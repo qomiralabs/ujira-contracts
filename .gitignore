@@ -1,6 +1,6 @@
 # Internal files: never committed
 .internal/
-implementation.md
+/implementation.md
 CLAUDE.md
 .claude/
 *.internal.md
@@ -17,14 +17,23 @@ CLAUDE.md
 # OS and editors
 .DS_Store
 .idea/
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 *.swp
+*.log
 
-# Rust and Soroban
+# Stellar CLI identities and network config (contain secret keys)
+.stellar/
+.soroban/
+
+# Rust and Soroban (test_snapshots stay tracked as regression fixtures)
 target/
-**/test_snapshots/
 
-# Foundry
-out/
-cache/
-broadcast/
+# Foundry build output, anchored so source folders named cache or out are never ignored
+/celo/out/
+/celo/cache/
+/out/
+/cache/
+# Local and dry-run broadcasts only; real deployment records stay tracked
+broadcast/*/31337/
+broadcast/**/dry-run/
