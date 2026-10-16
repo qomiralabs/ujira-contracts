@@ -1,0 +1,30 @@
+# Internal files: never committed
+.internal/
+implementation.md
+CLAUDE.md
+.claude/
+*.internal.md
+/PRODUCT.md
+/DESIGN.md
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Rust and Soroban
+target/
+**/test_snapshots/
+
+# Foundry
+out/
+cache/
+broadcast/
