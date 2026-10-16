@@ -1,0 +1,4 @@
+{
+  "filter_paths": "/celo/lib/",
+  "foundry_compile_all": false
+}
