@@ -18,12 +18,12 @@ UJIRA mandate contracts for Stellar (Soroban) and Celo (Solidity), built from on
 
 Every Rust and Solidity source file starts with these two lines:
 
-```
+```text
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Qomira Labs
 ```
 
-The SPDX line comes first, as the Solidity compiler expects. Use the year the file was created. To check the tree:
+The SPDX line comes first, as the Solidity documentation recommends. Use the year the file was created. To check the tree:
 
 ```sh
 scripts/check-headers.sh
