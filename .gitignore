@@ -1,6 +1,6 @@
 # Internal files: never committed
 .internal/
-/implementation.md
+implementation.md
 CLAUDE.md
 .claude/
 *.internal.md
