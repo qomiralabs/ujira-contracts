@@ -33,6 +33,35 @@ It names every tracked `.rs` or `.sol` file that is missing the header. Vendored
 
 ## Local setup
 
+### Celo (Foundry)
+
+Install Foundry 1.5.1 with `foundryup`, then fetch the pinned `forge-std` submodule:
+
+```sh
+curl -L https://foundry.paradigm.xyz | bash
+foundryup --install v1.5.1
+git submodule update --init --recursive
+```
+
+`foundry.toml` pins solc 0.8.30, and Foundry downloads it on the first build. Install Slither 0.11.6 with `pipx`. If your default Python is too new for its dependencies, point `pipx` at Python 3.12:
+
+```sh
+pipx install slither-analyzer==0.11.6
+# or: pipx install --python python3.12 slither-analyzer==0.11.6
+```
+
+Run the checks from `celo/`:
+
+```sh
+forge fmt --check
+forge build
+forge test
+forge coverage
+slither . --config-file slither.config.json --fail-low
+```
+
+Compiler warnings fail `forge build`.
+
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE).
