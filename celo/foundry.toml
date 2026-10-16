@@ -16,7 +16,9 @@ evm_version = "cancun"
 optimizer = true
 optimizer_runs = 200
 via_ir = false
-bytecode_hash = "none"
+# Keep the default ipfs metadata hash in the bytecode. Without it Sourcify and the
+# explorers can only give a partial match, and we want proof of the exact source.
+bytecode_hash = "ipfs"
 cbor_metadata = true
 
 # A compiler warning is a build failure. Vendored code is not ours to fix.
