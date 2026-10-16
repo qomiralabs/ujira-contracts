@@ -33,6 +33,8 @@ It names every tracked `.rs` or `.sol` file that is missing the header. Vendored
 
 ## Local setup
 
+### Soroban (Stellar)
+
 The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and stellar-cli 28.1.0 on macOS (Apple silicon).
 
 1. Install Rust with rustup (see https://rustup.rs):
@@ -61,6 +63,8 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
    cargo install --locked stellar-cli --version 28.1.0
    ```
 
+   Homebrew installs whatever version it currently ships, so check that `stellar --version` prints `stellar 28.1.0`. If it prints anything else, use the pinned `cargo install` line instead.
+
 4. Check, test and build from `soroban/`:
 
    ```sh
@@ -72,6 +76,39 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
    ```
 
    The contract wasm lands in `soroban/target/wasm32v1-none/release/`. Build it with `stellar contract build`, not `cargo build --target wasm32v1-none`. Since soroban-sdk 28 the SDK refuses a plain cargo build for wasm, because the contract spec embedded in the wasm is only correct after stellar-cli has trimmed it.
+
+### Celo (Foundry)
+
+Install Foundry 1.5.1 with `foundryup`, then fetch the pinned `forge-std` submodule:
+
+```sh
+curl -L https://foundry.paradigm.xyz | bash
+foundryup --install v1.5.1
+git submodule update --init --recursive
+```
+
+Check that `forge --version` prints `1.5.1`. A newer local Foundry can format, lint or compile differently from the pinned one, so switch back with `foundryup --use v1.5.1` if it does not.
+
+`foundry.toml` pins solc 0.8.30, and Foundry downloads it on the first build. Install Slither 0.11.6 with `pipx`. If your default Python is too new for its dependencies, point `pipx` at Python 3.12:
+
+```sh
+pipx install slither-analyzer==0.11.6
+# or: pipx install --python python3.12 slither-analyzer==0.11.6
+```
+
+Run the checks from `celo/`:
+
+```sh
+forge fmt --check
+forge build
+forge test
+forge coverage
+slither . --config-file slither.config.json --fail-low
+```
+
+Compiler warnings fail `forge build`.
+
+Slither ignores only vendored code under `celo/lib/`. Tests and scripts are left out because the build it runs skips them, not because of a path filter. Any vulnerable contract under `celo/src/`, in any subfolder, must make the slither command fail. If it passes, the config is hiding code.
 
 ## License
 
