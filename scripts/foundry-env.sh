@@ -5,9 +5,9 @@
 # Runs a command with a clean Foundry environment and a profile that exists.
 #
 # Foundry lets any FOUNDRY_* (and legacy DAPP_*) environment variable override
-# foundry.toml, so a stray FOUNDRY_DENY, FOUNDRY_SOLC or FOUNDRY_SRC could
-# loosen the gate without touching a tracked file. Every one of them is
-# removed before the command runs.
+# foundry.toml, in any case, so a stray FOUNDRY_DENY, foundry_solc or
+# Foundry_Src could loosen the gate without touching a tracked file. Every one
+# of them is removed before the command runs.
 #
 # forge also falls back to the default profile, without an error, when
 # FOUNDRY_PROFILE names a profile that does not exist. This script checks the
@@ -68,10 +68,13 @@ if ! grep -Eq "^[[:space:]]*\[profile\.\"?${profile}\"?\][[:space:]]*(#.*)?$" "$
   exit 2
 fi
 
+# forge matches these prefixes in any case, so foundry_deny counts as much as
+# FOUNDRY_DENY. Bracket patterns rather than ${name^^} or nocasematch, which
+# bash 3.2 (macOS) does not have.
 cleared=0
 while IFS= read -r name; do
   case "$name" in
-    FOUNDRY_* | DAPP_*)
+    [Ff][Oo][Uu][Nn][Dd][Rr][Yy]_* | [Dd][Aa][Pp][Pp]_*)
       unset "$name"
       cleared=$((cleared + 1))
       ;;
@@ -79,7 +82,7 @@ while IFS= read -r name; do
 done < <(compgen -e)
 
 if [ "$cleared" -gt 0 ]; then
-  echo "foundry-env: cleared $cleared FOUNDRY_ or DAPP_ variable(s)" >&2
+  echo "foundry-env: cleared $cleared FOUNDRY_ or DAPP_ variable(s), any case" >&2
 fi
 
 export FOUNDRY_PROFILE="$profile"

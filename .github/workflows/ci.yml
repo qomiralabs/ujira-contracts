@@ -225,8 +225,8 @@ jobs:
           slither --version | grep -qx "${SLITHER_VERSION}" || { echo "slither is not ${SLITHER_VERSION}" >&2; exit 1; }
 
       # Every forge call below goes through foundry-env.sh, which drops all
-      # FOUNDRY_* and DAPP_* variables and refuses a profile foundry.toml does
-      # not define. This step also proves forge reads the pinned settings.
+      # FOUNDRY_* and DAPP_* variables in any case and refuses a profile
+      # foundry.toml does not define. This step also proves forge reads the pinned settings.
       - name: Check Foundry config
         run: |
           ../scripts/foundry-env.sh --profile default -- forge config --json >"${RUNNER_TEMP}/config.json"

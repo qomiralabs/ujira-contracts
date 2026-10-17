@@ -128,7 +128,7 @@ Slither ignores only vendored code under `celo/lib/`. Tests and scripts are left
 
 ### Foundry environment
 
-Any `FOUNDRY_*` or `DAPP_*` environment variable overrides `foundry.toml`, and forge quietly falls back to the default profile when `FOUNDRY_PROFILE` names one that does not exist. CI runs every forge command through `scripts/foundry-env.sh`, which clears those variables and refuses an unknown profile. To run a check the same way locally:
+Any `FOUNDRY_*` or `DAPP_*` environment variable, in any case, overrides `foundry.toml`, and forge quietly falls back to the default profile when `FOUNDRY_PROFILE` names one that does not exist. CI runs every forge command through `scripts/foundry-env.sh`, which clears those variables and refuses an unknown profile. To run a check the same way locally:
 
 ```sh
 scripts/foundry-env.sh -- forge build
