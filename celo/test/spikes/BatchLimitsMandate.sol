@@ -244,7 +244,9 @@ contract BatchLimitsMandate {
         return balance - charged;
     }
 
-    /// Execute steps 3 to 9, in order. Reverts with the first failing code.
+    /// The execute checks in order: found, status, lapse, per-payment cap,
+    /// fee cap, recipient binding, daily cap, funds. Reverts with the first
+    /// failing code.
     function _checkExecute(bytes32 id, uint256 balance)
         internal
         view
@@ -277,7 +279,7 @@ contract BatchLimitsMandate {
         if (total + fee > balance) revert MandateError(INSUFFICIENT_FUNDS);
     }
 
-    /// Steps 3 to 12 of a single request, then its effects. Returns a code
+    /// Every check of a single request in order, then its effects. Returns a code
     /// instead of reverting so one bad item never sinks the batch; nothing is
     /// written unless every check passes.
     function _request(PayoutRequest calldata req, uint256 balance) internal returns (uint32 code, uint32 status) {
@@ -288,7 +290,7 @@ contract BatchLimitsMandate {
         return (0, _store(req));
     }
 
-    /// Steps 3 to 7: ID, deadline, amounts, legs, leg sum.
+    /// The shape checks: ID unused, deadline, amounts, legs, leg sum.
     function _checkShape(PayoutRequest calldata req) internal view returns (uint32) {
         if (payouts[req.payoutId].status != 0) return PAYOUT_ID_EXISTS;
         // slither-disable-next-line timestamp
@@ -313,7 +315,7 @@ contract BatchLimitsMandate {
         return 0;
     }
 
-    /// Step 8: allowlist, attestation, or both, leg by leg.
+    /// Recipient binding: allowlist, attestation, or both, leg by leg.
     function _checkBinding(PayoutRequest calldata req) internal view returns (uint32) {
         uint32 mode = cfg.recipientMode;
         uint256 n = req.legs.length;
@@ -335,7 +337,7 @@ contract BatchLimitsMandate {
         return 0;
     }
 
-    /// Steps 8a to 12: fee cap, per-payment cap, budget, daily cap, funds.
+    /// The limit checks: fee cap, per-payment cap, budget, daily cap, funds.
     function _checkLimits(PayoutRequest calldata req, uint256 balance) internal view returns (uint32) {
         uint256 total = req.total;
         uint256 fee = req.fee;

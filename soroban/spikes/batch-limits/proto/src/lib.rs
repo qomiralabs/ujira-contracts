@@ -536,7 +536,7 @@ fn fee_cap(total: i128, bps: u32) -> Result<i128, Error> {
     whole.checked_add(part).ok_or(Error::InternalInvariant)
 }
 
-/// Steps 3 to 12 of a single request, then its effects. Nothing is written
+/// Every check of a single request in order, then its effects. Nothing is written
 /// unless every check passes, so a rejected item leaves no trace but its event.
 fn request_one(
     env: &Env,
