@@ -99,11 +99,51 @@ else
   passed=$((passed + 1))
 fi
 
-new_repo binary
-printf '\x89PNG\x00%s' "$(char 202E)" >"$repo/image.txt"
-git -C "$repo" add -f -- image.txt
-write a.rs "fn a() {}"
-expect "binary content is skipped whatever the extension" 0 "1 text file(s) checked, 1 binary file(s) skipped"
+# A NUL byte does not make a source file binary: it is reported and the rest
+# of the file is still checked.
+new_repo nul_in_source
+printf '// x\000\n%s\n' "$(char 202E)" >"$repo/trojan.rs"
+git -C "$repo" add -f -- trojan.rs
+expect "a NUL in a source file is reported and the file is still checked" 1 \
+  "trojan.rs:1:5: U+0000" "trojan.rs:2:1: U+202E"
+
+new_repo nul_unlisted
+printf '\000\001\002' >"$repo/blob.dat"
+git -C "$repo" add -f -- blob.dat
+expect "binary content under an unlisted extension is checked as text" 1 "blob.dat:1:1: U+0000"
+
+# Only listed extensions are skipped, and only when the content starts with
+# the format's signature. Each signature is written out here independently of
+# the script, as printf escapes.
+for entry in \
+  'png:\211PNG\r\n\032\n' 'jpg:\377\330\377' 'jpeg:\377\330\377' \
+  'gif:GIF87a' 'gif:GIF89a' 'webp:RIFF\000\000\000\000WEBP' 'ico:\000\000\001\000' \
+  'woff:wOFF' 'woff2:wOF2' 'wasm:\000asm' 'pdf:%%PDF-'; do
+  ext=${entry%%:*}
+  signature=${entry#*:}
+  new_repo "binary_$ext"
+  # shellcheck disable=SC2059 # the signature is a printf format on purpose
+  printf "$signature" >"$repo/asset.$ext"
+  printf '\000%s' "$(char 202E)" >>"$repo/asset.$ext"
+  # shellcheck disable=SC2059
+  printf "$signature" >"$repo/UPPER.$(printf '%s' "$ext" | tr '[:lower:]' '[:upper:]')"
+  git -C "$repo" add -f -- .
+  expect ".$ext with its signature is skipped" 0 "0 text file(s) checked, 2 binary file(s) skipped"
+
+  new_repo "mismatch_$ext"
+  printf 'not really\n' >"$repo/asset.$ext"
+  git -C "$repo" add -f -- "asset.$ext"
+  expect ".$ext without its signature fails" 1 "asset.$ext: named .$ext but its content is not $ext"
+done
+
+new_repo webp_not_webp
+printf 'RIFF\000\000\000\000WAVE' >"$repo/sound.webp"
+git -C "$repo" add -f -- sound.webp
+expect "a RIFF file that is not WebP fails as .webp" 1 "sound.webp: named .webp but its content is not webp"
+
+new_repo dotted_folder
+write "assets.png/readme" "ok"
+expect "a dot in a folder name is not an extension" 0 "1 text file(s) checked"
 
 new_repo invalid
 printf 'caf\xe9\n' >"$repo/latin1.txt"
