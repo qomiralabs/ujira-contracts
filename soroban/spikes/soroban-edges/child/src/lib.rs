@@ -53,7 +53,7 @@ impl Child {
         env.storage().instance().get(&ChildKey::Value)
     }
 
-    /// Token-shaped on purpose, with two hostile behaviors picked by the
+    /// Token shaped on purpose (edited without rebuilding the fixture), with two hostile behaviors picked by the
     /// value the constructor stored: 0 grows a vector until the host stops
     /// it, anything else returns that value, which no real token does.
     pub fn transfer(env: Env, _from: Address, _to: Address, _amount: i128) -> u32 {
