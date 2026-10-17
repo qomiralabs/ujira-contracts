@@ -7,7 +7,6 @@ pragma solidity 0.8.37;
 contract Placeholder {
     /// @notice A function rather than a constant, so coverage has a line to report.
     function version() external pure returns (uint256) {
-        uint256 unused = 2;
         return 1;
     }
 }

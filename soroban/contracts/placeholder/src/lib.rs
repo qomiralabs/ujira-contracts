@@ -13,7 +13,6 @@ impl Placeholder {
     /// Bumped by hand when the placeholder changes, so a deployed build can be
     /// told apart from an older one.
     pub fn version() -> u32 {
-        let unused = 2;
         1
     }
 }
