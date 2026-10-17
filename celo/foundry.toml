@@ -29,6 +29,9 @@ code_size_limit = 65536
 bytecode_hash = "ipfs"
 cbor_metadata = true
 
+# The attestation spike reads the fixture both chains share. Read only, one file.
+fs_permissions = [{ access = "read", path = "../spikes/attestation-parity/fixture.json" }]
+
 # A compiler warning is a build failure. Vendored code is not ours to fix.
 deny = "warnings"
 ignored_warnings_from = ["lib"]

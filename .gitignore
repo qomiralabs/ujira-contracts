@@ -37,3 +37,6 @@ target/
 # Local and dry-run broadcasts only; real deployment records stay tracked
 **/broadcast/*/31337/
 **/broadcast/**/dry-run/
+
+# Node tooling for spike generators
+node_modules/

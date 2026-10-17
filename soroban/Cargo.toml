@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "contracts/placeholder",
+    "spikes/attestation-parity",
     "spikes/soroban-edges",
     "spikes/soroban-edges/child",
 ]
