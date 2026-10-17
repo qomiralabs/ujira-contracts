@@ -1347,6 +1347,7 @@ Effects: `MANDATE-WITHDRAW-004`.
 3. A caller other than the principal is refused while a principal change is proposed (MANDATE-SWEEP-002).
 4. A caller other than the principal is refused within the grace after expiry, unless revoked (MANDATE-SWEEP-003).
 5. The balance is not zero (MANDATE-SWEEP-004).
+5. Again (MANDATE-SWEEP-001).
 <!-- /check-order -->
 
 Effects: `MANDATE-SWEEP-005`.
