@@ -1233,12 +1233,6 @@ Effects: `MANDATE-WITHDRAW-004`.
 
 `sweep(caller) -> amount`. Anyone may call it.
 
-<!-- check-order: sweep -->
-1. The mandate is not active (MANDATE-SWEEP-001).
-2. A caller other than the principal is refused while a principal change is proposed (MANDATE-SWEEP-002).
-3. A caller other than the principal is refused within the grace after expiry, unless revoked (MANDATE-SWEEP-003).
-4. The balance is not zero (MANDATE-SWEEP-004).
-<!-- /check-order -->
 
 Effects: `MANDATE-SWEEP-005`.
 
