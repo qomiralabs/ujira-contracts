@@ -1,0 +1,7 @@
+# Contracts that get the factory size budget (61,440 bytes of runtime code)
+# in scripts/check-sizes.sh. Everything else is held to the mandate budget
+# (24,576 bytes), whatever its name.
+#
+# One entry per line: the source path relative to celo/ and the contract
+# name, as src/<file>.sol:<Contract>. Adding an entry needs review: the
+# larger budget is only for factories, never for the mandate itself.

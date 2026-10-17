@@ -115,7 +115,7 @@ scripts/check-sizes.sh
 scripts/check-sizes.test.sh
 ```
 
-A contract whose name ends in `Factory` may use up to 61,440 bytes of runtime code, Celo's 65,536 byte limit less a 4 KiB margin. Every other contract, the mandate included, must stay within 24,576 bytes. Initcode must stay within Celo's 131,072 byte limit. Name a contract `...Factory` only if it deploys mandates.
+A contract listed in `celo/factory-allowlist.txt` may use up to 61,440 bytes of runtime code, Celo's 65,536 byte limit less a 4 KiB margin. Entries name the source path and the contract, as `src/<file>.sol:<Contract>`; the contract's name plays no part, so a mandate renamed `...Factory` is still held to the mandate budget. Every other contract, the mandate included, must stay within 24,576 bytes. Initcode must stay within Celo's 131,072 byte limit. The check fails on an allowlist entry that is malformed, listed twice or matches no contract. Add a contract to the allowlist only if it deploys mandates, and only through a reviewed change.
 
 Slither ignores only vendored code under `celo/lib/`. Tests and scripts are left out because the build it runs skips them, not because of a path filter. Any vulnerable contract under `celo/src/`, in any subfolder, must make the slither command fail. If it passes, the config is hiding code.
 

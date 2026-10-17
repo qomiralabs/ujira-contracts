@@ -9,10 +9,18 @@
 #   all others 24,576   the EIP-170 limit, kept as our own budget so the
 #                       mandate stays cheap to deploy and portable
 #
-# A contract counts as a factory when its name ends in "Factory". Everything
-# else, the mandate included, gets the tighter budget, so a misnamed contract
-# can only ever be held to the stricter limit. Initcode is checked against
-# Celo's 131,072 byte limit for every contract.
+# A contract gets the factory budget only when it is listed, by source path and
+# name, in the committed allowlist (celo/factory-allowlist.txt by default, one
+# `src/<file>.sol:<Contract>` per line, `#` starts a comment). Its name plays
+# no part, so renaming a mandate to ...Factory changes nothing. Everything
+# else, the mandate included, gets the tighter budget. An allowlist entry that
+# is malformed, listed twice or matches no contract is an error. Initcode is
+# checked against Celo's 131,072 byte limit for every contract.
+#
+# forge names a contract by its bare name when the name is unique and as
+# `Name (path)` otherwise. In forge mode a bare name is resolved to its source
+# path from the build artifacts. A bare name in a --from-json report has no
+# path, so it is always held to the mandate budget.
 #
 # Sizes come from `forge build --sizes --json`, which lists the contracts in
 # src/. forge refuses anything over 24,576 bytes on its own, whatever
@@ -21,8 +29,8 @@
 #
 # Needs forge and jq.
 #
-# Usage: scripts/check-sizes.sh [celo dir]
-#        scripts/check-sizes.sh --from-json <file>   (sizes already captured)
+# Usage: scripts/check-sizes.sh [--factories <file>] [celo dir]
+#        scripts/check-sizes.sh [--factories <file>] --from-json <file>   (sizes already captured)
 # Exit codes: 0 all within budget, 1 one or more contracts over budget,
 # 2 sizes could not be produced or read.
 set -euo pipefail
@@ -32,15 +40,22 @@ factory_budget=61440
 initcode_limit=131072
 
 json_file=""
-if [ "${1:-}" = "--from-json" ]; then
-  if [ $# -lt 2 ]; then
-    echo "check-sizes: --from-json needs a file" >&2
-    exit 2
-  fi
-  json_file=$2
-  shift 2
-fi
+factories_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --from-json | --factories)
+      if [ $# -lt 2 ]; then
+        echo "check-sizes: $1 needs a file" >&2
+        exit 2
+      fi
+      if [ "$1" = "--from-json" ]; then json_file=$2; else factories_file=$2; fi
+      shift 2
+      ;;
+    *) break ;;
+  esac
+done
 celo=${1:-"$(cd "$(dirname "$0")/.." && pwd)/celo"}
+factories_file=${factories_file:-"$celo/factory-allowlist.txt"}
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "check-sizes: jq is not installed" >&2
@@ -50,7 +65,31 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# The allowlist, one validated entry per line in $tmp/factories.
+if [ ! -f "$factories_file" ]; then
+  echo "check-sizes: no factory allowlist at $factories_file" >&2
+  exit 2
+fi
+: >"$tmp/factories"
+while IFS= read -r line || [ -n "$line" ]; do
+  line=${line%%#*}
+  line=$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  [ -z "$line" ] && continue
+  if ! [[ $line =~ ^src/([A-Za-z0-9_.-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.sol:[A-Za-z_][A-Za-z0-9_]*$ ]] ||
+    [[ $line == *"/../"* || $line == *"/./"* ]]; then
+    echo "check-sizes: allowlist entry '$line' is not of the form src/<file>.sol:<Contract>" >&2
+    exit 2
+  fi
+  if grep -qxF -- "$line" "$tmp/factories"; then
+    echo "check-sizes: allowlist entry $line is listed twice" >&2
+    exit 2
+  fi
+  printf '%s\n' "$line" >>"$tmp/factories"
+done <"$factories_file"
+
+from_forge=""
 if [ -z "$json_file" ]; then
+  from_forge=1
   if ! command -v forge >/dev/null 2>&1; then
     echo "check-sizes: forge is not installed" >&2
     exit 2
@@ -78,7 +117,18 @@ if [ -z "$json_file" ]; then
     exit 2
   fi
   json_file="$tmp/sizes.json"
+
+  # Bare names in the report carry no path; map each source contract to the
+  # file it was compiled from, as `name<TAB>path`.
+  out_dir="$celo/out"
+  if [ -d "$out_dir" ]; then
+    find "$out_dir" -name '*.json' -not -path '*/build-info/*' -print0 |
+      xargs -0 jq -r '(.metadata.settings.compilationTarget // {}) | to_entries[]
+        | select(.key | startswith("src/")) | "\(.value)\t\(.key)"' 2>/dev/null |
+      sort -u >"$tmp/sources" || true
+  fi
 fi
+touch "$tmp/sources"
 
 # An empty or reshaped report would otherwise pass with nothing checked. Sizes
 # must be whole, non-negative and small enough for shell arithmetic: a failed
@@ -93,6 +143,7 @@ fi
 
 checked=0
 failed=0
+: >"$tmp/used"
 while IFS=$'\t' read -r key runtime init; do
   # jq can print a valid number in a form the shell cannot compare, so check
   # again here rather than trust the comparison to fail closed.
@@ -100,23 +151,57 @@ while IFS=$'\t' read -r key runtime init; do
     echo "check-sizes: could not read contract sizes for $key" >&2
     exit 2
   fi
-  name=${key##*:}
-  case "$name" in
-    *Factory) kind=factory budget=$factory_budget ;;
-    *) kind=contract budget=$mandate_budget ;;
-  esac
+  # `Name (path)` from forge, `path:Name`, or a bare name.
+  path=""
+  if [[ $key =~ ^([^ ]+)\ \((.+)\)$ ]]; then
+    name=${BASH_REMATCH[1]} path=${BASH_REMATCH[2]}
+  elif [[ $key == *:* ]]; then
+    name=${key##*:} path=${key%:*}
+  else
+    name=$key
+    if [ -n "$from_forge" ]; then
+      matches=$(awk -F '\t' -v n="$name" '$1 == n { print $2 }' "$tmp/sources")
+      if [ "$(printf '%s' "$matches" | grep -c .)" -ne 1 ]; then
+        echo "check-sizes: could not find the source file of $name in the build artifacts" >&2
+        exit 2
+      fi
+      path=$matches
+    fi
+  fi
+  shown=$name
+  kind=contract budget=$mandate_budget
+  if [ -n "$path" ]; then
+    shown="$path:$name"
+    if grep -qxF -- "$shown" "$tmp/factories"; then
+      kind=factory budget=$factory_budget
+      printf '%s\n' "$shown" >>"$tmp/used"
+    fi
+  fi
   checked=$((checked + 1))
 
   if [ "$runtime" -gt "$budget" ]; then
-    echo "over budget: $name ($kind) runtime $runtime bytes, budget $budget" >&2
+    echo "over budget: $shown ($kind) runtime $runtime bytes, budget $budget" >&2
     failed=$((failed + 1))
   elif [ "$init" -gt "$initcode_limit" ]; then
-    echo "over budget: $name ($kind) initcode $init bytes, Celo limit $initcode_limit" >&2
+    echo "over budget: $shown ($kind) initcode $init bytes, Celo limit $initcode_limit" >&2
     failed=$((failed + 1))
   else
-    echo "ok: $name ($kind) runtime $runtime of $budget bytes, initcode $init"
+    echo "ok: $shown ($kind) runtime $runtime of $budget bytes, initcode $init"
   fi
 done < <(jq -r 'to_entries[] | [.key, .value.runtime_size, .value.init_size] | @tsv' "$json_file")
+
+# An entry for a contract that no longer exists would quietly hand the factory
+# budget to whatever later appears at that path.
+unused=0
+while IFS= read -r entry; do
+  if ! grep -qxF -- "$entry" "$tmp/used"; then
+    echo "check-sizes: allowlist entry $entry matches no contract" >&2
+    unused=$((unused + 1))
+  fi
+done <"$tmp/factories"
+if [ "$unused" -gt 0 ]; then
+  exit 2
+fi
 
 if [ "$failed" -gt 0 ]; then
   echo "check-sizes: $failed of $checked contract(s) over budget" >&2
