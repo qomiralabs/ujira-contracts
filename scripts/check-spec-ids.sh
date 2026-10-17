@@ -37,8 +37,10 @@
 # that only mention another rule do so in their Effect.
 #
 # Everything inside fenced code blocks is ignored. An ID whose number does not
-# have exactly three digits is reported, never truncated. An empty "- Error:"
-# line is reported; a rule that adds no failure writes "- Error: none".
+# have exactly three digits, or that runs on into letters (MANDATE-SWEEP-004a),
+# is reported, never truncated. Letter suffixes on steps run a, b, c in order.
+# An empty "- Error:" line is reported; a rule that adds no failure writes
+# "- Error: none".
 #
 # Usage: scripts/check-spec-ids.sh [--check-order] [path to MANDATE.md]
 # Exit codes: 0 all checks pass, 1 one or more problems named on stderr,
@@ -105,8 +107,8 @@ function ids_in(s, where,    out, tok, digits) {
     s = substr(s, RSTART + RLENGTH)
     digits = tok
     sub(/^[A-Z]+-[A-Z]+-/, "", digits)
-    if (length(digits) != 3) {
-      problem("malformed rule ID " tok " at line " where ", the number must have three digits")
+    if (digits !~ /^[0-9][0-9][0-9]$/) {
+      problem("malformed rule ID " tok " at line " where ", the number must be exactly three digits")
       continue
     }
     out = out " " tok
@@ -115,7 +117,7 @@ function ids_in(s, where,    out, tok, digits) {
 }
 
 BEGIN {
-  tok_re = "(MANDATE|CHAINOPS)-[A-Z]+-[0-9]+"
+  tok_re = "(MANDATE|CHAINOPS)-[A-Z]+-[0-9]+[A-Za-z0-9_]*"
   ops_section = "Operations and check orders"
   section = ""
   in_order = 0
@@ -260,7 +262,7 @@ in_order {
   if (letter == "") {
     if (n != prev_n + 1) order_problem(order_name ": line " NR " is step " n ", expected step " (prev_n + 1))
     prev_letter = ""
-  } else if (n != prev_n || (prev_letter != "" && letter <= prev_letter)) {
+  } else if (n != prev_n || letter != substr("abcdefghijklmnopqrstuvwxyz", index("abcdefghijklmnopqrstuvwxyz", (prev_letter == "" ? "`" : prev_letter)) + 1, 1)) {
     order_problem(order_name ": line " NR " is step " numtxt ", which does not follow step " prev_n prev_letter)
   } else {
     prev_letter = letter

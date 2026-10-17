@@ -378,6 +378,24 @@ valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
 <!-- /check-order -->" "| \`MANDATE-CONFIG-002\` | Domains |"
 expect "a rule that only mentions another in its effect" 0 "$f" "--check-order"
 
+f="$work/order-letter-gap.md"
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).
+1b. Not paused (MANDATE-PAUSE-001).
+<!-- /check-order -->"
+expect "letter suffix out of sequence" 1 "$f" "--check-order" "is step 1b, which does not follow step 1"
+
+f="$work/heading-letter.md"
+valid_spec "$f" "#### MANDATE-SWEEP-004a Trailing letter
+
+- Precondition: x.
+- Effect: y.
+- Error: none
+"
+expect "rule id with a trailing letter is rejected" 1 "$f" "" "malformed rule ID MANDATE-SWEEP-004a"
+
 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
