@@ -1,0 +1,17 @@
+[package]
+name = "batch-limits"
+version = "0.0.0"
+description = "Measures batch request and execute resource use of the prototype wasm against the network limits."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+k256 = { version = "=0.13.4", default-features = false, features = ["ecdsa", "std"] }
