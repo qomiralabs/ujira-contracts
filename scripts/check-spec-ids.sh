@@ -31,10 +31,13 @@
 # check must cite exactly one MANDATE rule ID, that rule must be defined, and
 # it must be able to fail: its Error line may not start with "none". A rule
 # that hands off to per-item checks says so with "- Error: per item".
-# A step may not cite a rule whose precondition (its own line or indented
-# sub-bullets) cites a rule that another step of the same order checks, since
-# the first error would then depend on how an implementation read it. Rules
-# that only mention another rule do so in their Effect.
+# A step may not cite a rule whose precondition cites, directly or through
+# rules that no step of the same order checks, a rule that another step of the
+# same order checks, since the first error would then depend on how an
+# implementation read it. A precondition runs from "- Precondition:" to the
+# next field line, blank line or heading, whatever the indentation. Rules that
+# only mention another rule do so in their Effect. Tab characters are refused
+# inside rule bodies, and rule headings must run in numeric order per area.
 #
 # Everything inside fenced code blocks is ignored. An ID whose number does not
 # have exactly three digits, or that runs on into letters (MANDATE-SWEEP-004a),
@@ -161,6 +164,17 @@ in_fence { next }
     if (found != "") {
       if (found in defined) problem(found " is defined twice (lines " defined[found] " and " NR ")")
       else defined[found] = NR
+      area_key = found
+      sub(/-[0-9]+$/, "", area_key)
+      seq = found
+      sub(/^.*-/, "", seq)
+      if ((area_key in area_last) && seq + 0 < area_last[area_key] + 0) {
+        problem(found " at line " NR " comes after " area_key "-" area_last_txt[area_key] "; keep each area in numeric order")
+      }
+      if (!(area_key in area_last) || seq + 0 > area_last[area_key] + 0) {
+        area_last[area_key] = seq
+        area_last_txt[area_key] = seq
+      }
       current = found
       field = ""
       has_pre = has_eff = has_err = has_off = 0
@@ -171,12 +185,14 @@ in_fence { next }
 
 /^#+ / { close_rule() }
 
-current != "" && /^- / { field = "" }
+current != "" && /\t/ { problem(current " has a tab character at line " NR "; indent with spaces") }
+current != "" && /^- (Precondition|Effect|Error|Off chain):/ { field = "" }
+current != "" && /^[ \t]*$/ { field = "" }
 current != "" && /^- Precondition:/ { has_pre = 1; field = "pre" }
 current != "" && /^- Effect:/ { has_eff = 1 }
 current != "" && /^- Off chain:/ { has_off = 1 }
 # The rules a precondition includes, on its own line or its indented sub-bullets.
-current != "" && field == "pre" && (/^- Precondition:/ || /^  /) {
+current != "" && field == "pre" {
   found = ids_in(line, NR)
   k = split(found, got, " ")
   for (j = 1; j <= k; j++) if (got[j] != current) pre_refs[current] = pre_refs[current] " " got[j]
@@ -347,19 +363,41 @@ END {
       if (!(id in defined)) problem("check order line " ln " cites " id ", which is not defined")
       else if (err_text[id] ~ /^none/) problem("check order line " ln " cites " id ", which returns no error")
     }
-    # A step may not cite a rule whose precondition includes a rule that
-    # another step of the same order checks: the first error would depend on
-    # which reading an implementation chose.
+    # A step may not cite a rule whose precondition includes, directly or
+    # through rules that no step of the same order checks, a rule that another
+    # step checks: the first error would depend on how an implementation read
+    # it. Visited rules are tracked, so reference cycles end.
     for (ln in order_ref) {
       a = order_ref[ln]
-      if (!(a in pre_refs)) continue
-      nb = split(block_rules[order_block[ln]], steps, " ")
+      blk = order_block[ln]
+      delete step_of
+      nb = split(block_rules[blk], steps, " ")
+      for (y = 1; y <= nb; y++) {
+        split(steps[y], sp, "@")
+        if (!(sp[1] in step_of)) step_of[sp[1]] = sp[2]
+      }
+      delete seen
+      delete via
+      top = 0
+      seen[a] = 1
       nr = split(pre_refs[a], inc, " ")
-      for (x = 1; x <= nr; x++) {
-        for (y = 1; y <= nb; y++) {
-          split(steps[y], sp, "@")
-          if (sp[1] == inc[x] && sp[1] != a && sp[2] != order_step[ln]) {
-            problem(order_block[ln] ": line " ln " cites " a ", whose precondition includes " inc[x] ", which step " sp[2] " also checks")
+      for (x = 1; x <= nr; x++) { top++; stack[top] = inc[x]; via[inc[x]] = "" }
+      while (top > 0) {
+        b = stack[top]
+        top--
+        if (b in seen) continue
+        seen[b] = 1
+        if ((b in step_of) && step_of[b] != order_step[ln]) {
+          problem(blk ": line " ln " cites " a ", whose precondition includes " b (via[b] == "" ? "" : " (through " via[b] ")") ", which step " step_of[b] " also checks")
+          continue
+        }
+        if (b in step_of) continue
+        nr2 = split(pre_refs[b], inc2, " ")
+        for (x = 1; x <= nr2; x++) {
+          if (!(inc2[x] in seen)) {
+            top++
+            stack[top] = inc2[x]
+            if (!(inc2[x] in via)) via[inc2[x]] = (via[b] == "" ? b : via[b] ", " b)
           }
         }
       }

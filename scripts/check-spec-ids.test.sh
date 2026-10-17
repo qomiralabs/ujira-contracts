@@ -396,6 +396,97 @@ valid_spec "$f" "#### MANDATE-SWEEP-004a Trailing letter
 "
 expect "rule id with a trailing letter is rejected" 1 "$f" "" "malformed rule ID MANDATE-SWEEP-004a"
 
+f="$work/order-overlap-tab.md"
+valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
+
+- Precondition: a field breaks its domain:
+	- the threshold as in MANDATE-FEE-001.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+
+### create
+
+<!-- check-order: create -->
+1. Domains (MANDATE-CONFIG-002).
+2. Fee within the cap (MANDATE-FEE-001).
+<!-- /check-order -->" "| \`MANDATE-CONFIG-002\` | Domains |"
+expect "tab inside a rule body" 1 "$f" "--check-order" "MANDATE-CONFIG-002 has a tab character at line" "whose precondition includes MANDATE-FEE-001"
+
+f="$work/order-overlap-lazy.md"
+valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
+
+- Precondition: a field breaks its domain,
+including the threshold as in MANDATE-FEE-001.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+
+### create
+
+<!-- check-order: create -->
+1. Domains (MANDATE-CONFIG-002).
+2. Fee within the cap (MANDATE-FEE-001).
+<!-- /check-order -->" "| \`MANDATE-CONFIG-002\` | Domains |"
+expect "lazy continuation of a precondition" 1 "$f" "--check-order" "cites MANDATE-CONFIG-002, whose precondition includes MANDATE-FEE-001, which step 2 also checks"
+
+f="$work/order-overlap-transitive.md"
+valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
+
+- Precondition: a field breaks MANDATE-CONFIG-003.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+
+#### MANDATE-CONFIG-003 Inner
+
+- Precondition: the fee as in MANDATE-FEE-001.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+
+### create
+
+<!-- check-order: create -->
+1. Domains (MANDATE-CONFIG-002).
+2. Fee within the cap (MANDATE-FEE-001).
+<!-- /check-order -->" "| \`MANDATE-CONFIG-002\` | Domains |
+| \`MANDATE-CONFIG-003\` | Inner |"
+expect "overlap through a rule no step checks" 1 "$f" "--check-order" "cites MANDATE-CONFIG-002, whose precondition includes MANDATE-FEE-001 (through MANDATE-CONFIG-003), which step 2 also checks"
+
+f="$work/order-overlap-cycle.md"
+valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
+
+- Precondition: a field breaks MANDATE-CONFIG-003.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+
+#### MANDATE-CONFIG-003 Inner
+
+- Precondition: a field breaks MANDATE-CONFIG-002.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+
+### create
+
+<!-- check-order: create -->
+1. Domains (MANDATE-CONFIG-002).
+<!-- /check-order -->" "| \`MANDATE-CONFIG-002\` | Domains |
+| \`MANDATE-CONFIG-003\` | Inner |"
+expect "reference cycle terminates" 0 "$f" "--check-order"
+
+f="$work/heading-order.md"
+valid_spec "$f" "#### MANDATE-ROLE-003 Third
+
+- Precondition: x.
+- Effect: y.
+- Error: none
+
+#### MANDATE-ROLE-002 Second
+
+- Precondition: x.
+- Effect: y.
+- Error: none
+" "| \`MANDATE-ROLE-003\` | Third |
+| \`MANDATE-ROLE-002\` | Second |"
+expect "rule headings out of numeric order" 1 "$f" "" "MANDATE-ROLE-002 at line" "comes after MANDATE-ROLE-003"
+
 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
