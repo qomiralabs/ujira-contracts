@@ -57,14 +57,20 @@ pub enum Dest {
     Account,
     /// A contract address, whose balance entry the SAC creates on first credit.
     Contract,
+    /// A classic account with a trustline, paid through a muxed `M` address
+    /// with a 64-bit id. The tag adds `to_muxed_id` to every SAC transfer
+    /// event and widens every leg in the mandate's own events, so this is the
+    /// event-size worst case.
+    Tagged,
 }
 
 #[derive(Clone, Debug)]
 pub struct Row {
     pub op: &'static str,
     pub mode: u32,
-    pub legs: u32,
-    pub fee: bool,
+    /// Legs per item, or the whole plan when items differ.
+    pub legs: String,
+    pub fee: String,
     pub dest: Dest,
     pub items: u32,
     pub instructions: i64,
@@ -81,6 +87,14 @@ pub struct Row {
 }
 
 impl Row {
+    /// The whole envelope, estimated: the auth entry repeats the call and its
+    /// arguments, so they count twice, plus about 100 bytes per footprint key
+    /// and 400 for the rest. Calibrated on testnet, where a 16 item, 4-leg
+    /// request had a 47,016 byte envelope and this gives 46,976.
+    pub fn tx_size_estimate(&self) -> u32 {
+        2 * self.args_bytes + 100 * self.footprint() + 400
+    }
+
     /// Distinct keys the transaction must declare. Every key accessed is
     /// counted once, as a disk or an in-memory read.
     pub fn footprint(&self) -> u32 {
@@ -120,8 +134,8 @@ impl Row {
                 f64::from(self.events_bytes + self.return_bytes) / f64::from(Limits::EVENTS_BYTES),
             ),
             (
-                "tx_args",
-                f64::from(self.args_bytes) / f64::from(Limits::TX_SIZE_BYTES),
+                "tx_size",
+                f64::from(self.tx_size_estimate()) / f64::from(Limits::TX_SIZE_BYTES),
             ),
         ]
     }
@@ -317,18 +331,24 @@ fn sign(
     }
 }
 
-fn build(
-    w: &mut World,
-    items: u32,
-    legs: u32,
-    fee: bool,
-    dest: Dest,
-    batch: u32,
-) -> StdVec<PayoutRequest> {
+fn muxed(env: &Env, account: &Address, id: u64) -> MuxedAddress {
+    let key = match ScAddress::from(account) {
+        ScAddress::Account(AccountId(PublicKey::PublicKeyTypeEd25519(k))) => k,
+        other => panic!("not an account: {other:?}"),
+    };
+    let sc = xdr::ScVal::Address(ScAddress::MuxedAccount(xdr::MuxedEd25519Account {
+        id,
+        ed25519: key,
+    }));
+    MuxedAddress::try_from_val(env, &sc).unwrap()
+}
+
+/// One request per plan entry: (legs, whether it carries a fee).
+fn build(w: &mut World, plan: &[(u32, bool)], dest: Dest, batch: u32) -> StdVec<PayoutRequest> {
     let cfg_mode = w.mode;
     let mut reqs = StdVec::new();
     let mut allow = Vec::new(&w.env);
-    for i in 0..items {
+    for (i, &(legs, fee)) in (0u32..).zip(plan.iter()) {
         let n = batch * 1_000 + i;
         let recipient_ref = bytes32(&w.env, 0x11, n);
         let mut leg_vec = Vec::new(&w.env);
@@ -341,9 +361,18 @@ fn build(
                     create_receiver(&w.env, &a, &w.asset);
                     a
                 }
-                Dest::Contract => Address::generate(&w.env),
+                Dest::Contract | Dest::Tagged => Address::generate(&w.env),
             };
-            let destination = MuxedAddress::from(address);
+            let destination = match dest {
+                Dest::Tagged => {
+                    let a = account_address(&w.env, w.next_account);
+                    w.next_account += 1;
+                    create_receiver(&w.env, &a, &w.asset);
+                    // Every id is a full 8 bytes in XDR, whatever its value.
+                    muxed(&w.env, &a, u64::MAX - u64::from(w.next_account))
+                }
+                _ => MuxedAddress::from(address),
+            };
             if cfg_mode != MODE_ATTESTED {
                 allow.push_back(AllowEntry {
                     recipient_ref: recipient_ref.clone(),
@@ -377,26 +406,15 @@ fn build(
     reqs
 }
 
-#[allow(clippy::too_many_arguments)]
-fn row(
-    w: &World,
-    op: &'static str,
-    mode: u32,
-    legs: u32,
-    fee: bool,
-    dest: Dest,
-    items: u32,
-    args_bytes: u32,
-    return_bytes: u32,
-) -> Row {
+fn row(w: &World, label: &Label, op: &'static str, args_bytes: u32, return_bytes: u32) -> Row {
     let r = w.env.cost_estimate().resources();
     Row {
         op,
-        mode,
-        legs,
-        fee,
-        dest,
-        items,
+        mode: label.mode,
+        legs: label.legs.clone(),
+        fee: label.fee.clone(),
+        dest: label.dest,
+        items: label.items,
         instructions: r.instructions,
         mem: r.mem_bytes,
         disk_read_entries: r.disk_read_entries,
@@ -410,6 +428,15 @@ fn row(
     }
 }
 
+/// How a measured batch is described in the table.
+struct Label {
+    mode: u32,
+    legs: String,
+    fee: String,
+    dest: Dest,
+    items: u32,
+}
+
 fn xdr_len<T: soroban_sdk::IntoVal<Env, soroban_sdk::Val> + Clone>(env: &Env, v: &T) -> u32 {
     use soroban_sdk::xdr::ToXdr;
     let val: soroban_sdk::Val = v.clone().into_val(env);
@@ -419,23 +446,38 @@ fn xdr_len<T: soroban_sdk::IntoVal<Env, soroban_sdk::Val> + Clone>(env: &Env, v:
 /// Requests a batch, checks every item landed approved, executes the same
 /// batch, and returns both measurements.
 pub fn measure(mode: u32, legs: u32, fee: bool, dest: Dest, items: u32) -> (Row, Row) {
+    let plan: StdVec<(u32, bool)> = (0..items).map(|_| (legs, fee)).collect();
+    measure_plan(mode, &plan, dest)
+}
+
+/// The same for a batch whose items differ in legs or fee.
+pub fn measure_plan(mode: u32, plan: &[(u32, bool)], dest: Dest) -> (Row, Row) {
+    let items = u32::try_from(plan.len()).unwrap();
+    let uniform = plan.iter().all(|p| *p == plan[0]);
+    let legs_total: u32 = plan.iter().map(|p| p.0).sum();
+    let fees = u32::try_from(plan.iter().filter(|p| p.1).count()).unwrap();
+    let label = Label {
+        mode,
+        legs: if uniform {
+            format!("{}", plan[0].0)
+        } else {
+            format!("{legs_total} in all")
+        },
+        fee: match (uniform, fees) {
+            (true, 0) => String::from("no"),
+            (true, _) => String::from("yes"),
+            (false, n) => format!("{n} of {items}"),
+        },
+        dest,
+        items,
+    };
     let mut w = world(mode);
-    let reqs = build(&mut w, items, legs, fee, dest, 1);
+    let reqs = build(&mut w, plan, dest, 1);
     let batch = Vec::from_slice(&w.env, &reqs);
     let args = xdr_len(&w.env, &batch);
     let results = w.client().request_payouts(&w.agent, &batch);
     let ret = xdr_len(&w.env, &results);
-    let request = row(
-        &w,
-        "request_payouts",
-        mode,
-        legs,
-        fee,
-        dest,
-        items,
-        args,
-        ret,
-    );
+    let request = row(&w, &label, "request_payouts", args, ret);
     for r in results.iter() {
         assert_eq!((r.code, r.status), (0, STATUS_APPROVED), "item rejected");
     }
@@ -444,7 +486,7 @@ pub fn measure(mode: u32, legs: u32, fee: bool, dest: Dest, items: u32) -> (Row,
     let args = xdr_len(&w.env, &ids);
     w.client().execute_batch(&w.agent, &ids);
     // A unit return is ScVal::Void, 4 bytes of XDR.
-    let execute = row(&w, "execute_batch", mode, legs, fee, dest, items, args, 4);
+    let execute = row(&w, &label, "execute_batch", args, 4);
     (request, execute)
 }
 
@@ -461,7 +503,7 @@ pub fn line(r: &Row) -> String {
         r.op,
         mode_name(r.mode),
         r.legs,
-        if r.fee { "yes" } else { "no" },
+        r.fee,
         r.dest,
         r.items,
         r.instructions,
@@ -514,6 +556,12 @@ fn batch_table() {
     }
     cases.push((MODE_ALLOWLIST, 1, false, Dest::Account));
     cases.push((MODE_ATTESTED, 4, true, Dest::Contract));
+    // Tagged destinations, the event-size worst case.
+    for legs in [1, 2, 4] {
+        cases.push((MODE_ALLOWLIST, legs, true, Dest::Tagged));
+    }
+    cases.push((MODE_ATTESTED, 4, true, Dest::Tagged));
+    cases.push((MODE_ALLOWLIST, 2, false, Dest::Tagged));
 
     println!("{}", header());
     let mut limits_out = StdVec::new();
@@ -551,46 +599,107 @@ fn batch_table() {
 
 /// The candidate limits: at most `MAX_BATCH` items per batch, and on execute
 /// at most `MAX_BATCH_TRANSFERS` transfers (every leg, plus one per non-zero
-/// fee). Each case below is a worst case for one resource under those limits.
+/// fee). Tagged legs are the event-size worst case: 19 transfers of them reach
+/// 69.3 percent of the events limit in the env, and the network adds about
+/// half a point, so 18 is the most that keeps 30 percent headroom.
 const MAX_BATCH: u32 = 10;
-const MAX_BATCH_TRANSFERS: u32 = 20;
+const MAX_BATCH_TRANSFERS: u32 = 18;
 
 fn assert_headroom(r: &Row) {
     for (name, share) in r.shares() {
         assert!(
             share <= 1.0 - HEADROOM,
-            "{} {} legs {} items: {name} at {:.1}% of the limit",
+            "{} {} legs {} items {:?}: {name} at {:.1}% of the limit",
             r.op,
             r.legs,
             r.items,
+            r.dest,
             share * 100.0
         );
     }
 }
 
+/// Legs and fee, one entry per item.
+type Plan = StdVec<(u32, bool)>;
+
+fn transfers(plan: &[(u32, bool)]) -> u32 {
+    plan.iter().map(|&(legs, fee)| legs + u32::from(fee)).sum()
+}
+
 #[test]
 fn recommended_limits_keep_headroom() {
-    // (mode, legs, fee, items): transfers per execute = items * (legs + fee).
-    let cases = [
-        // Most event bytes per transfer budget: every transfer is a leg.
-        (MODE_ALLOWLIST, 2, false, MAX_BATCH),
-        // Most instructions: four attestations per item, on every item.
-        (MODE_BOTH, 4, true, 4),
-        // Largest request: the full item count at four legs.
-        (MODE_BOTH, 4, false, MAX_BATCH),
-        (MODE_ATTESTED, 4, true, MAX_BATCH),
-        // Most items with a fee each.
-        (MODE_ALLOWLIST, 1, true, MAX_BATCH),
-    ];
+    let fours = |n: usize, fee: bool| -> Plan { (0..n).map(|_| (4, fee)).collect() };
+    let cases: StdVec<(u32, Plan, Dest)> = StdVec::from([
+        // Most event bytes for the transfer budget: every transfer a leg, on
+        // as many items as allowed, tagged and untagged.
+        (
+            MODE_ALLOWLIST,
+            worst_plan(MAX_BATCH_TRANSFERS, MAX_BATCH),
+            Dest::Tagged,
+        ),
+        (
+            MODE_ALLOWLIST,
+            worst_plan(MAX_BATCH_TRANSFERS, MAX_BATCH),
+            Dest::Account,
+        ),
+        // Four tagged legs with fees, up to the transfer budget.
+        (
+            MODE_BOTH,
+            StdVec::from([(4, true), (4, true), (4, false), (4, false)]),
+            Dest::Tagged,
+        ),
+        (MODE_BOTH, fours(3, true), Dest::Tagged),
+        // Most items with a fee each, inside the transfer budget.
+        (
+            MODE_ALLOWLIST,
+            (0..9).map(|_| (1, true)).collect(),
+            Dest::Tagged,
+        ),
+        // Largest requests: the full item count at four legs. Their execute
+        // would exceed the transfer budget, so only the request is checked.
+        (MODE_BOTH, fours(10, false), Dest::Tagged),
+        (MODE_ATTESTED, fours(10, true), Dest::Tagged),
+        (MODE_BOTH, fours(10, false), Dest::Account),
+    ]);
     println!("{}", header());
-    for (mode, legs, fee, items) in cases {
-        let (rq, ex) = measure(mode, legs, fee, Dest::Account, items);
+    for (mode, plan, dest) in cases {
+        assert!(plan.len() <= MAX_BATCH as usize);
+        let (rq, ex) = measure_plan(mode, &plan, dest);
         println!("{}", line(&rq));
         assert_headroom(&rq);
-        let transfers = items * (legs + u32::from(fee));
-        if transfers <= MAX_BATCH_TRANSFERS {
+        if transfers(&plan) <= MAX_BATCH_TRANSFERS {
             println!("{}", line(&ex));
             assert_headroom(&ex);
         }
+    }
+}
+
+/// The plan that spends a transfer budget on the most event bytes: as many
+/// items as `MAX_BATCH` allows, every transfer a tagged leg, no fee (a leg
+/// costs more event bytes than a fee transfer, because it also appears in
+/// the mandate's own events).
+fn worst_plan(transfers: u32, items: u32) -> StdVec<(u32, bool)> {
+    let items = items.min(transfers);
+    (0..items)
+        .map(|i| (transfers / items + u32::from(i < transfers % items), false))
+        .collect()
+}
+
+/// Sweeps the transfer budget around the boundary so the table shows where
+/// 70 percent of the events limit falls for the worst plan.
+#[test]
+fn transfer_cap_sweep() {
+    println!("{}", header());
+    for transfers in 16..=20 {
+        for dest in [Dest::Account, Dest::Tagged] {
+            let (_, ex) = measure_plan(MODE_ALLOWLIST, &worst_plan(transfers, MAX_BATCH), dest);
+            println!("{}", line(&ex));
+        }
+    }
+    // Fewer items for the same transfers only removes per-item bytes, but
+    // check the other end too: one item per transfer, up to MAX_BATCH.
+    for dest in [Dest::Account, Dest::Tagged] {
+        let (_, ex) = measure_plan(MODE_ALLOWLIST, &worst_plan(MAX_BATCH, MAX_BATCH), dest);
+        println!("{}", line(&ex));
     }
 }
