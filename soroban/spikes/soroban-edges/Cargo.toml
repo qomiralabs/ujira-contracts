@@ -1,0 +1,17 @@
+[package]
+name = "soroban-edges"
+version = "0.0.0"
+description = "Probe contracts and tests that pin Soroban host behavior the mandate depends on."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

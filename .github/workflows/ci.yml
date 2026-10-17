@@ -192,6 +192,17 @@ jobs:
             exit 1
           fi
 
+      - name: Test the wasm fixture check
+        run: ../scripts/check-wasm-fixtures.test.sh
+
+      # Spike tests load committed wasm because the deployer needs real wasm.
+      # Each fixture is rebuilt from its own package and must match byte for
+      # byte, so a fixture can never drift from the source it claims to be.
+      # It runs after the production build check because these builds also
+      # write spike wasm under target/.
+      - name: Check wasm fixtures match their source
+        run: ../scripts/check-wasm-fixtures.sh
+
   celo:
     name: celo
     runs-on: ubuntu-24.04
