@@ -1,0 +1,20 @@
+[package]
+name = "attestation-parity"
+version = "0.0.0"
+description = "Spike: verifies the shared secp256k1 attestation fixture on Soroban."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+ed25519-dalek = "=2.2.0"
+serde_json = "=1.0.154"
+sha2 = "=0.10.9"

@@ -29,6 +29,7 @@ env:
   FORGE_COMMIT: b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2
   FORGE_SHA256: 73640b01bd9ed29fdb4965085099371f8cf0dbbec3e2086cf54564efc4dcfe88
   SLITHER_VERSION: 0.11.6
+  NODE_VERSION: 24.21.0
 
 jobs:
   headers:
@@ -66,6 +67,38 @@ jobs:
 
       - name: Test the invisible character check
         run: scripts/check-invisible-characters.test.sh
+
+  # The attestation parity fixture is generated, and both chain suites trust
+  # it. Rebuilding it from the reference signer must give the committed bytes,
+  # so a hand edit or a signer change cannot drift from what the suites run.
+  fixtures:
+    name: fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: spikes/attestation-parity/generator
+        shell: bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Installs exactly the lockfile, and no package gets to run install
+      # scripts.
+      - name: Install the generator
+        run: |
+          node --version | grep -qx "v${NODE_VERSION}" || { echo "node is not ${NODE_VERSION}" >&2; exit 1; }
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Check the attestation fixture
+        run: node generate.mjs --check ../fixture.json
 
   soroban:
     name: soroban
