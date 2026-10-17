@@ -125,10 +125,10 @@ done
 # Control characters: bash 3.2 truncates a line at a NUL and bash 5 drops it,
 # so either could turn a rejected entry into an accepted one.
 report real.json "{$(entry 'RealFactory (src/Real.sol)' 30000 31000)}"
-for bytes in 'src/Real.sol:Real\000Factory' 'src/Real.sol:RealFactory\000junk' \
-  'src/Real.sol:Real\001Factory' 'src/Real.sol:RealFactory\033' 'src/Real.sol:Real\177Factory' \
-  'src/Real.sol:Real\013Factory' 'src/Real\014.sol:RealFactory'; do
-  printf "$bytes\n" >"$work/control.txt"
+for bytes in 'src/Real.sol:Real\0000Factory' 'src/Real.sol:RealFactory\0000junk' \
+  'src/Real.sol:Real\0001Factory' 'src/Real.sol:RealFactory\0033' 'src/Real.sol:Real\0177Factory' \
+  'src/Real.sol:Real\0013Factory' 'src/Real\0014.sol:RealFactory'; do
+  printf '%b\n' "$bytes" >"$work/control.txt"
   expect "control character in the allowlist ($bytes) is an error" 2 \
     "--factories $work/control.txt --from-json $work/real.json" "control character"
 done
@@ -140,12 +140,18 @@ expect "tab padding is accepted" 0 "--factories $work/tabs.txt --from-json $work
   "src/Real.sol:RealFactory (factory)"
 
 # Solidity identifiers may contain $.
+# shellcheck disable=SC2016 # a literal $ in a Solidity identifier
 report dollar.json "{$(entry 'Real$Factory (src/Real.sol)' 30000 31000)}"
+# shellcheck disable=SC2016 # a literal $ in a Solidity identifier
 allow dollar.txt 'src/Real.sol:Real$Factory'
+# shellcheck disable=SC2016 # a literal $ in a Solidity identifier
 expect "a contract name with \$ can be allowlisted" 0 "--factories $work/dollar.txt --from-json $work/dollar.json" \
   'src/Real.sol:Real$Factory (factory)'
+# shellcheck disable=SC2016 # a literal $ in a Solidity identifier
 allow dollar_lead.txt 'src/Real.sol:$Real'
+# shellcheck disable=SC2016 # a literal $ in a Solidity identifier
 report dollar_lead.json "{$(entry '$Real (src/Real.sol)' 100 200)}"
+# shellcheck disable=SC2016 # a literal $ in a Solidity identifier
 expect "a contract name starting with \$ can be allowlisted" 0 \
   "--factories $work/dollar_lead.txt --from-json $work/dollar_lead.json" 'src/Real.sol:$Real (factory)'
 
