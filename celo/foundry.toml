@@ -33,6 +33,9 @@ cbor_metadata = true
 deny = "warnings"
 ignored_warnings_from = ["lib"]
 
+[profile.lax]
+deny = "never"
+
 [fuzz]
 runs = 1000
 
