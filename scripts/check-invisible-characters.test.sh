@@ -47,7 +47,9 @@ expect() {
     return
   fi
   for needle in "$@"; do
-    if ! printf '%s\n' "$out" | grep -qF -- "$needle"; then
+    # A pattern match, not a pipe into grep -q, so pipefail cannot turn an
+    # early grep exit into a false failure.
+    if [[ "$out" != *"$needle"* ]]; then
       echo "FAIL: $name: output does not mention '$needle'"
       printf '%s\n' "$out" | sed 's/^/    /'
       failures=$((failures + 1))
@@ -91,7 +93,8 @@ write scripts/invisible-characters-allowlist.txt "# Typeset prose
 docs/typeset.md
 docs/bidi.md"
 expect "lookalikes pass only in allowlisted files" 1 "docs/other.md:1:2: U+00A0" "docs/bidi.md:1:2: U+202E"
-if "$script" "$repo" 2>&1 | grep -qF "docs/typeset.md"; then
+allowlist_out=$("$script" "$repo" 2>&1) || true
+if [[ "$allowlist_out" == *"docs/typeset.md"* ]]; then
   echo "FAIL: allowlisted file was reported"
   failures=$((failures + 1))
 else
