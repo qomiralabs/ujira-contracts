@@ -122,6 +122,38 @@ for bad in UjiraFactory 'src/UjiraFactory.sol' '../src/X.sol:X' '/abs/X.sol:X' '
   expect "malformed allowlist entry '$bad' is an error" 2 "--factories $work/malformed.txt --from-json $work/under.json" \
     "not of the form src/<file>.sol:<Contract>"
 done
+# Control characters: bash 3.2 truncates a line at a NUL and bash 5 drops it,
+# so either could turn a rejected entry into an accepted one.
+report real.json "{$(entry 'RealFactory (src/Real.sol)' 30000 31000)}"
+for bytes in 'src/Real.sol:Real\000Factory' 'src/Real.sol:RealFactory\000junk' \
+  'src/Real.sol:Real\001Factory' 'src/Real.sol:RealFactory\033' 'src/Real.sol:Real\177Factory' \
+  'src/Real.sol:Real\013Factory' 'src/Real\014.sol:RealFactory'; do
+  printf "$bytes\n" >"$work/control.txt"
+  expect "control character in the allowlist ($bytes) is an error" 2 \
+    "--factories $work/control.txt --from-json $work/real.json" "control character"
+done
+printf 'src/Real.sol:RealFactory\r\n' >"$work/crlf.txt"
+expect "CRLF line endings are accepted" 0 "--factories $work/crlf.txt --from-json $work/real.json" \
+  "src/Real.sol:RealFactory (factory)"
+printf '\tsrc/Real.sol:RealFactory\t# tab padded\n' >"$work/tabs.txt"
+expect "tab padding is accepted" 0 "--factories $work/tabs.txt --from-json $work/real.json" \
+  "src/Real.sol:RealFactory (factory)"
+
+# Solidity identifiers may contain $.
+report dollar.json "{$(entry 'Real$Factory (src/Real.sol)' 30000 31000)}"
+allow dollar.txt 'src/Real.sol:Real$Factory'
+expect "a contract name with \$ can be allowlisted" 0 "--factories $work/dollar.txt --from-json $work/dollar.json" \
+  'src/Real.sol:Real$Factory (factory)'
+allow dollar_lead.txt 'src/Real.sol:$Real'
+report dollar_lead.json "{$(entry '$Real (src/Real.sol)' 100 200)}"
+expect "a contract name starting with \$ can be allowlisted" 0 \
+  "--factories $work/dollar_lead.txt --from-json $work/dollar_lead.json" 'src/Real.sol:$Real (factory)'
+
+# Options after the celo dir would otherwise be ignored.
+expect "an option after the celo dir is an error" 2 "$work/no_project --factories $work/none.txt" \
+  "unexpected argument"
+expect "a second positional argument is an error" 2 "$work/no_project extra" "unexpected argument"
+
 expect "a missing allowlist is an error" 2 "--factories $work/nope.txt --from-json $work/under.json" \
   "no factory allowlist"
 expect "missing --factories file argument" 2 "--factories" "needs a file"
@@ -222,6 +254,16 @@ project forge_stale_entry
 blob forge_stale_entry SmallMandate 100
 echo "src/Gone.sol:GoneFactory" >"$proj/factory-allowlist.txt"
 expect "forge: allowlist entry for a missing contract is an error" 2 "$proj" "matches no contract"
+
+project forge_test_helpers
+blob forge_test_helpers SmallMandate 100
+mkdir -p "$proj/test/mocks" "$proj/script"
+blob forge_test_helpers MockToken 30000
+mv "$proj/src/MockToken.sol" "$proj/test/mocks/MockToken.sol"
+blob forge_test_helpers Deployer 30000
+mv "$proj/src/Deployer.sol" "$proj/script/Deployer.sol"
+expect "forge: helper contracts under test/ and script/ are not sized" 0 "$proj" \
+  "src/SmallMandate.sol:SmallMandate (contract)" "1 contract(s) within budget"
 
 project forge_broken
 printf '// SPDX-License-Identifier: Apache-2.0\npragma solidity 0.8.37;\ncontract Broken {\n' >"$proj/src/Broken.sol"
