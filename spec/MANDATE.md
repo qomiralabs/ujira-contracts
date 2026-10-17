@@ -40,6 +40,7 @@ Identical on both chains.
 | `PAYOUT_TTL_MAX` | 2592000 | Longest payout time to live (30 days) |
 | `SWEEP_GRACE_SECONDS` | 2592000 | Time after expiry during which only the principal may sweep (30 days) |
 | `RECORD_TTL_MARGIN_SECONDS` | 86400 | Stellar storage only: how long a payout record stays live past its own expiry (1 day); no effect on Celo |
+| `STELLAR_LEDGER_SECONDS` | 5 | Stellar only: the ledger close time used to convert seconds into ledgers for a TTL; the contract cannot read the close time, and 5 matches the TTLs measured on testnet |
 
 Why the batch bounds: on Stellar the binding limit is the per-transaction contract events limit (16,384 bytes, events and return value together). Every token transfer emits its own transfer event that the mandate cannot avoid, and a leg to a tagged destination costs the most, so `execute_batch` is bounded by transfers as well as by items. Under these bounds every worst case, including all-tagged destinations, stays under 70 percent of every network limit on both chains. With 18 transfers a batch of two-leg payouts stops at 9 items; `MAX_BATCH` binds only for single-leg payouts without a fee.
 
@@ -283,7 +284,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-RECOVERYSET-009 Recovery powers are limited
 
 - Precondition: none.
-- Effect: a single member may pause. With the threshold the set may revoke (which freezes the balance for the principal and moves no funds) or rotate one agent. Recovery never withdraws, never changes a destination, the allowlist, the attestation policy, a limit, the principal, the approvers, the guardians, the executors or the recovery set itself. Payout approvals never count as recovery votes and recovery votes never approve a payout. Recovery calls are allowed while paused and after expiry, because they only reduce what can happen.
+- Effect: a single member may pause. With the threshold the set may revoke (which freezes the balance for the principal and moves no funds) or rotate one agent. Recovery never withdraws, never changes a destination, the allowlist, the attestation policy, a limit, the principal, the approvers, the guardians, the executors or the recovery set itself. Payout approvals never count as recovery votes and recovery votes never approve a payout. Recovery calls are allowed while paused and after expiry, because recovery never widens where money can go or any limit: a revoke only freezes, and a rotation only exchanges one agent for another under the same bound destinations and limits (`MANDATE-ROLE-006` records what a rotation followed by approvals can do).
 - Error: none
 
 ## State
@@ -445,7 +446,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-013 Transfers out are wrapped
 
 - Precondition: any transfer out of the mandate: legs, the fee, `withdraw`, `sweep` and `recover_token` (`revoke` makes none).
-- Effect: on Stellar each transfer is made through a guarded contract call, and any error it returns, of any type, becomes `TRANSFER_FAILED`, which reverts every effect of the call, including legs already paid; a token `transfer` that returns a value instead of unit is also `TRANSFER_FAILED`. Budget or storage-limit exhaustion and host internal errors inside the token cannot be caught and fail the call as a transport failure. On Celo a revert, a `false` return or missing return data from the settlement asset is `TRANSFER_FAILED`; for `recover_token` only, a transfer succeeds when the call does not revert, the token has code, and the return data is empty or decodes to `true`, so tokens that return nothing can still be recovered. The mandate never branches on the token's own error codes. Balance reads of the settlement asset are not transfers: on Stellar a failed read is a host abort (the asset contract cannot fail it other than by budget exhaustion), and on Celo a reverting `balanceOf` reverts the whole call without a mandate code; on both chains it is a transport failure, reported to the operator as not landed, never as `TRANSFER_FAILED`.
+- Effect: on Stellar each transfer is made through a guarded contract call, and any error it returns, of any type, becomes `TRANSFER_FAILED`, which reverts every effect of the call, including legs already paid; a token `transfer` that returns a value instead of unit is also `TRANSFER_FAILED`. Budget or storage-limit exhaustion and host internal errors inside the token cannot be caught and fail the call as a transport failure. On Celo a revert, a `false` return or missing return data from the settlement asset is `TRANSFER_FAILED`; for `recover_token` only, a transfer succeeds when the call does not revert, the token has code, and the return data is empty or decodes to `true`, so tokens that return nothing can still be recovered. The mandate never branches on the token's own error codes. Balance reads of the settlement asset are not transfers: on Stellar a failed read is a host abort (the asset contract cannot fail it other than by budget exhaustion, or by an archived balance entry the transaction did not restore, which fails as `EntryArchived`), and on Celo a reverting `balanceOf` reverts the whole call without a mandate code; on both chains it is a transport failure, reported to the operator as not landed, never as `TRANSFER_FAILED`.
 - Error: `TRANSFER_FAILED`
 
 #### MANDATE-PAYOUT-014 The requesting agent is still the same agent
@@ -460,12 +461,12 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Effect: the nested call fails and changes nothing. On Celo every state-changing function carries one reentrancy guard, a transient-storage flag, and views stay callable, so a view read during a callback may show mid-call state and off-chain code must never treat it as final; on Stellar the host refuses any call into a contract already on the call stack, views included. A token that lets that failure propagate fails its own call, so the outer call fails with `TRANSFER_FAILED` (`MANDATE-PAYOUT-013`). A token that catches it carries on without the nested effect, and the outer call completes as if no nested call had been tried. Either way no reasoning about a call's effects has to consider a nested call from a token, which matters most for `recover_token`, the one call to a token the principal chooses. Balance reads are not covered here: on Celo `balanceOf` is a static call that cannot change state, and on Stellar the settlement asset contract calls nothing back.
 - Error: `TRANSFER_FAILED` (the outer call, when the token propagates the failure)
 
-
 #### MANDATE-PAYOUT-016 Payout record lifetime on Stellar
 
 - Precondition: on Stellar, a request stores a payout record.
-- Effect: the request extends the record's TTL so that it stays live until at least `payout.expires_at + RECORD_TTL_MARGIN_SECONDS`, converted to ledgers at the shortest expected ledger close time so the result never falls short, and never below the network's minimum persistent TTL; the submitter pays the rent. Nothing extends a record after that: the tombstone a terminal transition writes keeps the record's remaining TTL and is then left to archive, because an archived record or tombstone still counts as present (`MANDATE-PAYOUT-009`) and a later restore costs only a fee. The one-day margin covers ledger clock drift, a last-moment execute, and the operator's read of the record after the payout lapses, without a restore. Celo storage does not expire, so the rule has no effect there.
+- Effect: the request extends the record's TTL so that it stays live until at least `payout.expires_at + RECORD_TTL_MARGIN_SECONDS`, that is, by `ceil((payout.expires_at + RECORD_TTL_MARGIN_SECONDS - now) / STELLAR_LEDGER_SECONDS)` ledgers, clamped to the network's maximum entry TTL. A new persistent entry already starts at the network's minimum TTL and an extension never shortens one, so the TTL is never below that minimum. At the network's current close time the record does not fall short; if the network later closes ledgers faster, a record may archive somewhat before that point, which only costs a restore fee on its next use (`MANDATE-PAYOUT-009`). The submitter pays the rent. Nothing extends a record after that: the tombstone a terminal transition writes keeps the record's remaining TTL and is then left to archive, because an archived record or tombstone still counts as present (`MANDATE-PAYOUT-009`) and a later restore costs only a fee. The one-day margin covers ledger clock drift, a last-moment execute, and the operator's read of the record after the payout lapses, without a restore. Celo storage does not expire, so the rule has no effect there.
 - Error: none
+
 ## Amounts, time and identity
 
 #### MANDATE-AMOUNT-001 Amounts are integer smallest units
@@ -1099,6 +1100,8 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Precondition: none.
 - Effect: funding is the one balance change with no mandate event, because the mandate is not called; the asset's transfer event is the record.
 - Error: none
+
+### Event list
 
 | Event | Fields |
 | --- | --- |
