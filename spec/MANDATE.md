@@ -39,6 +39,7 @@ Identical on both chains.
 | `PAYOUT_TTL_MIN` | 3600 | Shortest payout time to live (1 hour) |
 | `PAYOUT_TTL_MAX` | 2592000 | Longest payout time to live (30 days) |
 | `SWEEP_GRACE_SECONDS` | 2592000 | Time after expiry during which only the principal may sweep (30 days) |
+| `RECORD_TTL_MARGIN_SECONDS` | 86400 | Stellar storage only: how long a payout record stays live past its own expiry (1 day); no effect on Celo |
 
 Why the batch bounds: on Stellar the binding limit is the per-transaction contract events limit (16,384 bytes, events and return value together). Every token transfer emits its own transfer event that the mandate cannot avoid, and a leg to a tagged destination costs the most, so `execute_batch` is bounded by transfers as well as by items. Under these bounds every worst case, including all-tagged destinations, stays under 70 percent of every network limit on both chains. With 18 transfers a batch of two-leg payouts stops at 9 items; `MAX_BATCH` binds only for single-leg payouts without a fee.
 
@@ -408,7 +409,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-007 Request effects
 
 - Precondition: a request passed every check.
-- Effect: store the record with `created_at = now`, `expires_at` as in `MANDATE-EXPIRY-003` and `MANDATE-EXPIRY-004`, the current `policy_epoch`, and the requesting agent's stored epoch as `agent_epoch` (`MANDATE-PAYOUT-014`). The status follows `MANDATE-APPROVAL-001`. Emit `payout_requested`. Return the status. Funds are reserved at request so that `committed` always means covered by the balance and the principal can see and veto what is queued.
+- Effect: store the record with `created_at = now`, `expires_at` as in `MANDATE-EXPIRY-003` and `MANDATE-EXPIRY-004`, the current `policy_epoch`, and the requesting agent's stored epoch as `agent_epoch` (`MANDATE-PAYOUT-014`); on Stellar, set the record's TTL under `MANDATE-PAYOUT-016`. The status follows `MANDATE-APPROVAL-001`. Emit `payout_requested`. Return the status. Funds are reserved at request so that `committed` always means covered by the balance and the principal can see and veto what is queued.
 - Error: none
 
 #### MANDATE-PAYOUT-008 IDs are opaque to the contract
@@ -459,6 +460,12 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Effect: the nested call is refused and changes nothing. If the token passes that failure on, the transfer fails and the outer call fails with `TRANSFER_FAILED` (`MANDATE-PAYOUT-013`). If the token catches it (`try` and `catch` on Celo, `try_call` on Stellar) and returns success, the outer call continues and stays correct, because no mandate state changed. On Celo every state-changing function carries one reentrancy guard, a transient-storage flag; on Stellar the host refuses to re-enter a contract already on the call stack. Balance reads are not covered here: on Celo `balanceOf` is a static call that cannot change state, and on Stellar the settlement asset contract calls nothing back. So no reasoning about a call's effects has to consider a nested call from a token, which matters most for `recover_token`, the one call to a token the principal chooses. Views stay callable during a callback and may show the mid-call state, so off-chain code must never treat a view read made during a callback as final.
 - Error: `TRANSFER_FAILED` (the outer call, when the token passes the failure on)
 
+
+#### MANDATE-PAYOUT-016 Payout record lifetime on Stellar
+
+- Precondition: on Stellar, a request stores a payout record.
+- Effect: the request extends the record's TTL so that it stays live until at least `payout.expires_at + RECORD_TTL_MARGIN_SECONDS`, converted to ledgers at the shortest expected ledger close time so the result never falls short, and never below the network's minimum persistent TTL; the submitter pays the rent. Nothing extends a record after that: the tombstone a terminal transition writes keeps the record's remaining TTL and is then left to archive, because an archived record or tombstone still counts as present (`MANDATE-PAYOUT-009`) and a later restore costs only a fee. The one-day margin covers ledger clock drift, a last-moment execute, and the operator's read of the record after the payout lapses, without a restore. Celo storage does not expire, so the rule has no effect there.
+- Error: none
 ## Amounts, time and identity
 
 #### MANDATE-AMOUNT-001 Amounts are integer smallest units
@@ -1598,7 +1605,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-SUBMIT-002 Submission discipline on Stellar
 
-- Off chain: every Stellar mandate call is built from a fresh simulation, never a hand-built footprint. Calls that may catch a transfer failure add at least 512 bytes to the simulated write bytes and the matching resource fee; since revoke moves no funds no current call does, so the padding applies to none today and stays as the rule for any future call. `ResourceLimitExceeded` or `EntryArchived` results are re-simulated and resubmitted with bounded retries, never read as a mandate rejection. Only the `getTransaction` result proves a transaction landed. After any restore, the TTL of the instance, every touched record and the asset contract's balance entry for the mandate is extended; the balance entry has its own TTL, so a quiet mandate's money is never archived by surprise. Tested end to end on testnet: a revoke for a principal without a trustline lands with no padding, `frozen` equals the balance, and the funds are withdrawn once the trustline exists.
+- Off chain: every Stellar mandate call is built from a fresh simulation, never a hand-built footprint. Calls that may catch a transfer failure add at least 512 bytes to the simulated write bytes and the matching resource fee; since revoke moves no funds no current call does, so the padding applies to none today and stays as the rule for any future call. `ResourceLimitExceeded` or `EntryArchived` results are re-simulated and resubmitted with bounded retries, never read as a mandate rejection. Only the `getTransaction` result proves a transaction landed. After any restore, the TTL of the instance and of the asset contract's balance entry for the mandate is extended (the balance entry has its own TTL, so a quiet mandate's money is never archived by surprise); a restored open payout record is extended only as far as `MANDATE-PAYOUT-016` allows, and a restored tombstone is not extended at all. Tested end to end on testnet: a revoke for a principal without a trustline lands with no padding, `frozen` equals the balance, and the funds are withdrawn once the trustline exists.
 
 #### CHAINOPS-CREATE-001 The pause-only guardian is on by default
 
@@ -1708,6 +1715,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-PAYOUT-013` | Transfers out are wrapped |
 | `MANDATE-PAYOUT-014` | The requesting agent is still the same agent |
 | `MANDATE-PAYOUT-015` | No nested call into the mandate during a transfer |
+| `MANDATE-PAYOUT-016` | Payout record lifetime on Stellar |
 | `MANDATE-AMOUNT-001` | Amounts are integer smallest units |
 | `MANDATE-AMOUNT-002` | Amount domain |
 | `MANDATE-AMOUNT-003` | Only addition, subtraction and comparison |
