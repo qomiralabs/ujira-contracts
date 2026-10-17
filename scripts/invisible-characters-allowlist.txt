@@ -1,0 +1,4 @@
+# Files allowed to hold a literal no break space (U+00A0), narrow no break
+# space (U+202F) or minus sign (U+2212), one repository relative path per
+# line. Format, bidirectional control and separator characters are rejected
+# in every file, listed or not. Add a file here only with a reason in review.
