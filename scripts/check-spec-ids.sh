@@ -31,6 +31,10 @@
 # check must cite exactly one MANDATE rule ID, that rule must be defined, and
 # it must be able to fail: its Error line may not start with "none". A rule
 # that hands off to per-item checks says so with "- Error: per item".
+# A step may not cite a rule whose precondition (its own line or indented
+# sub-bullets) cites a rule that another step of the same order checks, since
+# the first error would then depend on how an implementation read it. Rules
+# that only mention another rule do so in their Effect.
 #
 # Everything inside fenced code blocks is ignored. An ID whose number does not
 # have exactly three digits is reported, never truncated. An empty "- Error:"
@@ -156,6 +160,7 @@ in_fence { next }
       if (found in defined) problem(found " is defined twice (lines " defined[found] " and " NR ")")
       else defined[found] = NR
       current = found
+      field = ""
       has_pre = has_eff = has_err = has_off = 0
     }
   }
@@ -164,9 +169,16 @@ in_fence { next }
 
 /^#+ / { close_rule() }
 
-current != "" && /^- Precondition:/ { has_pre = 1 }
+current != "" && /^- / { field = "" }
+current != "" && /^- Precondition:/ { has_pre = 1; field = "pre" }
 current != "" && /^- Effect:/ { has_eff = 1 }
 current != "" && /^- Off chain:/ { has_off = 1 }
+# The rules a precondition includes, on its own line or its indented sub-bullets.
+current != "" && field == "pre" && (/^- Precondition:/ || /^  /) {
+  found = ids_in(line, NR)
+  k = split(found, got, " ")
+  for (j = 1; j <= k; j++) if (got[j] != current) pre_refs[current] = pre_refs[current] " " got[j]
+}
 current != "" && /^- Error:/ {
   has_err = 1
   text = substr(line, 10)
@@ -260,7 +272,12 @@ in_order {
   first = ""
   for (j = 1; j <= k; j++) if (got[j] ~ /^MANDATE-/) { m++; if (first == "") first = got[j] }
   if (m != 1) order_problem(order_name ": line " NR " cites " m " rule IDs, needs exactly one")
-  else order_ref[NR] = first
+  else {
+    order_ref[NR] = first
+    order_block[NR] = order_name
+    order_step[NR] = numtxt
+    block_rules[order_name] = block_rules[order_name] " " first "@" numtxt
+  }
 }
 
 # Every ID cited anywhere, outside headings and the index.
@@ -327,6 +344,23 @@ END {
       id = order_ref[ln]
       if (!(id in defined)) problem("check order line " ln " cites " id ", which is not defined")
       else if (err_text[id] ~ /^none/) problem("check order line " ln " cites " id ", which returns no error")
+    }
+    # A step may not cite a rule whose precondition includes a rule that
+    # another step of the same order checks: the first error would depend on
+    # which reading an implementation chose.
+    for (ln in order_ref) {
+      a = order_ref[ln]
+      if (!(a in pre_refs)) continue
+      nb = split(block_rules[order_block[ln]], steps, " ")
+      nr = split(pre_refs[a], inc, " ")
+      for (x = 1; x <= nr; x++) {
+        for (y = 1; y <= nb; y++) {
+          split(steps[y], sp, "@")
+          if (sp[1] == inc[x] && sp[1] != a && sp[2] != order_step[ln]) {
+            problem(order_block[ln] ": line " ln " cites " a ", whose precondition includes " inc[x] ", which step " sp[2] " also checks")
+          }
+        }
+      }
     }
     if (problems == 0) printf "check orders: %d block(s) for %d operation(s), every numbered check cites one defined rule\n", blocks, ops
   }
