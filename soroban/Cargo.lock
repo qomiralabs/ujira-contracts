@@ -181,6 +181,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
+name = "attestation-parity"
+version = "0.0.0"
+dependencies = [
+ "ed25519-dalek",
+ "serde_json",
+ "sha2",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

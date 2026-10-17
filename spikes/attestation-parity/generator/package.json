@@ -1,0 +1,19 @@
+{
+  "name": "attestation-parity-generator",
+  "private": true,
+  "type": "module",
+  "description": "Builds the shared attestation parity fixture for the Soroban and Celo suites.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "generate": "node generate.mjs ../fixture.json",
+    "check": "node generate.mjs --check ../fixture.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@stellar/stellar-base": "15.0.0"
+  }
+}
