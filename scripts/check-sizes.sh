@@ -24,8 +24,9 @@
 #
 # Sizes come from `forge build --sizes --json`, run with test/ and script/
 # skipped. Test helpers such as mocks are never deployed and would otherwise be
-# reported too. What remains is every contract in src/ plus any vendored
-# contract under lib/ that src/ deploys with `new`. forge refuses anything over
+# reported too. What remains is every contract in src/ plus every concrete
+# vendored contract under lib/ that src/ compiles, whether src/ deploys it,
+# calls it or only imports it. forge refuses anything over
 # 24,576 bytes on its own, whatever code_size_limit says, so that one refusal
 # is tolerated and our budgets are applied instead. Any other forge failure
 # stops the check.
@@ -148,9 +149,9 @@ if [ -z "$json_file" ]; then
   json_file="$tmp/sizes.json"
 
   # Bare names in the report carry no path; map each contract to the file it
-  # was compiled from, as `name<TAB>path`. Vendored contracts under lib/ that
-  # src/ deploys with `new` are in the report too and resolve here; only src/
-  # paths can be allowlisted, so they always get the mandate budget.
+  # was compiled from, as `name<TAB>path`. Every concrete vendored contract
+  # under lib/ that src/ compiles is in the report too and resolves here; only
+  # src/ paths can be allowlisted, so they always get the mandate budget.
   out_dir="$celo/out"
   if [ -d "$out_dir" ]; then
     find "$out_dir" -name '*.json' -not -path '*/build-info/*' -print0 |

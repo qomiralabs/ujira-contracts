@@ -291,8 +291,9 @@ jobs:
       # check-sizes.sh reports how many contracts it checked, which must match
       # the contracts it passed. The ones it passed from src/ must match the
       # deployable contracts forge compiled from src/, so a contract dropped
-      # from the size report cannot pass unchecked. Vendored contracts that
-      # src/ deploys with `new` are checked too, so the total can be larger.
+      # from the size report cannot pass unchecked. Every concrete vendored
+      # contract under lib/ that src/ compiles is checked too, so the total
+      # can be larger.
       - name: Check contract sizes
         working-directory: .
         run: |

@@ -338,6 +338,28 @@ echo "src/Parent.sol:Parent" >"$proj/factory-allowlist.txt"
 expect "forge: a lib contract over the mandate budget fails" 1 "$proj" \
   "lib/vendor/Child.sol:Child (contract) runtime"
 
+# A vendored contract that src/ only imports and calls, without deploying it,
+# is compiled with src/ and sized all the same, at the mandate budget.
+project forge_lib_imported
+mkdir -p "$proj/lib/vendor"
+blob forge_lib_imported Mid 26000
+mv "$proj/src/Mid.sol" "$proj/lib/vendor/Mid.sol"
+cat >"$proj/src/UsesMid.sol" <<'SOL'
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Qomira Labs
+pragma solidity 0.8.37;
+
+import {Mid} from "../lib/vendor/Mid.sol";
+
+contract UsesMid {
+    function read(address a) external pure returns (bytes memory) {
+        return Mid(a).blob();
+    }
+}
+SOL
+expect "forge: a lib contract src only imports is sized at the mandate budget" 1 "$proj" \
+  "lib/vendor/Mid.sol:Mid (contract) runtime" "src/UsesMid.sol:UsesMid (contract)"
+
 project forge_broken
 printf '// SPDX-License-Identifier: Apache-2.0\npragma solidity 0.8.37;\ncontract Broken {\n' \
   >"$proj/src/Broken.sol"
