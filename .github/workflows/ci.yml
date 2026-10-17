@@ -21,8 +21,10 @@ env:
   STELLAR_CLI_SHA256: c1680deee94301d33ada7a17f98411e642a4248c727afbd2e43050d345746462
   CARGO_DENY_VERSION: 0.20.2
   CARGO_DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
-  FOUNDRY_VERSION: 1.5.1
-  FOUNDRY_SHA256: 73640b01bd9ed29fdb4965085099371f8cf0dbbec3e2086cf54564efc4dcfe88
+  # Not FOUNDRY_*: forge reads every FOUNDRY_ variable as a config override.
+  FORGE_VERSION: 1.5.1
+  FORGE_COMMIT: b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2
+  FORGE_SHA256: 73640b01bd9ed29fdb4965085099371f8cf0dbbec3e2086cf54564efc4dcfe88
   SLITHER_VERSION: 0.11.6
 
 jobs:
@@ -186,14 +188,19 @@ jobs:
       - name: Install Foundry
         run: |
           mkdir -p "${RUNNER_TEMP}/bin"
-          curl -fsSLo foundry.tar.gz "https://github.com/foundry-rs/foundry/releases/download/v${FOUNDRY_VERSION}/foundry_v${FOUNDRY_VERSION}_linux_amd64.tar.gz"
-          echo "${FOUNDRY_SHA256}  foundry.tar.gz" | sha256sum --check --strict
+          curl -fsSLo foundry.tar.gz "https://github.com/foundry-rs/foundry/releases/download/v${FORGE_VERSION}/foundry_v${FORGE_VERSION}_linux_amd64.tar.gz"
+          echo "${FORGE_SHA256}  foundry.tar.gz" | sha256sum --check --strict
           tar -xzf foundry.tar.gz -C "${RUNNER_TEMP}/bin" forge
           rm foundry.tar.gz
           echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
-          "${RUNNER_TEMP}/bin/forge" --version
-          "${RUNNER_TEMP}/bin/forge" --version | head -n 1 | grep -qx "forge Version: ${FOUNDRY_VERSION}-stable" \
-            || { echo "forge is not ${FOUNDRY_VERSION}" >&2; exit 1; }
+          version=$("${RUNNER_TEMP}/bin/forge" --version)
+          printf '%s\n' "$version"
+          # The release build prints its tag after the version, a local
+          # foundryup build prints "stable", so the commit is the real check.
+          printf '%s\n' "$version" | grep -q "^forge Version: ${FORGE_VERSION}-" \
+            || { echo "forge is not ${FORGE_VERSION}" >&2; exit 1; }
+          printf '%s\n' "$version" | grep -qx "Commit SHA: ${FORGE_COMMIT}" \
+            || { echo "forge was not built from ${FORGE_COMMIT}" >&2; exit 1; }
 
       # Only the compiler is cached. Build output is rebuilt every run so a
       # stale artifact can never stand in for a deleted contract.
