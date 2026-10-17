@@ -92,7 +92,7 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
    cargo deny --locked check advisories licenses sources
    ```
 
-   The contract wasm lands in `soroban/target/wasm32v1-none/release/`. Build it with `stellar contract build`, not `cargo build --target wasm32v1-none`. Since soroban-sdk 28 the SDK refuses a plain cargo build for wasm, because the contract spec embedded in the wasm is only correct after stellar-cli has trimmed it.
+   The contract wasm lands in `soroban/target/wasm32v1-none/release/`. Build it with `stellar contract build`, not `cargo build --target wasm32v1-none`. A plain `stellar contract build` also builds any spike crate in the workspace; to build only the production contracts (the cdylib crates under `soroban/contracts/`) as CI does, run `scripts/soroban-build.sh`. It builds each one with `--package` and fails unless the release folder then holds exactly their wasm. `scripts/soroban-build.test.sh` tests it. Since soroban-sdk 28 the SDK refuses a plain cargo build for wasm, because the contract spec embedded in the wasm is only correct after stellar-cli has trimmed it.
 
 ### Celo (Foundry)
 
@@ -138,7 +138,19 @@ Slither ignores only vendored code under `celo/lib/`. Tests and scripts are left
 
 ### Foundry environment
 
-Any `FOUNDRY_*` or `DAPP_*` environment variable overrides `foundry.toml`, and forge quietly falls back to the default profile when `FOUNDRY_PROFILE` names one that does not exist. CI runs every forge command through `scripts/foundry-env.sh`, which clears those variables and refuses an unknown profile. To run a check the same way locally:
+Any `FOUNDRY_*` or `DAPP_*` environment variable, in any case, overrides `foundry.toml`, and forge quietly falls back to the default profile when `FOUNDRY_PROFILE` names one that does not exist. CI runs every forge command through `scripts/foundry-env.sh`, which clears those variables and refuses an unknown profile.
+
+forge also reads some overrides itself, after the wrapper has handed over, so the wrapper cannot clear them. It refuses to run instead while any of these exists:
+
+- a `.env` in the working directory, in `celo/`, or in any parent of either
+- `~/.foundry/foundry.toml`
+- `FOUNDRY_CONFIG`, in any case
+- a `foundry.toml` in the working directory other than the one it checks
+- an inherited `FOUNDRY_` or `DAPP_` variable whose name is not a valid shell name
+
+That covers what forge 1.5.1 reads. A command that changes directory, or a later forge that reads a new source, can still get around it, so CI also checks the results: `forge config` must show the pinned settings and no test filter, and `forge test` must report at least one test, all passing.
+
+To run a check the same way locally:
 
 ```sh
 scripts/foundry-env.sh -- forge build
@@ -156,8 +168,8 @@ Slither is installed in CI from `celo/slither-requirements.txt`, which pins Slit
 | Job | What it checks |
 | --- | --- |
 | `headers` | actionlint on the workflows, the license header check, the invisible character check and their self tests. |
-| `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, `stellar contract build`, and a clean tree afterwards. |
-| `celo` | From `celo/`, through `scripts/foundry-env.sh`: `forge fmt --check`, `forge build` with warnings denied, `forge test`, `forge coverage`, Slither with `--fail-low`, the size check (every compiled `src/` contract must be checked), both self tests, and a clean tree afterwards. |
+| `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), and a clean tree afterwards. |
+| `celo` | From `celo/`, through `scripts/foundry-env.sh`: `forge fmt --check`, `forge build --force` with warnings denied, `forge test` (at least one test must run), `forge coverage`, Slither with `--fail-low`, the size check (every compiled `src/` contract must be checked), both self tests, and a clean tree afterwards. |
 
 Every action is pinned to a full commit SHA. actionlint, stellar-cli, cargo-deny and Foundry are release binaries checked against a SHA256 in the workflow; bump a version and its hash together.
 
