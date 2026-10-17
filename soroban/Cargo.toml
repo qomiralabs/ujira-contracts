@@ -1,6 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["contracts/placeholder"]
+members = [
+    "contracts/placeholder",
+    "spikes/batch-limits",
+    "spikes/batch-limits/proto",
+]
+# Only production contracts build by default. The spikes are measurement code
+# and must never land in a release folder by accident. CI lints and tests them
+# with --workspace.
+default-members = ["contracts/placeholder"]
 
 [workspace.package]
 edition = "2021"
