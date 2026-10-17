@@ -22,12 +22,19 @@
 # cited anywhere is not defined, when a field is missing, when an error name is
 # unknown, or when a required rule area has no rule.
 #
-# With --check-order it also checks every check order block, the lines
-# between "<!-- check-order: <name> -->" and "<!-- /check-order -->". Each
-# numbered line ("1. ", "9a. ") must cite exactly one MANDATE rule ID, that
-# rule must be defined, and it must be able to fail: its Error line may not
-# start with "none". A rule that hands off to per-item checks says so with
-# "- Error: per item".
+# With --check-order it also checks the check order blocks, the lines
+# between "<!-- check-order: <name> -->" and "<!-- /check-order -->". Every
+# "### <name>" operation heading under "## Operations and check orders",
+# except "Views", must be followed by exactly one block of the same name, and
+# no block may sit anywhere else. A block holds only numbered checks, numbered
+# 1, 2, 3 in order (a letter suffix such as "9a. " follows its step). Each
+# check must cite exactly one MANDATE rule ID, that rule must be defined, and
+# it must be able to fail: its Error line may not start with "none". A rule
+# that hands off to per-item checks says so with "- Error: per item".
+#
+# Everything inside fenced code blocks is ignored. An ID whose number does not
+# have exactly three digits is reported, never truncated. An empty "- Error:"
+# line is reported; a rule that adds no failure writes "- Error: none".
 #
 # Usage: scripts/check-spec-ids.sh [--check-order] [path to MANDATE.md]
 # Exit codes: 0 all checks pass, 1 one or more problems named on stderr,
@@ -85,32 +92,72 @@ function close_rule() {
   current = ""
 }
 
-BEGIN {
-  id_re = "(MANDATE|CHAINOPS)-[A-Z]+-[0-9][0-9][0-9]"
-  section = ""
-  in_order = 0
+# Returns the well formed rule IDs in s, separated by spaces, and reports any
+# ID-like token whose number does not have exactly three digits.
+function ids_in(s, where,    out, tok, digits) {
+  out = ""
+  while (match(s, tok_re)) {
+    tok = substr(s, RSTART, RLENGTH)
+    s = substr(s, RSTART + RLENGTH)
+    digits = tok
+    sub(/^[A-Z]+-[A-Z]+-/, "", digits)
+    if (length(digits) != 3) {
+      problem("malformed rule ID " tok " at line " where ", the number must have three digits")
+      continue
+    }
+    out = out " " tok
+  }
+  return out
 }
 
-{
-  line = $0
+BEGIN {
+  tok_re = "(MANDATE|CHAINOPS)-[A-Z]+-[0-9]+"
+  ops_section = "Operations and check orders"
+  section = ""
+  in_order = 0
+  in_fence = 0
+  op = ""
 }
+
+{ line = $0 }
+
+# Fenced code blocks are examples, not spec text: nothing inside counts.
+/^```/ { in_fence = !in_fence; next }
+in_fence { next }
 
 # Section tracking: level two headings name the section.
 /^## / {
   close_rule()
   section = substr(line, 4)
+  op = ""
+}
+
+# Operation headings under the operations section.
+/^### / && section == ops_section {
+  close_rule()
+  op = substr(line, 5)
+  sub(/ .*$/, "", op)
+  gsub(/`/, "", op)
+  if (op != "Views") {
+    if (op in op_line) problem("operation " op " has two headings")
+    op_line[op] = NR
+  }
+  next
 }
 
 # Rule headings.
 /^#### / {
   close_rule()
   rest = substr(line, 6)
-  if (match(rest, "^" id_re)) {
-    id = substr(rest, RSTART, RLENGTH)
-    if (id in defined) problem(id " is defined twice (lines " defined[id] " and " NR ")")
-    else defined[id] = NR
-    current = id
-    has_pre = has_eff = has_err = has_off = 0
+  if (match(rest, "^" tok_re)) {
+    found = ids_in(substr(rest, RSTART, RLENGTH), NR)
+    sub(/^ /, "", found)
+    if (found != "") {
+      if (found in defined) problem(found " is defined twice (lines " defined[found] " and " NR ")")
+      else defined[found] = NR
+      current = found
+      has_pre = has_eff = has_err = has_off = 0
+    }
   }
   next
 }
@@ -122,7 +169,11 @@ current != "" && /^- Effect:/ { has_eff = 1 }
 current != "" && /^- Off chain:/ { has_off = 1 }
 current != "" && /^- Error:/ {
   has_err = 1
-  err_text[current] = substr(line, 10)
+  text = substr(line, 10)
+  sub(/^ +/, "", text)
+  sub(/ +$/, "", text)
+  if (text == "") problem(current " has an empty \"- Error:\" field; write none or the error names")
+  err_text[current] = text
   rest = line
   while (match(rest, /`[A-Z][A-Z0-9_]*`/)) {
     name = substr(rest, RSTART + 1, RLENGTH - 2)
@@ -147,61 +198,86 @@ section == "Errors" && /^\| *[0-9]+ *\| *`[A-Z][A-Z0-9_]*`/ {
 
 # Rule index rows: | `MANDATE-ROLE-001` | ...
 section == "Rule index" && /^\| *`/ {
-  if (match(line, "^\\| *`" id_re "`")) {
-    s = substr(line, RSTART, RLENGTH)
-    match(s, id_re)
-    id = substr(s, RSTART, RLENGTH)
-    if (id in indexed) problem(id " is listed twice in the rule index")
-    indexed[id] = NR
+  if (match(line, "^\\| *`" tok_re "`")) {
+    found = ids_in(substr(line, RSTART, RLENGTH), NR)
+    sub(/^ /, "", found)
+    if (found != "") {
+      if (found in indexed) problem(found " is listed twice in the rule index")
+      indexed[found] = NR
+    }
   }
   next
 }
 
 # Check order blocks.
 /^<!-- check-order: [a-z_]+ -->$/ {
-  if (in_order) problem("check order block at line " NR " opens inside another block")
+  if (in_order) order_problem("check order block at line " NR " opens inside another block")
   in_order = 1
   order_name = line
   sub(/^<!-- check-order: /, "", order_name)
   sub(/ -->$/, "", order_name)
-  if (order_name in order_seen) problem("check order " order_name " appears twice")
-  order_seen[order_name] = 1
+  if (order_name in order_seen) order_problem("check order " order_name " appears twice")
+  order_seen[order_name] = NR
+  if (section != ops_section || op == "") order_problem("check order " order_name " at line " NR " is not under an operation heading")
+  else if (op != order_name) order_problem("check order " order_name " at line " NR " sits under the heading for " op)
   order_lines = 0
+  prev_n = 0
+  prev_letter = ""
   next
 }
 /^<!-- \/check-order -->$/ {
-  if (!in_order) problem("check order block closed at line " NR " without being opened")
-  else if (order_lines == 0) problem("check order " order_name " has no numbered checks")
+  if (!in_order) order_problem("check order block closed at line " NR " without being opened")
+  else if (order_lines == 0) order_problem("check order " order_name " has no numbered checks")
   in_order = 0
   next
 }
-in_order && /^[0-9]+[a-z]?\. / {
-  order_lines++
-  n = 0
-  rest = line
-  first = ""
-  while (match(rest, "MANDATE-[A-Z]+-[0-9][0-9][0-9]")) {
-    n++
-    if (first == "") first = substr(rest, RSTART, RLENGTH)
-    rest = substr(rest, RSTART + RLENGTH)
+in_order && /^[ \t]*$/ { next }
+in_order {
+  if (line !~ /^[0-9]+[a-z]?\. /) {
+    order_problem(order_name ": line " NR " is not a numbered check (\"1. \" or \"9a. \")")
+    next
   }
-  if (n != 1) order_bad[NR] = order_name ": line " NR " cites " n " rule IDs, needs exactly one"
+  order_lines++
+  numtxt = line
+  sub(/\..*$/, "", numtxt)
+  letter = numtxt
+  sub(/^[0-9]+/, "", letter)
+  n = numtxt
+  sub(/[a-z]$/, "", n)
+  n = n + 0
+  if (letter == "") {
+    if (n != prev_n + 1) order_problem(order_name ": line " NR " is step " n ", expected step " (prev_n + 1))
+    prev_letter = ""
+  } else if (n != prev_n || (prev_letter != "" && letter <= prev_letter)) {
+    order_problem(order_name ": line " NR " is step " numtxt ", which does not follow step " prev_n prev_letter)
+  } else {
+    prev_letter = letter
+  }
+  if (letter == "") prev_n = n
+  found = ids_in(line, NR)
+  k = split(found, got, " ")
+  m = 0
+  first = ""
+  for (j = 1; j <= k; j++) if (got[j] ~ /^MANDATE-/) { m++; if (first == "") first = got[j] }
+  if (m != 1) order_problem(order_name ": line " NR " cites " m " rule IDs, needs exactly one")
   else order_ref[NR] = first
 }
 
 # Every ID cited anywhere, outside headings and the index.
 {
-  rest = line
-  while (match(rest, id_re)) {
-    id = substr(rest, RSTART, RLENGTH)
-    if (!(id in cited)) cited[id] = NR
-    rest = substr(rest, RSTART + RLENGTH)
-  }
+  found = ids_in(line, NR)
+  k = split(found, got, " ")
+  for (j = 1; j <= k; j++) if (!(got[j] in cited)) cited[got[j]] = NR
+}
+
+# Check order problems count only with --check-order.
+function order_problem(msg) {
+  if (check_order) problem(msg)
 }
 
 END {
   close_rule()
-  if (in_order) problem("check order " order_name " is never closed")
+  if (in_order) order_problem("check order " order_name " is never closed")
 
   for (id in defined) if (!(id in indexed)) problem(id " is defined at line " defined[id] " but missing from the rule index")
   for (id in indexed) if (!(id in defined)) problem(id " is in the rule index but not defined")
@@ -242,13 +318,17 @@ END {
     blocks = 0
     for (b in order_seen) blocks++
     if (blocks == 0) problem("no check order blocks found")
-    for (ln in order_bad) problem(order_bad[ln])
+    ops = 0
+    for (o in op_line) {
+      ops++
+      if (!(o in order_seen)) problem("operation " o " at line " op_line[o] " has no check order block")
+    }
     for (ln in order_ref) {
       id = order_ref[ln]
       if (!(id in defined)) problem("check order line " ln " cites " id ", which is not defined")
       else if (err_text[id] ~ /^none/) problem("check order line " ln " cites " id ", which returns no error")
     }
-    if (problems == 0) printf "check orders: %d block(s), every numbered check cites one defined rule\n", blocks
+    if (problems == 0) printf "check orders: %d block(s) for %d operation(s), every numbered check cites one defined rule\n", blocks, ops
   }
 
   total = 0

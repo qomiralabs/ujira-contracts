@@ -46,7 +46,9 @@ valid_spec() {
       echo "- Off chain: the service does something."
       echo
     done
-    echo "## Operations"
+    echo "## Operations and check orders"
+    echo
+    echo "### request_payout"
     echo
     echo "<!-- check-order: request_payout -->"
     echo "1. Caller is an agent (MANDATE-ROLE-001)."
@@ -92,7 +94,7 @@ expect() {
 f="$work/valid.md"
 valid_spec "$f"
 expect "valid spec passes" 0 "$f" "" "30 rule ID(s) defined" "area MANDATE-FEE: 1 rule(s)" "area CHAINOPS-SWEEP: 1 rule(s), off chain, excluded from vector coverage"
-expect "valid spec passes check order" 0 "$f" "--check-order" "check orders: 1 block(s)"
+expect "valid spec passes check order" 0 "$f" "--check-order" "check orders: 1 block(s) for 1 operation(s)"
 
 f="$work/dup.md"
 valid_spec "$f" "#### MANDATE-ROLE-001 Defined again
@@ -163,25 +165,33 @@ valid_spec "$f" "#### MANDATE-WIDGET-001 Not an area
 expect "unknown area" 1 "$f" "" "MANDATE-WIDGET-001 uses an area that is not in the area list"
 
 f="$work/order-no-id.md"
-valid_spec "$f" "<!-- check-order: approve -->
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
 1. Caller is an approver.
 <!-- /check-order -->"
 expect "check order line without an id" 1 "$f" "--check-order" "approve: line" "cites 0 rule IDs"
 expect "check order ignored without the flag" 0 "$f" ""
 
 f="$work/order-two-ids.md"
-valid_spec "$f" "<!-- check-order: approve -->
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
 1. Caller is an approver (MANDATE-ROLE-001, MANDATE-PAUSE-001).
 <!-- /check-order -->"
 expect "check order line with two ids" 1 "$f" "--check-order" "cites 2 rule IDs"
 
 f="$work/order-unclosed.md"
-valid_spec "$f" "<!-- check-order: approve -->
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
 1. Caller is an approver (MANDATE-ROLE-001)."
 expect "check order never closed" 1 "$f" "--check-order" "check order approve is never closed"
 
 f="$work/order-empty.md"
-valid_spec "$f" "<!-- check-order: approve -->
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
 <!-- /check-order -->"
 expect "check order block without checks" 1 "$f" "--check-order" "check order approve has no numbered checks"
 
@@ -210,6 +220,8 @@ valid_spec "$f" "#### MANDATE-PAUSE-002 Never fails
 - Effect: y.
 - Error: none
 
+### pause
+
 <!-- check-order: pause -->
 1. Pause (MANDATE-PAUSE-002).
 <!-- /check-order -->" "| \`MANDATE-PAUSE-002\` | Never fails |"
@@ -222,10 +234,118 @@ valid_spec "$f" "#### MANDATE-BATCH-002 Per item
 - Effect: y.
 - Error: per item (items report their own codes)
 
+### batch
+
 <!-- check-order: batch -->
 1. Each item (MANDATE-BATCH-002).
 <!-- /check-order -->" "| \`MANDATE-BATCH-002\` | Per item |"
-expect "check cites a per-item rule" 0 "$f" "--check-order" "check orders: 2 block(s)"
+expect "check cites a per-item rule" 0 "$f" "--check-order" "check orders: 2 block(s) for 2 operation(s)"
+
+f="$work/op-without-block.md"
+valid_spec "$f" "### sweep
+
+Anyone may call it."
+expect "operation heading without a block" 1 "$f" "--check-order" "operation sweep at line" "has no check order block"
+expect "operation heading without a block passes without the flag" 0 "$f" ""
+
+f="$work/block-renamed.md"
+valid_spec "$f" "### sweep
+
+<!-- check-order: sweeep -->
+1. Not active (MANDATE-SWEEP-001).
+<!-- /check-order -->"
+expect "block named after another operation" 1 "$f" "--check-order" "check order sweeep at line" "sits under the heading for sweep" "operation sweep at line"
+
+f="$work/block-orphan.md"
+valid_spec "$f" "## Notes
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).
+<!-- /check-order -->
+"
+expect "block outside the operations section" 1 "$f" "--check-order" "check order approve at line" "is not under an operation heading"
+
+f="$work/views-excluded.md"
+valid_spec "$f" "### Views
+
+The views change nothing."
+expect "views heading needs no block" 0 "$f" "--check-order" "check orders: 1 block(s) for 1 operation(s)"
+
+f="$work/empty-error.md"
+valid_spec "$f" "#### MANDATE-ROLE-005 Empty error
+
+- Precondition: x.
+- Effect: y.
+- Error:
+" "| \`MANDATE-ROLE-005\` | Empty error |"
+expect "empty error field" 1 "$f" "" "MANDATE-ROLE-005 has an empty \"- Error:\" field"
+
+f="$work/order-bullet.md"
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).
+- Also the payout exists.
+<!-- /check-order -->"
+expect "bullet inside a check order" 1 "$f" "--check-order" "is not a numbered check"
+
+f="$work/order-paren.md"
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).
+2) The payout exists.
+<!-- /check-order -->"
+expect "parenthesis numbering inside a check order" 1 "$f" "--check-order" "is not a numbered check"
+
+f="$work/order-dup-step.md"
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).
+1. Not paused (MANDATE-PAUSE-001).
+<!-- /check-order -->"
+expect "duplicate step number" 1 "$f" "--check-order" "is step 1, expected step 2"
+
+f="$work/order-skip-step.md"
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).
+3. Not paused (MANDATE-PAUSE-001).
+<!-- /check-order -->"
+expect "skipped step number" 1 "$f" "--check-order" "is step 3, expected step 2"
+
+f="$work/order-letter.md"
+valid_spec "$f" "### approve
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).
+1a. Not paused (MANDATE-PAUSE-001).
+2. Fee within the cap (MANDATE-FEE-001).
+<!-- /check-order -->"
+expect "letter suffix follows its step" 0 "$f" "--check-order"
+
+f="$work/four-digit.md"
+valid_spec "$f" "#### MANDATE-ROLE-0010 Four digits
+
+- Precondition: x.
+- Effect: y.
+- Error: none
+"
+expect "four digit id is rejected, not truncated" 1 "$f" "" "malformed rule ID MANDATE-ROLE-0010"
+
+f="$work/fenced-field.md"
+valid_spec "$f" "#### MANDATE-ROLE-006 Field in a fence
+
+- Precondition: x.
+- Effect: y.
+
+\`\`\`
+- Error: \`UNAUTHORIZED\`
+\`\`\`
+" "| \`MANDATE-ROLE-006\` | Field in a fence |"
+expect "field inside a fenced code block does not count" 1 "$f" "" "MANDATE-ROLE-006 has no \"- Error:\" field"
 
 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
