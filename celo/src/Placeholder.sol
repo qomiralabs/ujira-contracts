@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Qomira Labs
-pragma solidity 0.8.30;
+pragma solidity 0.8.37;
 
 /// @title Placeholder
 /// @notice Proves the toolchain compiles, tests, measures coverage and runs analysis. Holds no funds and no state.

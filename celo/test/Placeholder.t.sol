@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Qomira Labs
-pragma solidity 0.8.30;
+pragma solidity 0.8.37;
 
 import {Placeholder} from "../src/Placeholder.sol";
 import {Test} from "forge-std/Test.sol";
