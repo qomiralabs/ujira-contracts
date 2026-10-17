@@ -249,10 +249,11 @@ jobs:
       - name: slither
         run: ../scripts/foundry-env.sh --profile default -- slither . --config-file slither.config.json --fail-low
 
-      # check-sizes.sh reports how many contracts it checked. That count must
-      # match both the contracts it passed and the deployable contracts forge
-      # compiled from src/, so a contract dropped from the size report cannot
-      # pass unchecked.
+      # check-sizes.sh reports how many contracts it checked, which must match
+      # the contracts it passed. The ones it passed from src/ must match the
+      # deployable contracts forge compiled from src/, so a contract dropped
+      # from the size report cannot pass unchecked. Vendored contracts that
+      # src/ deploys with `new` are checked too, so the total can be larger.
       - name: Check contract sizes
         working-directory: .
         run: |
@@ -260,12 +261,14 @@ jobs:
           printf '%s\n' "$out"
           checked=$(printf '%s\n' "$out" | sed -n 's/^check-sizes: \([0-9][0-9]*\) contract(s) within budget$/\1/p')
           validated=$(printf '%s\n' "$out" | grep -c '^ok: ' || true)
+          validated_src=$(printf '%s\n' "$out" | grep -c '^ok: src/' || true)
           compiled=$(find celo/out -name '*.json' -not -path 'celo/out/build-info/*' -print0 \
             | xargs -0 jq -r 'select((.metadata.settings.compilationTarget // {} | keys | any(startswith("src/")))
                 and ((.deployedBytecode.object // "0x") | length > 2)) | input_filename' \
             | wc -l | tr -d ' ')
-          echo "checked=${checked:-none} validated=${validated} compiled=${compiled}"
-          if [ -z "$checked" ] || [ "$checked" -eq 0 ] || [ "$checked" -ne "$validated" ] || [ "$checked" -ne "$compiled" ]; then
+          echo "checked=${checked:-none} validated=${validated} validated_src=${validated_src} compiled=${compiled}"
+          if [ -z "$checked" ] || [ "$checked" -eq 0 ] || [ "$checked" -ne "$validated" ] \
+            || [ "$validated_src" -ne "$compiled" ]; then
             echo "check-sizes did not check every contract in celo/src" >&2
             exit 1
           fi
