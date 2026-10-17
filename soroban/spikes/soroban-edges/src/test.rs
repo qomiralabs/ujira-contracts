@@ -475,3 +475,109 @@ fn transfer_failure_rolled_back_write_is_still_charged() {
     assert_eq!(recipient_side.write_bytes, 328);
     assert_eq!(TokenClient::new(&f.env, &f.token).balance(&f.payer), 999);
 }
+
+#[test]
+fn transfer_failure_budget_exhaustion_is_not_caught() {
+    // The env writes a snapshot when it drops, and that draws on the same
+    // exhausted budget, so this test skips it.
+    let env = Env::new_with_config(soroban_sdk::testutils::EnvTestConfig {
+        capture_snapshot_at_drop: false,
+    });
+    // The test env panics as soon as a call goes over mainnet limits, which
+    // hides what the host returns. Turn that off and give the call a plain
+    // CPU budget instead.
+    env.cost_estimate().disable_resource_limits();
+    env.cost_estimate()
+        .budget()
+        .reset_limits(20_000_000, 200_000_000);
+    // A stored value of 0 makes the child's transfer grow a vector forever.
+    let burner = env.register(child_wasm::WASM, (0_u32, false));
+    let payer = env.register(Payer, ());
+    let client = PayerClient::new(&env, &payer);
+    let to = Address::generate(&env);
+
+    // pay_or_keep catches every failure it can and then succeeds. Budget
+    // exhaustion is not one of them: try_invoke_contract never returns, and
+    // the whole invocation fails with the host's budget error.
+    let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.try_pay_or_keep(&burner, &to, &1)
+    }));
+    env.cost_estimate().budget().reset_unlimited();
+    let events = std::format!("{:?}", env.host().get_diagnostic_events().unwrap());
+    match got {
+        Ok(Ok(Ok(caught))) => panic!("budget exhaustion was caught: {caught:?}"),
+        Ok(Err(Ok(e))) => assert_eq!(
+            e,
+            Error::from_type_and_code(ScErrorType::Budget, xdr::ScErrorCode::ExceededLimit)
+        ),
+        // The native caller frame can only escalate the error by panicking.
+        other => assert!(other.is_err(), "unexpected result {other:?}"),
+    }
+    // The token's own frame ran out of budget, try_call handed the same error
+    // back up instead of a value the payer could inspect, and the payer
+    // frame could only escalate it.
+    assert!(
+        events.contains("Error(Budget(ExceededLimit))"),
+        "no budget error logged"
+    );
+    assert!(
+        events.contains("contract try_call failed"),
+        "the failure did not come through try_call"
+    );
+    assert!(events.contains("escalating error to panic"));
+    assert_eq!(client.marker(), None);
+}
+
+#[test]
+fn transfer_failure_host_error_is_narrowed() {
+    let f = funded(1_000);
+    let payer = PayerClient::new(&f.env, &f.payer);
+    // No contract lives at this address, so the host fails the call itself.
+    let nowhere = Address::generate(&f.env);
+    let to = Address::generate(&f.env);
+    assert_eq!(
+        payer.pay_or_keep(&nowhere, &to, &1),
+        Some(Caught {
+            error_type: ScErrorType::Context as u32,
+            code: xdr::ScErrorCode::InvalidAction as u32,
+        })
+    );
+    // The granular cause is only in the diagnostic log.
+    let events = std::format!("{:?}", f.env.host().get_diagnostic_events().unwrap());
+    assert!(events.contains("contract try_call failed"));
+    assert_eq!(payer.marker(), Some(1));
+}
+
+#[test]
+fn transfer_returning_a_value_is_a_failure() {
+    let env = Env::default();
+    // Any non-zero stored value is what the child's transfer returns.
+    let odd_token = env.register(child_wasm::WASM, (7_u32, false));
+    let payer = env.register(Payer, ());
+    let client = PayerClient::new(&env, &payer);
+    let to = Address::generate(&env);
+    assert_eq!(
+        client.pay_or_keep(&odd_token, &to, &1),
+        Some(Caught {
+            error_type: ScErrorType::Value as u32,
+            code: u32::MAX,
+        })
+    );
+    assert_eq!(
+        client.try_pay(&odd_token, &vec![&env, leg(&to, 1)]),
+        Err(Ok(ProbeError::TransferFailed))
+    );
+}
+
+#[test]
+fn constructor_error_code_is_only_in_diagnostics() {
+    let env = Env::default();
+    let hash = env.deployer().upload_contract_wasm(child_wasm::WASM);
+    let factory = env.register(Factory, ());
+    let client = FactoryClient::new(&env, &factory);
+    let salt = BytesN::from_array(&env, &[5; 32]);
+    assert!(client.try_create(&hash, &salt, &7, &true).is_err());
+    let events = std::format!("{:?}", env.host().get_diagnostic_events().unwrap());
+    assert!(events.contains("constructor invocation has failed with error"));
+    assert!(events.contains("Error(Contract(34))"));
+}

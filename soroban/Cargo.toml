@@ -5,6 +5,10 @@ members = [
     "spikes/soroban-edges",
     "spikes/soroban-edges/child",
 ]
+# Only production contracts build by default. The spikes are measurement code,
+# one of them a deliberately hostile token, and must never land in a release
+# folder by accident. CI lints and tests them with --workspace.
+default-members = ["contracts/placeholder"]
 
 [workspace.package]
 edition = "2021"

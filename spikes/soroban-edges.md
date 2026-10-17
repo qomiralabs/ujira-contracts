@@ -1,6 +1,6 @@
 # Soroban edges: transfer failure, constructor errors, archived entries
 
-Three host behaviors that decide how the mandate's Soroban rules are worded. Each finding is pinned by a test in `soroban-edges/`, so an SDK or protocol bump that changes it fails CI.
+Three host behaviors that decide how the mandate's Soroban rules are worded. The tests live in `soroban/spikes/soroban-edges/`. Every finding the SDK test env can reproduce is pinned by a named test there, so an SDK bump that changes it fails CI. A few findings only show on a real network, because the test env behaves differently on purpose (it restores archived entries itself, it does not run RPC simulation, and native test contracts report host errors differently from wasm). Those are marked **network only** below, with the transactions that showed them, and have to be rechecked by hand on a protocol or RPC upgrade.
 
 ## Versions tested
 
@@ -16,18 +16,23 @@ The local network had its state archival settings lowered (`min_persistent_ttl` 
 
 ## Layout and how to run
 
+All paths are under `soroban/spikes/`.
+
 - `soroban-edges/src/lib.rs`: the probe contracts. `Payer` changes its own state and then pays through `try_invoke_contract`, either returning `TRANSFER_FAILED` (execute shape) or carrying on (revoke shape). `Factory` deploys a child with or without checking its arguments first. `Store` writes and reads persistent and temporary records.
-- `soroban-edges/child/`: a contract whose constructor fails on request. Its `transfer` never returns, so it also serves as a hostile token.
-- `soroban-edges/fixtures/soroban_edges_child.wasm`: the child built with `stellar contract build --package soroban-edges-child`. The deployer needs real wasm, so the build output is committed. Rebuilding from this tree gives the same bytes (sha256 `04b27bc576e7fbe5515d216cb8c1a7895f28127a693e08b15cce90df351e98ea`); rebuild and copy it whenever the child changes.
+- `soroban-edges/child/`: a contract whose constructor fails on request. It doubles as a hostile token: with a stored value of 0 its `transfer` grows a vector until the budget runs out, and with any other value it returns that value.
+- `soroban-edges/fixtures/soroban_edges_child.wasm`: the child built with `stellar contract build --package soroban-edges-child`. The deployer needs real wasm, so the build output is committed (sha256 `4c3c4f7aec653e12b3a74d21bbef044e5162869763f80b506f27b10a591cbec1`). `scripts/check-wasm-fixtures.sh` rebuilds it from source and fails if the bytes differ; rebuild and copy it whenever the child changes.
+
+The spike crates are workspace members but not default members, so a plain `stellar contract build` or `cargo build` in `soroban/` builds only the production contracts and never writes the hostile child into the release folder. The gates run them with `--workspace`.
 
 ```
 cd soroban
 cargo test -p soroban-edges
+cd .. && scripts/check-wasm-fixtures.sh
 ```
 
 ## 1. Transfer failure mapping
 
-Tests: `transfer_failure_no_trustline`, `transfer_failure_deauthorized`, `transfer_failure_insufficient_balance`, `transfer_failure_rolls_back_earlier_legs`, `transfer_failure_rolled_back_write_is_still_charged`.
+Tests: `transfer_failure_no_trustline`, `transfer_failure_deauthorized`, `transfer_failure_insufficient_balance`, `transfer_failure_rolls_back_earlier_legs`, `transfer_failure_rolled_back_write_is_still_charged`, `transfer_failure_budget_exhaustion_is_not_caught`, `transfer_failure_host_error_is_narrowed`, `transfer_returning_a_value_is_a_failure`.
 
 Every SAC failure is caught by `try_invoke_contract` and arrives as a contract error the caller can map:
 
@@ -39,18 +44,20 @@ Every SAC failure is caught by `try_invoke_contract` and arrives as a contract e
 | Sender (the contract) deauthorized by the issuer | `Error(Contract, #11)` "balance is deauthorized" | yes |
 | Amount above the balance | `Error(Contract, #10)` "balance is not sufficient to spend" | yes |
 
-When the contract then returns its own error (`#72` here), the whole invocation is rolled back: the contract's own earlier write, its event, and any leg that had already been paid in the same call. Measured in the test env and on a submitted transaction that failed at apply time (local, tx `ee5472ea...`, ledger 1155, result `trapped`, first leg of 300 undone). When the contract catches the failure and returns success instead, its own writes and events stay and no money moves.
+When the contract then returns its own error (`#72` here), the whole invocation is rolled back: the contract's own earlier write, its event, and any leg that had already been paid in the same call. Pinned in the test env, and also seen on a submitted transaction that failed at apply time (local, tx `ee5472ea...`, ledger 1155, result `trapped`, first leg of 300 undone). When the contract catches the failure and returns success instead, its own writes and events stay and no money moves.
 
-What `try_invoke_contract` does not catch, read from the host and measured on both networks: budget exhaustion and storage limit errors (`ExceededLimit` of type Budget or Storage) and host internal errors. A token that burns the budget fails the whole call with `Error(Budget, ExceededLimit)`. Any other recoverable host error is narrowed to `Error(Context, InvalidAction)` before the caller sees it, so the mapping has to accept any error, not a list of SAC codes.
+What `try_invoke_contract` does not catch: budget exhaustion, storage limit errors (`ExceededLimit` of type Budget or Storage) and host internal errors (from the host source). A token that burns the budget fails the whole call: in `transfer_failure_budget_exhaustion_is_not_caught` the child, running as wasm, exhausts the budget inside `transfer`, `try_call` hands `Error(Budget(ExceededLimit))` back instead of a value, the calling frame can only escalate it, and the caller's write is gone. The same call simulated against a wasm caller on the local network and on testnet fails with `Error(Budget, ExceededLimit)`. Storage limit and internal errors are not tested; that part rests on the host source alone.
 
-Resource accounting, measured on both networks: when the failure is on the recipient side (no account, no trustline, unauthorized trustline), the SAC has already written the sender's balance before it fails. That write is rolled back, but it still counts against the transaction's write bytes. stellar-rpc 29.0.1 simulation leaves it out, so a call that catches such a failure and succeeds is under-declared and fails on chain with `InvokeHostFunctionResourceLimitExceeded`:
+Any other recoverable host error reaches the caller narrowed to `Error(Context, InvalidAction)`, and the real cause is only in the diagnostic log. `transfer_failure_host_error_is_narrowed` pins it by calling `transfer` on an address with no contract. A token whose `transfer` returns a value instead of nothing is a failure too (`transfer_returning_a_value_is_a_failure`). So the mapping has to accept any error and any unexpected return, not a list of SAC codes.
+
+Resource accounting: when the failure is on the recipient side (no account, no trustline, unauthorized trustline), the SAC has already written the sender's balance before it fails. That write is rolled back, but it still counts against the transaction's write bytes. stellar-rpc 29.0.1 simulation leaves it out, so a call that catches such a failure and succeeds is under-declared and fails on chain with `InvokeHostFunctionResourceLimitExceeded`:
 
 | Network | Declared by simulation | Needed at apply |
 | --- | --- | --- |
 | Local | 104 bytes | 328 bytes |
 | Testnet (tx `ce94d6ba...`, ledger 5243610) | 104 bytes | 224 bytes |
 
-The same call with the write bytes padded by 400 lands and returns the caught `#13` (local, unpadded tx `c9898ba4...` failed, padded tx `052efd01...` succeeded). Sender-side failures (insufficient balance, deauthorized sender) fail before any write and land unpadded. The SDK test env charges the rolled-back write (328 bytes, 2 entries), so the test pins it.
+The same call with the write bytes padded by 400 lands and returns the caught `#13` (local, unpadded tx `c9898ba4...` failed, padded tx `052efd01...` succeeded; testnet `9791d557...` failed, padded `e0ecead5...` succeeded). Sender-side failures (insufficient balance, deauthorized sender) fail before any write and land unpadded. The test env charges the rolled-back write (328 bytes, 2 entries), and `transfer_failure_rolled_back_write_is_still_charged` pins that. The simulation gap itself is **network only**: the test env runs no RPC simulation.
 
 Implied rule wording:
 
@@ -60,15 +67,15 @@ Implied rule wording:
 
 ## 2. Constructor errors through a deployer
 
-Tests: `constructor_error_through_deployer`, `constructor_error_checked_in_factory`.
+Tests: `constructor_error_through_deployer`, `constructor_error_checked_in_factory`, `constructor_error_code_is_only_in_diagnostics`.
 
 A constructor that returns `Error(Contract, #34)` reaches the factory's caller as `Error(Context, InvalidAction)`. The host rewrites any recoverable constructor error on purpose, so that a constructor cannot leak codes into the contract that deployed it. The original `#34` survives only in diagnostic events ("constructor invocation has failed with error"), which are not part of the transaction result.
 
-Nothing is left behind: no instance entry at the deterministic address, no contract events (only the fee events), and the same salt deploys cleanly once the arguments are good. Measured in the test env and on submitted transactions (local tx `48564536...`, ledger 1255; testnet tx `27890fa7...`, ledger 5243638; both `trapped`, then a clean retry at the predicted address).
+Nothing is left behind: no instance entry at the deterministic address, no contract events, and the same salt deploys cleanly once the arguments are good. Pinned in the test env, and also seen on submitted transactions, where the meta held only the fee events (local tx `48564536...`, ledger 1255; testnet tx `27890fa7...`, ledger 5243638; both `trapped`, then a clean retry at the predicted address).
 
 A factory that checks the arguments itself before deploying returns its own `#34` to the caller.
 
-Side finding: a native test contract and the same contract running as wasm report host errors differently. A second deploy at a used address shows `Error(Context, InvalidAction)` through the native test factory and `Error(Storage, ExistingValue)` on the network. Contract error codes agree.
+Side finding, **network only** for the wasm half: a native test contract and the same contract running as wasm report host errors differently. A second deploy at a used address shows `Error(Context, InvalidAction)` through the native test factory and `Error(Storage, ExistingValue)` on the network. Contract error codes agree.
 
 Implied rule wording:
 
@@ -90,7 +97,7 @@ A persistent entry whose TTL has run out is archived, never deleted, and never r
 
 A temporary entry past its TTL is gone: `has` returns `false` and the entry is no longer in storage, on both the test env and the network.
 
-The SDK 29 test env restores archived entries automatically, like a simulated transaction, so it cannot show the failing path; that path was measured on the network only.
+The test env restores archived entries automatically, like a simulated transaction, so `archived_entry_read` pins the restore and the minimum TTL. The failing path without restore marking, eviction to the hot archive, and the RPC `liveUntilLedgerSeq: 0` reading are **network only** (local network, transactions above).
 
 Implied rule wording:
 

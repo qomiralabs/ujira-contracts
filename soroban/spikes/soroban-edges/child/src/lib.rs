@@ -5,8 +5,8 @@
 //! to see what a failed constructor looks like from the outside, so it writes
 //! state and emits an event before failing: both must be gone afterwards.
 //!
-//! It also doubles as a hostile token: its `transfer` never returns, so a
-//! caller can see what happens when a token burns the whole budget.
+//! It also doubles as a hostile token, either one that burns the whole budget
+//! or one whose `transfer` returns a value.
 
 #![no_std]
 
@@ -53,8 +53,14 @@ impl Child {
         env.storage().instance().get(&ChildKey::Value)
     }
 
-    /// Token-shaped on purpose. Grows a vector until the host stops it.
-    pub fn transfer(env: Env, _from: Address, _to: Address, _amount: i128) {
+    /// Token-shaped on purpose, with two hostile behaviors picked by the
+    /// value the constructor stored: 0 grows a vector until the host stops
+    /// it, anything else returns that value, which no real token does.
+    pub fn transfer(env: Env, _from: Address, _to: Address, _amount: i128) -> u32 {
+        let value: u32 = env.storage().instance().get(&ChildKey::Value).unwrap_or(0);
+        if value != 0 {
+            return value;
+        }
         let mut v: Vec<u32> = Vec::new(&env);
         loop {
             v.push_back(1);
