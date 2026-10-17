@@ -75,6 +75,13 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
    stellar contract build
    ```
 
+   Check dependencies against `soroban/deny.toml` (RustSec advisories, permissive licenses only, crates.io only) with cargo-deny 0.20.2:
+
+   ```sh
+   cargo install --locked cargo-deny --version 0.20.2
+   cargo deny --locked check advisories licenses sources
+   ```
+
    The contract wasm lands in `soroban/target/wasm32v1-none/release/`. Build it with `stellar contract build`, not `cargo build --target wasm32v1-none`. Since soroban-sdk 28 the SDK refuses a plain cargo build for wasm, because the contract spec embedded in the wasm is only correct after stellar-cli has trimmed it.
 
 ### Celo (Foundry)
@@ -118,6 +125,31 @@ scripts/check-sizes.test.sh
 A contract whose name ends in `Factory` may use up to 61,440 bytes of runtime code, Celo's 65,536 byte limit less a 4 KiB margin. Every other contract, the mandate included, must stay within 24,576 bytes. Initcode must stay within Celo's 131,072 byte limit. Name a contract `...Factory` only if it deploys mandates.
 
 Slither ignores only vendored code under `celo/lib/`. Tests and scripts are left out because the build it runs skips them, not because of a path filter. Any vulnerable contract under `celo/src/`, in any subfolder, must make the slither command fail. If it passes, the config is hiding code.
+
+### Foundry environment
+
+Any `FOUNDRY_*` or `DAPP_*` environment variable overrides `foundry.toml`, and forge quietly falls back to the default profile when `FOUNDRY_PROFILE` names one that does not exist. CI runs every forge command through `scripts/foundry-env.sh`, which clears those variables and refuses an unknown profile. To run a check the same way locally:
+
+```sh
+scripts/foundry-env.sh -- forge build
+scripts/foundry-env.sh --profile default -- scripts/check-sizes.sh
+```
+
+`scripts/foundry-env.test.sh` tests the wrapper.
+
+Slither is installed in CI from `celo/slither-requirements.txt`, which pins Slither 0.11.6 and every dependency by hash.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `development`, `staging` and `main`, with read-only permissions and no secrets. A newer push to the same branch cancels the run in progress.
+
+| Job | What it checks |
+| --- | --- |
+| `headers` | actionlint on the workflows, the license header check and its self test. |
+| `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, `stellar contract build`, and a clean tree afterwards. |
+| `celo` | From `celo/`, through `scripts/foundry-env.sh`: `forge fmt --check`, `forge build` with warnings denied, `forge test`, `forge coverage`, Slither with `--fail-low`, the size check (every compiled `src/` contract must be checked), both self tests, and a clean tree afterwards. |
+
+Every action is pinned to a full commit SHA. actionlint, stellar-cli, cargo-deny and Foundry are release binaries checked against a SHA256 in the workflow; bump a version and its hash together.
 
 ## License
 

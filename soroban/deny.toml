@@ -1,0 +1,59 @@
+# cargo-deny policy for the Soroban workspace. Run from soroban/:
+#
+#   cargo deny --locked check advisories licenses sources
+
+[graph]
+# No `targets` list, so dependencies for every target are checked, the
+# wasm32v1-none contract build included. All features, so an optional
+# dependency cannot slip past.
+all-features = true
+
+[advisories]
+# Any RustSec advisory fails the check, including unmaintained and unsound
+# crates anywhere in the graph. Add an `ignore` entry only with a reason that
+# says why the crate cannot reach a deployed contract or be replaced.
+unmaintained = "all"
+unsound = "all"
+yanked = "deny"
+ignore = [
+  # paste is unmaintained, not vulnerable. It is a proc macro that ark-ff
+  # pulls in through soroban-env-host, runs only at compile time and has no
+  # maintained replacement upstream yet. Drop this once soroban-env-host
+  # moves off it.
+  { id = "RUSTSEC-2024-0436", reason = "unmaintained compile time proc macro from soroban-env-host, no upgrade available" },
+]
+
+[licenses]
+# Permissive licenses only. A crate with an OR expression passes when one
+# side is on this list.
+allow = [
+  "Apache-2.0",
+  # Apache 2.0 plus an extra grant that only removes a restriction.
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-1-Clause",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+]
+confidence-threshold = 0.93
+unused-allowed-license = "allow"
+
+# unicode-ident is "(MIT OR Apache-2.0) AND Unicode-3.0". The Unicode
+# license covers the generated character tables and is permissive, but it is
+# scoped to this crate so a new crate under it still needs a review.
+exceptions = [
+  { allow = ["Unicode-3.0"], crate = "unicode-ident" },
+]
+
+[licenses.private]
+# The workspace crates are not published, so their own license is not checked
+# against the allowlist.
+ignore = true
+
+[sources]
+# crates.io only. A git or alternative registry dependency fails the check.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

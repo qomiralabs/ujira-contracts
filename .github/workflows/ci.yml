@@ -1,0 +1,282 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [development, staging, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Every tool is a pinned release binary checked against its SHA256 before it
+# runs. Bump a version and its hash together.
+env:
+  ACTIONLINT_VERSION: 1.7.12
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+  STELLAR_CLI_VERSION: 28.1.0
+  STELLAR_CLI_SHA256: c1680deee94301d33ada7a17f98411e642a4248c727afbd2e43050d345746462
+  CARGO_DENY_VERSION: 0.20.2
+  CARGO_DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+  FOUNDRY_VERSION: 1.5.1
+  FOUNDRY_SHA256: 73640b01bd9ed29fdb4965085099371f8cf0dbbec3e2086cf54564efc4dcfe88
+  SLITHER_VERSION: 0.11.6
+
+jobs:
+  headers:
+    name: headers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint workflows
+        run: |
+          curl -fsSLo actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf actionlint.tar.gz -C "${RUNNER_TEMP}" actionlint
+          rm actionlint.tar.gz
+          "${RUNNER_TEMP}/actionlint" -color
+
+      - name: Check license headers
+        run: scripts/check-headers.sh
+
+      - name: Test the header check
+        run: scripts/check-headers.test.sh
+
+  soroban:
+    name: soroban
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      # Incremental output is never reused in CI and only bloats the cache.
+      CARGO_INCREMENTAL: 0
+    defaults:
+      run:
+        working-directory: soroban
+        # rust-toolchain.toml is the only toolchain source: an inherited
+        # RUSTUP_TOOLCHAIN would silently win over it, so every step drops it.
+        shell: env -u RUSTUP_TOOLCHAIN bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Rust toolchain
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          if [ -z "$channel" ]; then
+            echo "no channel in rust-toolchain.toml" >&2
+            exit 1
+          fi
+          rustup --version
+          # Installs exactly what rust-toolchain.toml lists, target and
+          # components included.
+          rustup toolchain install
+          active=$(rustup show active-toolchain)
+          echo "$active"
+          case "$active" in
+            "${channel}-"*"(overridden by "*"rust-toolchain.toml"*) ;;
+            *) echo "active toolchain is not the rust-toolchain.toml pin ${channel}" >&2; exit 1 ;;
+          esac
+          rustc --version | grep -q "^rustc ${channel} " || { echo "rustc is not ${channel}" >&2; exit 1; }
+          cargo --version | grep -q "^cargo ${channel} " || { echo "cargo is not ${channel}" >&2; exit 1; }
+          rustup target list --installed | grep -qx wasm32v1-none || { echo "wasm32v1-none is not installed" >&2; exit 1; }
+          echo "toolchain=${channel}" >> "$GITHUB_ENV"
+
+      # Keyed on the toolchain and the lockfile. A lockfile change restores
+      # the closest older cache and only rebuilds what changed.
+      - name: Cache cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            soroban/target
+          key: soroban-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
+          restore-keys: |
+            soroban-${{ runner.os }}-${{ env.toolchain }}-
+
+      - name: Install stellar-cli
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -fsSLo stellar.tar.gz "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${STELLAR_CLI_SHA256}  stellar.tar.gz" | sha256sum --check --strict
+          tar -xzf stellar.tar.gz -C "${RUNNER_TEMP}/bin" stellar
+          rm stellar.tar.gz
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+          "${RUNNER_TEMP}/bin/stellar" --version
+          "${RUNNER_TEMP}/bin/stellar" --version | head -n 1 | grep -q "^stellar ${STELLAR_CLI_VERSION} " \
+            || { echo "stellar is not ${STELLAR_CLI_VERSION}" >&2; exit 1; }
+
+      - name: Install cargo-deny
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          name="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          curl -fsSLo cargo-deny.tar.gz "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/${name}.tar.gz"
+          echo "${CARGO_DENY_SHA256}  cargo-deny.tar.gz" | sha256sum --check --strict
+          tar -xzf cargo-deny.tar.gz -C "${RUNNER_TEMP}/bin" --strip-components=1 "${name}/cargo-deny"
+          rm cargo-deny.tar.gz
+          "${RUNNER_TEMP}/bin/cargo-deny" --version | grep -qx "cargo-deny ${CARGO_DENY_VERSION}" \
+            || { echo "cargo-deny is not ${CARGO_DENY_VERSION}" >&2; exit 1; }
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      # Advisories, licenses and crate sources, against the committed lockfile
+      # and soroban/deny.toml.
+      - name: cargo deny
+        run: cargo deny --locked check advisories licenses sources
+
+      - name: cargo clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --locked --workspace
+
+      # Soroban rewrites test_snapshots/ when a test's output changes, so a
+      # changed or new snapshot must fail here rather than pass unnoticed.
+      - name: Check test snapshots are unchanged
+        run: |
+          status=$(git status --porcelain --untracked-files=all)
+          if [ -n "$status" ]; then
+            printf '%s\n' "$status"
+            git diff
+            echo "the tests changed tracked files or wrote new ones, commit the updated snapshots" >&2
+            exit 1
+          fi
+
+      - name: stellar contract build
+        run: |
+          stellar contract build --locked
+          ls -l target/wasm32v1-none/release/*.wasm
+
+      - name: Check the tree is clean after the build
+        run: |
+          status=$(git status --porcelain --untracked-files=all)
+          if [ -n "$status" ]; then
+            printf '%s\n' "$status"
+            echo "the build changed tracked files or wrote files outside target/" >&2
+            exit 1
+          fi
+
+  celo:
+    name: celo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: celo
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Foundry
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -fsSLo foundry.tar.gz "https://github.com/foundry-rs/foundry/releases/download/v${FOUNDRY_VERSION}/foundry_v${FOUNDRY_VERSION}_linux_amd64.tar.gz"
+          echo "${FOUNDRY_SHA256}  foundry.tar.gz" | sha256sum --check --strict
+          tar -xzf foundry.tar.gz -C "${RUNNER_TEMP}/bin" forge
+          rm foundry.tar.gz
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+          "${RUNNER_TEMP}/bin/forge" --version
+          "${RUNNER_TEMP}/bin/forge" --version | head -n 1 | grep -qx "forge Version: ${FOUNDRY_VERSION}-stable" \
+            || { echo "forge is not ${FOUNDRY_VERSION}" >&2; exit 1; }
+
+      # Only the compiler is cached. Build output is rebuilt every run so a
+      # stale artifact can never stand in for a deleted contract.
+      - name: Cache solc
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.svm
+          key: svm-${{ runner.os }}-${{ hashFiles('celo/foundry.toml') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: celo/slither-requirements.txt
+
+      # Every package is pinned by hash, so this installs exactly the locked
+      # set or fails.
+      - name: Install Slither
+        run: |
+          python -m pip install --require-hashes --no-deps -r slither-requirements.txt
+          slither --version | grep -qx "${SLITHER_VERSION}" || { echo "slither is not ${SLITHER_VERSION}" >&2; exit 1; }
+
+      # Every forge call below goes through foundry-env.sh, which drops all
+      # FOUNDRY_* and DAPP_* variables and refuses a profile foundry.toml does
+      # not define. This step also proves forge reads the pinned settings.
+      - name: Check Foundry config
+        run: |
+          ../scripts/foundry-env.sh --profile default -- forge config --json >"${RUNNER_TEMP}/config.json"
+          jq -e '.solc == "0.8.37" and .evm_version == "prague" and .deny == "warnings" and .auto_detect_solc == false' \
+            "${RUNNER_TEMP}/config.json"
+
+      - name: forge fmt
+        run: ../scripts/foundry-env.sh --profile default -- forge fmt --check
+
+      # foundry.toml sets deny = "warnings", so a compiler warning fails here.
+      - name: forge build
+        run: ../scripts/foundry-env.sh --profile default -- forge build
+
+      - name: forge test
+        run: ../scripts/foundry-env.sh --profile default -- forge test
+
+      - name: forge coverage
+        run: ../scripts/foundry-env.sh --profile default -- forge coverage --report summary
+
+      - name: slither
+        run: ../scripts/foundry-env.sh --profile default -- slither . --config-file slither.config.json --fail-low
+
+      # check-sizes.sh reports how many contracts it checked. That count must
+      # match both the contracts it passed and the deployable contracts forge
+      # compiled from src/, so a contract dropped from the size report cannot
+      # pass unchecked.
+      - name: Check contract sizes
+        working-directory: .
+        run: |
+          out=$(scripts/foundry-env.sh --profile default -- scripts/check-sizes.sh)
+          printf '%s\n' "$out"
+          checked=$(printf '%s\n' "$out" | sed -n 's/^check-sizes: \([0-9][0-9]*\) contract(s) within budget$/\1/p')
+          validated=$(printf '%s\n' "$out" | grep -c '^ok: ' || true)
+          compiled=$(find celo/out -name '*.json' -not -path 'celo/out/build-info/*' -print0 \
+            | xargs -0 jq -r 'select((.metadata.settings.compilationTarget // {} | keys | any(startswith("src/")))
+                and ((.deployedBytecode.object // "0x") | length > 2)) | input_filename' \
+            | wc -l | tr -d ' ')
+          echo "checked=${checked:-none} validated=${validated} compiled=${compiled}"
+          if [ -z "$checked" ] || [ "$checked" -eq 0 ] || [ "$checked" -ne "$validated" ] || [ "$checked" -ne "$compiled" ]; then
+            echo "check-sizes did not check every contract in celo/src" >&2
+            exit 1
+          fi
+
+      - name: Test the size check
+        working-directory: .
+        run: scripts/foundry-env.sh --profile default -- scripts/check-sizes.test.sh
+
+      - name: Test the Foundry environment wrapper
+        working-directory: .
+        run: scripts/foundry-env.test.sh
+
+      - name: Check the tree is clean
+        working-directory: .
+        run: |
+          status=$(git status --porcelain --untracked-files=all)
+          if [ -n "$status" ]; then
+            printf '%s\n' "$status"
+            echo "the gate changed tracked files or wrote untracked ones" >&2
+            exit 1
+          fi
