@@ -39,6 +39,13 @@
 # only mention another rule do so in their Effect. Tab characters are refused
 # inside rule bodies, and rule headings must run in numeric order per area.
 #
+# Formatting: once the fields of a rule start, a blank line may only be
+# followed by a heading, so every field is contiguous and nothing can hide
+# after a blank line. Two blank lines in a row are refused, every heading
+# needs a blank line before it, line endings must be LF, and hyphen
+# look-alikes (U+2010 to U+2015, U+2212, U+FE58, U+FE63, U+FF0D, U+00AD) are
+# refused here and in README.md and the JSON files beside the spec.
+#
 # Everything inside fenced code blocks is ignored. An ID whose number does not
 # have exactly three digits, or that runs on into letters (MANDATE-SWEEP-004a),
 # is reported, never truncated. Letter suffixes on steps run a, b, c in order.
@@ -79,10 +86,31 @@ fi
 mandate_areas="CONFIG ROLE AMOUNT FUND ASSET DUST PAYOUT BATCH BUDGET PAYMENT DAILY RECIPIENT SPLIT APPROVAL EXPIRY PAUSE REVOKE WITHDRAW SWEEP RECOVER RECOVERYSET PRINCIPAL EVENT FEE"
 chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE"
 
+# Hyphen look-alikes that read as "-" but are not: U+2010 to U+2015, U+2212,
+# U+FE58, U+FE63, U+FF0D and the soft hyphen U+00AD, as UTF-8 bytes.
+hyphens=$(printf '\342\200\220 \342\200\221 \342\200\222 \342\200\223 \342\200\224 \342\200\225 \342\210\222 \357\271\230 \357\271\243 \357\274\215 \302\255')
+
+# The other text files of the spec directory (README.md and the JSON tables)
+# must not hold hyphen look-alikes either.
+sibling_status=0
+spec_dir=$(dirname "$spec")
+for other in "$spec_dir"/README.md "$spec_dir"/*.json; do
+  [ -f "$other" ] || continue
+  for h in $hyphens; do
+    if hit=$(LC_ALL=C grep -n -F -- "$h" "$other" | head -n 1); then
+      echo "check-spec-ids: $(basename "$other"):${hit%%:*} has a non-ASCII hyphen; write the ASCII hyphen-minus" >&2
+      sibling_status=1
+      break
+    fi
+  done
+done
+
+set +e
 LC_ALL=C awk \
   -v check_order="$check_order" \
   -v mandate_areas="$mandate_areas" \
-  -v chainops_areas="$chainops_areas" '
+  -v chainops_areas="$chainops_areas" \
+  -v hyphens="$hyphens" '
 function problem(msg) {
   print "check-spec-ids: " msg > "/dev/stderr"
   problems++
@@ -126,9 +154,40 @@ BEGIN {
   in_order = 0
   in_fence = 0
   op = ""
+  nh = split(hyphens, hy, " ")
+  prev_blank = 0
 }
 
-{ line = $0 }
+{
+  line = $0
+  if (line ~ /\r$/) {
+    if (!cr_seen) problem("line " NR " ends with a carriage return; line endings must be LF")
+    cr_seen = 1
+    sub(/\r$/, "", line)
+    $0 = line
+  }
+  for (h = 1; h <= nh; h++) {
+    if (index(line, hy[h]) > 0) {
+      problem("non-ASCII hyphen at line " NR "; write the ASCII hyphen-minus")
+      break
+    }
+  }
+  is_blank = (line ~ /^[ \t]*$/)
+  if (!in_fence) {
+    if (is_blank && prev_blank) problem("two blank lines in a row at line " NR)
+    if (!is_blank && line ~ /^#+ / && NR > 1 && !prev_blank) problem("heading at line " NR " needs a blank line before it")
+    # The fields of a rule are contiguous: once they start, a blank line may
+    # only be followed by another heading.
+    if (current != "" && fields_started) {
+      if (is_blank) pending_blank = 1
+      else if (pending_blank && line !~ /^#+ /) {
+        problem(current " has content after a blank line at line " NR "; the fields of a rule must be contiguous")
+        pending_blank = 0
+      }
+    }
+  }
+  prev_blank = is_blank
+}
 
 # Fenced code blocks are examples, not spec text: nothing inside counts.
 /^```/ { in_fence = !in_fence; next }
@@ -177,6 +236,8 @@ in_fence { next }
       }
       current = found
       field = ""
+      fields_started = 0
+      pending_blank = 0
       has_pre = has_eff = has_err = has_off = 0
     }
   }
@@ -186,7 +247,7 @@ in_fence { next }
 /^#+ / { close_rule() }
 
 current != "" && /\t/ { problem(current " has a tab character at line " NR "; indent with spaces") }
-current != "" && /^- (Precondition|Effect|Error|Off chain):/ { field = "" }
+current != "" && /^- (Precondition|Effect|Error|Off chain):/ { field = ""; fields_started = 1 }
 current != "" && /^[ \t]*$/ { field = "" }
 current != "" && /^- Precondition:/ { has_pre = 1; field = "pre" }
 current != "" && /^- Effect:/ { has_eff = 1 }
@@ -414,3 +475,7 @@ END {
   printf "%d rule ID(s) defined, indexed and unique\n", total
 }
 ' "$spec"
+awk_status=$?
+set -e
+if [ "$awk_status" -ne 0 ]; then exit "$awk_status"; fi
+exit "$sibling_status"

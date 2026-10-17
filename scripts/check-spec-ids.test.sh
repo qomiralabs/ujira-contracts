@@ -55,7 +55,14 @@ valid_spec() {
     echo "2. Fee within the cap (MANDATE-FEE-001)."
     echo "<!-- /check-order -->"
     echo
-    printf '%s\n' "$extra"
+    if [ -n "$extra" ]; then
+      printf '%s\n' "$extra"
+      case "$extra" in
+        *"
+") ;;
+        *) echo ;;
+      esac
+    fi
     echo "## Rule index"
     echo
     echo "| ID | Title |"
@@ -486,6 +493,61 @@ valid_spec "$f" "#### MANDATE-ROLE-003 Third
 " "| \`MANDATE-ROLE-003\` | Third |
 | \`MANDATE-ROLE-002\` | Second |"
 expect "rule headings out of numeric order" 1 "$f" "" "MANDATE-ROLE-002 at line" "comes after MANDATE-ROLE-003"
+
+f="$work/blank-then-indented.md"
+valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
+
+- Precondition: a field breaks its domain.
+
+  It also covers the fee as in MANDATE-FEE-001.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+
+### create
+
+<!-- check-order: create -->
+1. Domains (MANDATE-CONFIG-002).
+2. Fee within the cap (MANDATE-FEE-001).
+<!-- /check-order -->" "| \`MANDATE-CONFIG-002\` | Domains |"
+expect "blank line then indented content in a rule" 1 "$f" "--check-order" "MANDATE-CONFIG-002 has content after a blank line at line" "must be contiguous"
+
+f="$work/blank-then-paragraph.md"
+valid_spec "$f" "#### MANDATE-ROLE-005 Paragraph after the fields
+
+- Precondition: x.
+- Effect: y.
+- Error: none
+
+A stray paragraph inside the rule.
+" "| \`MANDATE-ROLE-005\` | Paragraph after the fields |"
+expect "blank line then a paragraph in a rule" 1 "$f" "" "MANDATE-ROLE-005 has content after a blank line at line"
+
+f="$work/nb-hyphen.md"
+valid_spec "$f" "See MANDATE$(printf '\342\200\221')SWEEP$(printf '\342\200\221')001 for details."
+expect "non-ascii hyphen" 1 "$f" "" "non-ASCII hyphen at line"
+
+f="$work/crlf.md"
+valid_spec "$f"
+sed 's/$/'"$(printf '\r')"'/' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+expect "crlf line endings" 1 "$f" "" "line endings must be LF"
+
+f="$work/double-blank.md"
+valid_spec "$f" "Some text.
+
+
+More text."
+expect "two blank lines in a row" 1 "$f" "" "two blank lines in a row at line"
+
+f="$work/heading-no-blank.md"
+valid_spec "$f" "Some text.
+### approve"
+expect "heading not preceded by a blank line" 1 "$f" "" "heading at line" "needs a blank line before it"
+
+mkdir -p "$work/sibling"
+f="$work/sibling/MANDATE.md"
+valid_spec "$f"
+printf 'A README with a non breaking hyphen: a%sb\n' "$(printf '\342\200\221')" >"$work/sibling/README.md"
+expect "non-ascii hyphen in a sibling spec file" 1 "$f" "" "README.md:1 has a non-ASCII hyphen"
 
 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
