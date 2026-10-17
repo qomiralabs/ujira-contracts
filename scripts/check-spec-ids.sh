@@ -16,16 +16,18 @@
 # CHAINOPS rule must carry an "- Off chain:" field; those rules bind services,
 # not the contracts, and are reported as excluded from vector coverage.
 #
-# The check fails when an ID is defined twice, when an ID is defined but not in
-# the rule index (a "## Rule index" section with rows "| `ID` | ... |"), when
+# The check fails when the error table lists a code or a name twice, when an
+# ID is defined twice, when an ID is defined but not in the rule index (a "## Rule index" section with rows "| `ID` | ... |"), when
 # the index lists an ID twice or lists one that is not defined, when any ID
 # cited anywhere is not defined, when a field is missing, when an error name is
 # unknown, or when a required rule area has no rule.
 #
 # With --check-order it also checks every check order block, the lines
 # between "<!-- check-order: <name> -->" and "<!-- /check-order -->". Each
-# numbered line ("1. ", "9a. ") must cite exactly one MANDATE rule ID, and
-# that rule must be defined.
+# numbered line ("1. ", "9a. ") must cite exactly one MANDATE rule ID, that
+# rule must be defined, and it must be able to fail: its Error line may not
+# start with "none". A rule that hands off to per-item checks says so with
+# "- Error: per item".
 #
 # Usage: scripts/check-spec-ids.sh [--check-order] [path to MANDATE.md]
 # Exit codes: 0 all checks pass, 1 one or more problems named on stderr,
@@ -120,6 +122,7 @@ current != "" && /^- Effect:/ { has_eff = 1 }
 current != "" && /^- Off chain:/ { has_off = 1 }
 current != "" && /^- Error:/ {
   has_err = 1
+  err_text[current] = substr(line, 10)
   rest = line
   while (match(rest, /`[A-Z][A-Z0-9_]*`/)) {
     name = substr(rest, RSTART + 1, RLENGTH - 2)
@@ -130,7 +133,16 @@ current != "" && /^- Error:/ {
 
 # Error table rows: | 10 | `UNAUTHORIZED` | ...
 section == "Errors" && /^\| *[0-9]+ *\| *`[A-Z][A-Z0-9_]*`/ {
-  if (match(line, /`[A-Z][A-Z0-9_]*`/)) known_error[substr(line, RSTART + 1, RLENGTH - 2)] = 1
+  code = line
+  sub(/^\| */, "", code)
+  sub(/ *\|.*$/, "", code)
+  if (code in error_code) problem("error code " code " is listed twice (lines " error_code[code] " and " NR ")")
+  else error_code[code] = NR
+  if (match(line, /`[A-Z][A-Z0-9_]*`/)) {
+    name = substr(line, RSTART + 1, RLENGTH - 2)
+    if (name in known_error) problem("error name " name " is listed twice")
+    known_error[name] = 1
+  }
 }
 
 # Rule index rows: | `MANDATE-ROLE-001` | ...
@@ -231,7 +243,11 @@ END {
     for (b in order_seen) blocks++
     if (blocks == 0) problem("no check order blocks found")
     for (ln in order_bad) problem(order_bad[ln])
-    for (ln in order_ref) if (!(order_ref[ln] in defined)) problem("check order line " ln " cites " order_ref[ln] ", which is not defined")
+    for (ln in order_ref) {
+      id = order_ref[ln]
+      if (!(id in defined)) problem("check order line " ln " cites " id ", which is not defined")
+      else if (err_text[id] ~ /^none/) problem("check order line " ln " cites " id ", which returns no error")
+    }
     if (problems == 0) printf "check orders: %d block(s), every numbered check cites one defined rule\n", blocks
   }
 

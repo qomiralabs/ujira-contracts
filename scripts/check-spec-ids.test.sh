@@ -191,6 +191,42 @@ valid_spec "$f" "<!-- check-order: request_payout -->
 <!-- /check-order -->"
 expect "check order name used twice" 1 "$f" "--check-order" "check order request_payout appears twice"
 
+f="$work/dup-code.md"
+valid_spec "$f"
+# shellcheck disable=SC2016 # the backticks are literal markdown
+sed 's/^| 46 | `FEE_EXCEEDS_CAP`/| 10 | `FEE_EXCEEDS_CAP`/' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+expect "duplicate error code" 1 "$f" "" "error code 10 is listed twice"
+
+f="$work/dup-name.md"
+valid_spec "$f"
+# shellcheck disable=SC2016 # the backticks are literal markdown
+sed 's/^| 46 | `FEE_EXCEEDS_CAP`/| 46 | `UNAUTHORIZED`/' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+expect "duplicate error name" 1 "$f" "" "error name UNAUTHORIZED is listed twice"
+
+f="$work/order-no-error.md"
+valid_spec "$f" "#### MANDATE-PAUSE-002 Never fails
+
+- Precondition: x.
+- Effect: y.
+- Error: none
+
+<!-- check-order: pause -->
+1. Pause (MANDATE-PAUSE-002).
+<!-- /check-order -->" "| \`MANDATE-PAUSE-002\` | Never fails |"
+expect "check cites a rule that returns no error" 1 "$f" "--check-order" "cites MANDATE-PAUSE-002, which returns no error"
+
+f="$work/order-per-item.md"
+valid_spec "$f" "#### MANDATE-BATCH-002 Per item
+
+- Precondition: x.
+- Effect: y.
+- Error: per item (items report their own codes)
+
+<!-- check-order: batch -->
+1. Each item (MANDATE-BATCH-002).
+<!-- /check-order -->" "| \`MANDATE-BATCH-002\` | Per item |"
+expect "check cites a per-item rule" 0 "$f" "--check-order" "check orders: 2 block(s)"
+
 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 

@@ -82,6 +82,7 @@ Codes are append only and never reused. `0` means success and appears only in ba
 | 62 | `PAYOUT_WRONG_STATUS` | The payout is not in a status this call accepts |
 | 63 | `PAYOUT_LAPSED` | The payout is at or after its own expiry |
 | 64 | `ALREADY_APPROVED` | A repeated approval or recovery vote |
+| 65 | `AGENT_REMOVED` | The agent that requested the payout is no longer an agent |
 | 70 | `ASSET_NOT_SUPPORTED` | The factory does not support the asset |
 | 71 | `WRONG_ASSET` | Token recovery of the settlement asset |
 | 72 | `TRANSFER_FAILED` | A token transfer out of the mandate failed |
@@ -111,7 +112,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-ROLE-002 The principal is never an agent or an executor
 
 - Precondition: a configuration or role change that would put the principal in `agents` or `executors`.
-- Effect: refused. The principal already holds those powers.
+- Effect: refused. The principal already executes, and requesting payouts is deliberately left to agent keys, so the principal's key is never used for routine spending and each key has one clear job.
 - Error: `ROLE_CONFLICT`
 
 #### MANDATE-ROLE-003 Agents and approvers are disjoint
@@ -135,7 +136,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-ROLE-006 Allowed overlaps
 
 - Precondition: none.
-- Effect: guardians may also be approvers or agents, and recovery approvers may also be approvers or guardians. Pausing only tightens, so these overlaps grant nothing dangerous. Payout approvals and recovery votes never count for each other.
+- Effect: these overlaps, and only these, are allowed: a guardian may also be an approver, an agent, an executor or a recovery approver; a recovery approver may also be an approver or a guardian. Pausing only tightens, so these overlaps grant nothing dangerous. Every other pair of roles is disjoint (`MANDATE-ROLE-002` to `MANDATE-ROLE-005`, `MANDATE-ROLE-020`), and the fee address holds no role at all (`MANDATE-ROLE-008`). Payout approvals and recovery votes never count for each other.
 - Error: none
 
 #### MANDATE-ROLE-007 Role sets are bounded
@@ -146,13 +147,13 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 #### MANDATE-ROLE-008 The fee address holds no role
 
-- Precondition: a configuration, `add_role`, principal proposal or agent rotation that would make `fee_address` the principal or put it in `agents`, `approvers`, `executors` or `recovery`.
-- Effect: refused.
+- Precondition: a configuration, `add_role`, principal proposal or acceptance, or agent rotation that would make `fee_address` the principal or put it in `agents`, `approvers`, `guardians`, `executors` or `recovery`.
+- Effect: refused. The fee address is used for nothing else, not even pausing; the operator's pause key is a separate guardian.
 - Error: `ROLE_CONFLICT`
 
 #### MANDATE-ROLE-009 Role conflict check on add
 
-- Precondition: `add_role(role, account)` where adding `account` would break `MANDATE-ROLE-002`, `MANDATE-ROLE-003`, `MANDATE-ROLE-004`, `MANDATE-ROLE-005` or `MANDATE-ROLE-008`.
+- Precondition: `add_role(role, account)` where adding `account` would break, checked in this order, `MANDATE-ROLE-002`, `MANDATE-ROLE-003`, `MANDATE-ROLE-004`, `MANDATE-ROLE-005`, `MANDATE-ROLE-020` or `MANDATE-ROLE-008`. The attester overlap is `MANDATE-ROLE-018`.
 - Effect: refused.
 - Error: `ROLE_CONFLICT`
 
@@ -198,6 +199,30 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 - Effect: refused.
 - Error: `CONFIG_INVALID`
 
+#### MANDATE-ROLE-017 No zero address as principal or role member
+
+- Precondition: on Celo, the zero address given as `config.principal`, as any role member at creation, in `add_role`, or as `propose_principal(proposed)`. In `recovery_rotate_agent` the zero address encodes "no new agent", so it never reaches this rule.
+- Effect: refused. The zero address can never call, so as a role member it would count toward `len(approvers)` or `len(recovery)` without ever being able to approve or vote, and as a proposed principal it could not be told apart from no proposal. Unreachable on Stellar, which has no zero address; the vectors are Celo only with the unrepresentable-input skip reason.
+- Error: `CONFIG_INVALID`
+
+#### MANDATE-ROLE-018 The attester's address holds no role
+
+- Precondition: on Celo, the address derived from the configured `attester` key would equal the principal, `fee_address` or a member of `agents`, `approvers`, `guardians`, `executors` or `recovery`. Checked on every path that can create the overlap: at creation, in `set_attestation_policy`, `add_role`, `propose_principal`, `accept_principal` and `recovery_rotate_agent`.
+- Effect: refused, so an agent can never also be the key that vouches for its own destinations, whichever of the two is set first. On Stellar the attester is a secp256k1 key and every role is an address, so the overlap cannot be detected on chain; there the off-chain attester service and `CHAINOPS-CREATE-003` carry the guarantee, and the vectors for this rule are Celo only.
+- Error: `ROLE_CONFLICT`
+
+#### MANDATE-ROLE-019 Every caller argument is authorized first
+
+- Precondition: a call that takes a `caller` address, including one that anyone may make (`cancel`, `cancel_batch`, `sweep`).
+- Effect: on Stellar the first check is `caller.require_auth()`, before any lookup or role decision; on Celo the caller is `msg.sender`. Without it, an account could pass the principal's address to get past the sweep guards, cancel as an agent, or forge the `by` field of an event. Vectors on Stellar include a call that names the principal as `caller` without the principal's signature.
+- Error: host authorization failure (Stellar); not reachable on Celo
+
+#### MANDATE-ROLE-020 Agents and executors are disjoint
+
+- Precondition: a configuration, `add_role` or agent rotation that would put one address in both `agents` and `executors`.
+- Effect: refused. An agent already executes, so the overlap adds no power and only blurs which key did what.
+- Error: `ROLE_CONFLICT`
+
 ### Recovery approver set
 
 #### MANDATE-RECOVERYSET-001 Only the principal changes the set
@@ -232,7 +257,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 #### MANDATE-RECOVERYSET-006 Rotation respects the role rules
 
-- Precondition: `recovery_rotate_agent(old, new)` where `new` is in `approvers`, `executors` or `recovery`, or is the principal or `fee_address`.
+- Precondition: `recovery_rotate_agent(old, new)` where `new` is in `approvers`, `executors` or `recovery`, or is the principal or `fee_address` (the same separation as `add_role`, `MANDATE-ROLE-009`). A proposed principal that becomes an agent this way cannot then accept (`MANDATE-PRINCIPAL-006`). On Celo the attester's address is refused by `MANDATE-ROLE-018`.
 - Effect: refused.
 - Error: `ROLE_CONFLICT`
 
@@ -282,13 +307,13 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-003 Caller of create is the principal
 
 - Precondition: `create(config, salt)` from a caller other than `config.principal`.
-- Effect: refused.
-- Error: `UNAUTHORIZED`
+- Effect: refused. `create` takes no caller argument: on Stellar it requires the authorization of `config.principal`, so another caller fails as a host authorization failure; on Celo `msg.sender` must be `config.principal`.
+- Error: `UNAUTHORIZED` (Celo); host authorization failure (Stellar)
 
 #### MANDATE-CONFIG-004 The factory validates before it deploys
 
 - Precondition: `create` passed the caller and asset checks.
-- Effect: the factory validates the full configuration with the same validation the constructor uses, before deploying, and returns the error itself: field domains (`MANDATE-CONFIG-002`), role rules (`MANDATE-ROLE-002` to `MANDATE-ROLE-008`) and the attester rule (`MANDATE-CONFIG-005`). The constructor repeats every check as a backstop. Both chains follow this structure, so the error code always comes from the factory. On Stellar a constructor error reaches the factory's caller only as a generic host error, so a vector that sees that from `create` has found a factory bug. A failed create leaves no contract and no events, and retrying with the same salt is safe.
+- Effect: the factory validates the full configuration before deploying, in the fixed order of `create` checks 3 to 14, and returns the first error itself. The constructor repeats the same checks in the same order as a backstop, so two implementations can never pick a different first error for a configuration that breaks several rules. Both chains follow this structure, so the error code always comes from the factory. On Stellar a constructor error reaches the factory's caller only as a generic host error, so a vector that sees that from `create` has found a factory bug. The Stellar vector runner therefore loads the compiled contract, not a native test registration, because host error codes seen through native test contracts differ from what the chain reports; the codes the mandate itself returns are the same either way. A failed create leaves no contract and no events, and retrying with the same salt is safe.
 - Error: `CONFIG_INVALID`, `ROLE_CONFLICT`, `ROLE_SET_FULL`
 
 #### MANDATE-CONFIG-005 Attester presence and form
@@ -306,14 +331,14 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-007 update_limits
 
 - Precondition: `update_limits(limits)` with `limits = { total_budget, per_payment_cap, per_recipient_daily_cap, approval_threshold, payout_ttl_seconds, expires_at }` where a field breaks `MANDATE-CONFIG-002`, or `expires_at <= now`.
-- Effect: refused. On success all six fields are replaced at once and `limits_updated` is emitted with the new values. A new `payout_ttl_seconds` applies to new requests only. Extending `expires_at` after expiry makes the mandate active again.
+- Effect: refused. On success all six fields are replaced at once and `limits_updated` is emitted with the new values. A new `payout_ttl_seconds` applies to new requests only, and so does a new `approval_threshold` (`MANDATE-APPROVAL-001`). With no approvers, the threshold rule is re-checked here (`MANDATE-APPROVAL-009`). Extending `expires_at` after expiry makes the mandate active again, subject to `MANDATE-FUND-004`.
 - Error: `CONFIG_INVALID`
 
 #### MANDATE-CONFIG-008 set_attestation_policy
 
-- Precondition: `set_attestation_policy(attester, country_policy_hash)` while the mode is `ALLOWLIST`; or with an attester that breaks `MANDATE-CONFIG-005`; or, on Celo, where the address derived from the key is in a role set.
+- Precondition: `set_attestation_policy(attester, country_policy_hash)` while the mode is `ALLOWLIST`, or with an attester that breaks `MANDATE-CONFIG-005`. The attester address overlap is `MANDATE-ROLE-018`.
 - Effect: refused. On success `attester` and `country_policy_hash` are replaced, `policy_epoch` increases by one, and `attestation_policy_set { attester, country_policy_hash, policy_epoch }` is emitted.
-- Error: `WRONG_RECIPIENT_MODE`, `CONFIG_INVALID`, `ROLE_CONFLICT`
+- Error: `WRONG_RECIPIENT_MODE`, `CONFIG_INVALID`
 
 #### MANDATE-CONFIG-009 Configuration changes are atomic
 
@@ -380,7 +405,7 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 #### MANDATE-PAYOUT-007 Request effects
 
 - Precondition: a request passed every check.
-- Effect: store the record with `created_at = now`, `expires_at = now + payout_ttl_seconds` and the current `policy_epoch`. The status follows `MANDATE-APPROVAL-001`. Emit `payout_requested`. Return the status. Funds are reserved at request so that `committed` always means covered by the balance and the principal can see and veto what is queued.
+- Effect: store the record with `created_at = now`, `expires_at` as in `MANDATE-EXPIRY-003` and `MANDATE-EXPIRY-004`, and the current `policy_epoch`. The status follows `MANDATE-APPROVAL-001`. Emit `payout_requested`. Return the status. Funds are reserved at request so that `committed` always means covered by the balance and the principal can see and veto what is queued.
 - Error: none
 
 #### MANDATE-PAYOUT-008 IDs are opaque to the contract
@@ -397,9 +422,15 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 
 #### MANDATE-PAYOUT-010 Who may cancel
 
-- Precondition: `cancel` where the caller is not the principal (reason 1) and not an agent (reason 2), and neither of these holds for anyone else (reason 3): `now >= payout.expires_at`; or the mandate is expired and `now - expires_at >= SWEEP_GRACE_SECONDS`. A payout whose own time to live lapsed can be cancelled by anyone at once; a cancel that rests only on the mandate's expiry waits out the grace. When the mandate is expired `now >= expires_at`, so the subtraction cannot underflow.
-- Effect: refused. Authorization is checked after the lookup here because who may cancel depends on the payout.
+- Precondition: `cancel` where the caller is not the principal (reason 1), is not the payout's own agent while it is still an agent (reason 2), and neither of these holds for anyone else (reason 3): `now >= payout.expires_at`; or the mandate is expired and `now - expires_at >= SWEEP_GRACE_SECONDS`. A payout whose own time to live lapsed can be cancelled by anyone at once; a cancel that rests only on the mandate's expiry waits out the grace. When the mandate is expired `now >= expires_at`, so the subtraction cannot underflow.
+- Effect: refused. Authorization is checked after the lookup here because who may cancel depends on the payout. Reason 2 is limited to the payout's own agent so that one agent, for example an operator-held key, can never cancel payouts that people approved for another.
 - Error: `UNAUTHORIZED`
+
+#### MANDATE-PAYOUT-014 The requesting agent is still an agent
+
+- Precondition: `approve` or `execute` of a payout whose `payout.agent` is no longer in `agents`.
+- Effect: refused, so removing or rotating out a compromised agent stops every payout it queued, including when the principal's key is lost and only the recovery set can act. Such payouts can still be cancelled by the principal, or by anyone once they lapse.
+- Error: `AGENT_REMOVED`
 
 #### MANDATE-PAYOUT-011 Cancel effects
 
@@ -416,7 +447,7 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 #### MANDATE-PAYOUT-013 Transfers out are wrapped
 
 - Precondition: any transfer out of the mandate: legs, the fee, `withdraw`, `sweep` and `recover_token` (`revoke` makes none).
-- Effect: on Stellar each transfer is made through a guarded contract call, and any error it returns, of any type, becomes `TRANSFER_FAILED`, which reverts every effect of the call, including legs already paid. Budget or storage-limit exhaustion and host internal errors inside the token cannot be caught and fail the call as a transport failure. On Celo a revert, a `false` return or missing return data from the token is `TRANSFER_FAILED`. The mandate never branches on the token's own error codes.
+- Effect: on Stellar each transfer is made through a guarded contract call, and any error it returns, of any type, becomes `TRANSFER_FAILED`, which reverts every effect of the call, including legs already paid; a token `transfer` that returns a value instead of unit is also `TRANSFER_FAILED`. Budget or storage-limit exhaustion and host internal errors inside the token cannot be caught and fail the call as a transport failure. On Celo a revert, a `false` return or missing return data from the settlement asset is `TRANSFER_FAILED`; for `recover_token` only, a transfer succeeds when the call does not revert, the token has code, and the return data is empty or decodes to `true`, so tokens that return nothing can still be recovered. The mandate never branches on the token's own error codes.
 - Error: `TRANSFER_FAILED`
 
 ## Amounts, time and identity
@@ -476,7 +507,13 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 #### MANDATE-EXPIRY-003 Payout time to live
 
 - Precondition: none.
-- Effect: each payout expires at `created_at + payout_ttl_seconds`, using the value in force at request time.
+- Effect: each payout expires at `created_at + payout_ttl_seconds`, using the value in force at request time, unless `MANDATE-EXPIRY-004` sets it earlier.
+- Error: none
+
+#### MANDATE-EXPIRY-004 Attested payouts expire with their attestations
+
+- Precondition: a request in mode `ATTESTED` or `BOTH`.
+- Effect: `payout.expires_at = min(now + payout_ttl_seconds, the earliest valid_until among the leg attestations)`. An attestation is valid for at most `MAX_ATTESTATION_VALIDITY`, so an attested payout must be approved and executed while its eligibility statement holds; afterwards it lapses (`MANDATE-PAYOUT-006`), anyone may cancel it, and the agent requests again with fresh attestations. Chosen over storing the earliest `valid_until` and re-checking it at execute, because capping the expiry needs no new field and no new check, and a lapsed payout can be cancelled at once, which releases its reservation instead of leaving it stuck as APPROVED.
 - Error: none
 
 ## Destinations, legs and recipient binding
@@ -573,8 +610,8 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 
 #### MANDATE-RECIPIENT-016 Allowlist entry validation
 
-- Precondition: `allow_recipients(entries)` or `disallow_recipients(entries)`, where each entry is `{ recipient_ref, destination }`, and: the mode is `ATTESTED`; or an entry has the zero address or a non-canonical tag; or, for allow, an entry is already present, or for disallow, an entry is absent, counting duplicate pairs within the same call.
-- Effect: refused. On success the call is atomic and emits one `recipient_allowed` or `recipient_disallowed { recipient_ref, destination }` per entry.
+- Precondition: `allow_recipients(entries)` or `disallow_recipients(entries)`, where each entry is `{ recipient_ref, destination }`, and: the mode is `ATTESTED`; or an entry has the zero address, a non-canonical tag or the address of `fee_address` (any tag); or, for allow, an entry is already present, or for disallow, an entry is absent, counting duplicate pairs within the same call.
+- Effect: refused. On success the call is atomic and emits one `recipient_allowed` or `recipient_disallowed { recipient_ref, destination }` per entry. The zero address and non-canonical tag checks can only be reached on Celo, as for `MANDATE-SPLIT-003` and `MANDATE-SPLIT-004`; their vectors are Celo only with the unrepresentable-input skip reason.
 - Error: `WRONG_RECIPIENT_MODE`, `CONFIG_INVALID`
 
 #### MANDATE-RECIPIENT-017 Policy epoch
@@ -613,6 +650,12 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 - Effect: refused. It can only be reached on Celo; Stellar cannot express the input.
 - Error: `LEGS_INVALID`
 
+#### MANDATE-SPLIT-008 No leg to the fee address
+
+- Precondition: a request with a leg whose address is `fee_address`, with any tag.
+- Effect: refused, so every unit that reaches the fee address is the fee and stays under the fee cap.
+- Error: `LEGS_INVALID`
+
 #### MANDATE-SPLIT-005 No duplicate destination
 
 - Precondition: a request with two legs that have the same `(address, tag)` pair.
@@ -649,6 +692,12 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 
 - Precondition: an execute item with `charged > balance`.
 - Effect: refused.
+- Error: `INSUFFICIENT_FUNDS`
+
+#### MANDATE-FUND-004 Reactivation needs the reservations covered
+
+- Precondition: `update_limits` on an expired, unrevoked mandate (`now >= expires_at`) with a new `expires_at > now`, while `balance < pending + committed`.
+- Effect: refused. After expiry `free` is the whole balance, so the principal may withdraw it, or after the grace anyone may sweep it, while `pending` and `committed` stay as they were. Reactivating then would leave an active mandate whose reservations are not covered, breaking I2, with approved payouts that could only fail at execute. The principal funds the mandate, or cancels payouts until the reservations fit, before extending. Chosen over cancelling the stale payouts automatically, because the contract keeps no enumerable index of open payouts and so cannot release them in bounded cost, and because silently dropping approved payouts would surprise the principal; over freezing `expires_at` after expiry, because extending a lapsed mandate is a useful path; and over releasing reservations at expiry, because expiry happens without a transaction.
 - Error: `INSUFFICIENT_FUNDS`
 
 #### MANDATE-DUST-001 Dust is part of the balance
@@ -698,7 +747,7 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 #### MANDATE-DAILY-001 Daily usage per recipient
 
 - Precondition: none.
-- Effect: the mandate keeps one entry `daily[recipient_ref] = { day, used }` per recipient, the executed totals on UTC day `day`, overwritten when the day changes. It counts `total`, never the fee.
+- Effect: the mandate keeps one entry `daily[recipient_ref] = { day, used }` per recipient, the executed totals on UTC day `day`, overwritten when the day changes. It counts `total`, never the fee. The cap is keyed by `recipient_ref`, not by destination: a destination bound under two refs would get two caps. The operator never binds one destination to two recipients of the same principal, which keeps one person to one cap.
 - Error: none
 
 #### MANDATE-DAILY-002 Daily cap at request
@@ -716,7 +765,7 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 #### MANDATE-APPROVAL-001 Which payouts need approval
 
 - Precondition: a request passed every check.
-- Effect: if `charged >= approval_threshold`, the payout is PENDING and `pending += charged`; otherwise it is APPROVED and `committed += charged`.
+- Effect: if `charged >= approval_threshold`, the payout is PENDING and `pending += charged`; otherwise it is APPROVED and `committed += charged`. The threshold is read at request only: lowering it later does not pull back payouts already approved below the old value. In an incident the principal pauses, revokes, lowers the per-payment cap or the fee cap (both re-checked at execute), removes a destination, or removes the agent (`MANDATE-PAYOUT-014`).
 - Error: none
 
 #### MANDATE-APPROVAL-002 Approvals required
@@ -745,8 +794,26 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 
 #### MANDATE-APPROVAL-006 Approver removal keeps the gate working
 
-- Precondition: `remove_role(2, account)` that would leave `len(approvers) < approvals_required`, or remove the last approver while `approval_threshold <= per_payment_cap`.
-- Effect: refused.
+- Precondition: `remove_role(2, account)` of one approver among several that would leave `len(approvers) < approvals_required`.
+- Effect: refused; the principal lowers `approvals_required` first. Removing the last approver is `MANDATE-APPROVAL-008`.
+- Error: `CONFIG_INVALID`
+
+#### MANDATE-APPROVAL-007 Adding the first approver
+
+- Precondition: `add_role(2, account)` passed every check while `approvers` was empty.
+- Effect: `approvals_required` becomes 1 in the same call and `approvals_required_set { required }` is emitted after `role_added`, so `MANDATE-APPROVAL-002` holds after every call. With no approvers `approval_threshold > per_payment_cap`, so no payout needs approval at that moment; the principal lowers the threshold afterwards if it wants approvals.
+- Error: none
+
+#### MANDATE-APPROVAL-008 Removing the last approver
+
+- Precondition: `remove_role(2, account)` of the only approver while `approval_threshold <= per_payment_cap`.
+- Effect: refused, because payouts could then need an approval nobody can give; the principal raises the threshold above the per-payment cap first. On success `approvals_required` becomes 0 in the same call and `approvals_required_set { required }` is emitted after `role_removed`. PENDING payouts left over can no longer be approved; the principal cancels them, or they lapse.
+- Error: `CONFIG_INVALID`
+
+#### MANDATE-APPROVAL-009 Threshold re-checked when there are no approvers
+
+- Precondition: `update_limits` while `approvers` is empty, with a new `approval_threshold <= ` the new `per_payment_cap`.
+- Effect: refused, whichever of the two fields changed, so no payout can need an approval nobody can give.
 - Error: `CONFIG_INVALID`
 
 ## Batches
@@ -761,7 +828,7 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 
 - Precondition: `request_payouts` passed the caller, active and length checks.
 - Effect: each item in order runs the `request_payout` checks from the payout ID check onward against the state left by earlier items. A failing item writes nothing, emits `payout_request_rejected { payout_id, agent, code }`, and the batch continues; a duplicate ID later in the same batch fails with `PAYOUT_ID_EXISTS`. The call returns one `ItemResult { payout_id, code, status }` per item, with code 0 for success. The one exception is `MANDATE-RECIPIENT-013`: an unrecoverable signature aborts the whole call on both chains.
-- Error: none (items report their own codes)
+- Error: per item (items report their own codes)
 
 #### MANDATE-BATCH-003 Cancel batch
 
@@ -778,8 +845,8 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 #### MANDATE-BATCH-005 Execute batch is atomic
 
 - Precondition: `execute_batch` passed the caller, active and length checks.
-- Effect: each ID in order runs the `execute` checks from the lookup onward against the state left by earlier items, then the transfer budget (`MANDATE-BATCH-006`), then its effects. The first failure reverts the whole call with that item's code. Batches are atomic so that no state change is ever left behind a caught transfer failure.
-- Error: none (items report their own codes)
+- Effect: each ID in order runs the `execute` checks from the lookup onward against the state left by earlier items, then the transfer budget (`MANDATE-BATCH-006`), then its effects, transfers included, before the next item's checks start. So the balance check of a later item reads the balance after earlier items were paid. The first failure reverts the whole call with that item's code. Batches are atomic so that no state change is ever left behind a caught transfer failure.
+- Error: per item (items report their own codes)
 
 #### MANDATE-BATCH-006 Transfer budget per execute batch
 
@@ -816,7 +883,7 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 #### MANDATE-REVOKE-001 Revoke is a pure state change
 
 - Precondition: `revoke` by the principal, or a recovery revoke at threshold, passed every check. Allowed while paused or expired.
-- Effect: `revoked = true`, `pending = 0`, `committed = 0`. Every open payout becomes unexecutable and every role-gated power ends at once, because every agent, approver, executor, guardian and recovery path checks `revoked` first; role storage is kept, so history stays readable and the call costs the same whatever the role set sizes. No token is called, so no issuer, trustline, token bug or resource estimate can stop it. Emit `revoked { by, frozen }`, where `frozen` is the balance at that moment, informational only, and return it.
+- Effect: `revoked = true`, `pending = 0`, `committed = 0`. Every open payout becomes unexecutable and every role-gated power ends at once, because every agent, approver, executor, guardian and recovery path checks `revoked` first; role storage is kept, so history stays readable and the call costs the same whatever the role set sizes. No token transfer is made; the only token call is a read of the mandate's balance, so no issuer, trustline, token bug or resource estimate can stop it. Emit `revoked { by, frozen }`, where `frozen` is the balance at that moment, informational only, and return it.
 - Error: none
 
 #### MANDATE-REVOKE-002 Revoked mandates refuse state changes
@@ -903,25 +970,43 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 - Effect: transfer `amount` of `token` to the principal and emit `token_recovered { token, amount }`. Allowed in every state.
 - Error: `TRANSFER_FAILED`
 
+#### MANDATE-RECOVER-004 Token recovery never moves the settlement asset
+
+- Precondition: after the `recover_token` transfer, `asset.balance(mandate)` differs from its value before the transfer.
+- Effect: the whole call reverts. This holds even for a settlement asset reachable through a second token address, so token recovery can never bypass the free-balance cap of `withdraw`.
+- Error: `WRONG_ASSET`
+
 ## Principal transfer
 
 #### MANDATE-PRINCIPAL-001 Propose a new principal
 
-- Precondition: `propose_principal(proposed)` where `proposed` is in `agents` or `executors`, or is `fee_address`.
+- Precondition: `propose_principal(proposed)` where `proposed` is in `agents` or `executors`, or is `fee_address`. On Celo the zero address and the attester's address are refused by `MANDATE-ROLE-017` and `MANDATE-ROLE-018`.
 - Effect: refused. On success `proposed_principal = proposed` and `principal_proposed { current, proposed }` is emitted. A new proposal replaces an earlier one.
 - Error: `ROLE_CONFLICT`
 
 #### MANDATE-PRINCIPAL-002 Accept the transfer
 
-- Precondition: `accept_principal()` from a caller other than `proposed_principal`, or with no proposal set.
-- Effect: refused. On success the principal becomes the proposed address, the proposal clears, and `principal_transferred { previous, current }` is emitted.
-- Error: `UNAUTHORIZED`
+- Precondition: `accept_principal()` from a caller other than `proposed_principal`.
+- Effect: refused. `accept_principal` takes no caller argument: on Stellar it requires the authorization of `proposed_principal`, so another caller fails as a host authorization failure; on Celo `msg.sender` must be `proposed_principal`. On success the principal becomes the proposed address, the proposal clears, and `principal_transferred { previous, current }` is emitted.
+- Error: `UNAUTHORIZED` (Celo); host authorization failure (Stellar)
 
 #### MANDATE-PRINCIPAL-003 Cancel a proposal
 
 - Precondition: `cancel_principal_proposal()` with no proposal set.
 - Effect: refused. On success the proposal clears and `principal_proposal_cancelled { current, proposed }` is emitted. Without this call, a proposal to a wrong address could only be replaced, never withdrawn, and would hold every third-party sweep behind `MANDATE-SWEEP-002`.
 - Error: `CONFIG_INVALID`
+
+#### MANDATE-PRINCIPAL-005 Accept needs a proposal
+
+- Precondition: `accept_principal()` with no proposal set. Checked first, because with no proposal there is no address to authorize.
+- Effect: refused on both chains with the same code.
+- Error: `UNAUTHORIZED`
+
+#### MANDATE-PRINCIPAL-006 Roles are re-checked at acceptance
+
+- Precondition: `accept_principal()` while `proposed_principal` is in `agents` or `executors`, which can happen if it gained the role after the proposal.
+- Effect: refused, so the new principal never holds a role `MANDATE-ROLE-002` forbids. The principal removes the role, or cancels the proposal, first. The attester overlap on Celo is `MANDATE-ROLE-018`.
+- Error: `ROLE_CONFLICT`
 
 #### MANDATE-PRINCIPAL-004 The principal changes only in two steps
 
@@ -1032,7 +1117,7 @@ A payout record holds `payout_id`, `agent`, `recipient_ref`, `total`, `fee`, `le
 
 ## Operations and check orders
 
-Authorization comes first in every call. On Stellar a call that several roles may make takes a `caller` address and requires its authorization before the role check; a missing signature is a host failure, not a mandate error. `cancel` is the one call whose role check comes after the lookup.
+Authorization comes first in every call. Every call that takes a `caller` address authorizes it as its first check (`MANDATE-ROLE-019`), including calls anyone may make (`cancel`, `cancel_batch`, `sweep`); on Stellar a missing signature is a host failure, not a mandate error, and on Celo the caller is `msg.sender`. Calls with no `caller` argument authorize a fixed address instead (`MANDATE-ROLE-015`, `MANDATE-CONFIG-003`, `MANDATE-PRINCIPAL-002`). `cancel` is the one call whose role decision comes after the lookup. Where a rule is marked Celo only, the check does not exist on Stellar and the next check follows.
 
 ### create (factory)
 
@@ -1041,59 +1126,73 @@ Authorization comes first in every call. On Stellar a call that several roles ma
 <!-- check-order: create -->
 1. The caller is `config.principal` (MANDATE-CONFIG-003).
 2. `config.asset` is supported by the factory (MANDATE-ASSET-001).
-3. The full configuration is valid, checked by the factory before deploying (MANDATE-CONFIG-004).
+3. Every field is in its domain and the cross-field rules hold (MANDATE-CONFIG-002).
+4. The attester is present exactly when the mode needs it, and well formed (MANDATE-CONFIG-005).
+5. On Celo, neither the principal nor any role member is the zero address (MANDATE-ROLE-017).
+6. The principal is in neither `agents` nor `executors` (MANDATE-ROLE-002).
+7. `agents` and `approvers` are disjoint (MANDATE-ROLE-003).
+8. `executors` and `approvers` are disjoint (MANDATE-ROLE-004).
+9. `recovery` is disjoint from `agents` and `executors` (MANDATE-ROLE-005).
+10. `agents` and `executors` are disjoint (MANDATE-ROLE-020).
+11. The fee address is neither the principal nor in any role set (MANDATE-ROLE-008).
+12. On Celo, the attester's address is neither the principal, the fee address nor in any role set (MANDATE-ROLE-018).
+13. No role set exceeds its bound (MANDATE-ROLE-007).
+14. The recovery threshold and approvals required fit their sets (MANDATE-CONFIG-004).
 <!-- /check-order -->
 
-Effects: `MANDATE-CONFIG-006`.
+Checks 3 to 14 run in the factory before it deploys, and again in the constructor in the same order (`MANDATE-CONFIG-004`). Check 14 applies `MANDATE-RECOVERYSET-002` and `MANDATE-APPROVAL-002`, and `max_fee_bps` is part of check 3 (`MANDATE-FEE-005`). Effects: `MANDATE-CONFIG-006`.
 
 ### request_payout
 
 `request_payout(caller, req) -> status`, where `req = { payout_id, recipient_ref, total, fee, legs, deadline, task_ref, attestations }` and each attestation is `{ valid_until, signature }`.
 
 <!-- check-order: request_payout -->
-1. The caller is an agent (MANDATE-ROLE-010).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The mandate is not expired (MANDATE-EXPIRY-002).
-4. The mandate is not paused (MANDATE-PAUSE-001).
-5. The payout ID is unused (MANDATE-PAYOUT-002).
-6. The deadline has not passed (MANDATE-PAYOUT-003).
-7. Total and fee are in their domains (MANDATE-AMOUNT-004).
-8. The leg count is 1 to `MAX_LEGS` (MANDATE-SPLIT-001).
-9. Every leg amount is in its domain (MANDATE-SPLIT-002).
-10. No leg pays the zero address (MANDATE-SPLIT-003).
-11. Every leg tag is canonical (MANDATE-SPLIT-004).
-12. No two legs share a destination pair (MANDATE-SPLIT-005).
-13. The legs sum to the total (MANDATE-SPLIT-006).
-14. In `ALLOWLIST` mode, there are no attestations (MANDATE-RECIPIENT-003).
-15. In `ATTESTED` and `BOTH` modes, there is one attestation per leg (MANDATE-RECIPIENT-004).
-16. For each leg in order, in `ALLOWLIST` and `BOTH` modes, the destination pair is on the allowlist (MANDATE-RECIPIENT-005).
-17. For the same leg, in `ATTESTED` and `BOTH` modes, the attestation is not expired (MANDATE-RECIPIENT-006).
-18. For the same leg, the attestation window is at most `MAX_ATTESTATION_VALIDITY` (MANDATE-RECIPIENT-007).
-19. For the same leg, the signature is 65 bytes (MANDATE-RECIPIENT-008).
-20. For the same leg, `v` is 27 or 28 (MANDATE-RECIPIENT-009).
-21. For the same leg, `r` is in range (MANDATE-RECIPIENT-010).
-22. For the same leg, `s` is low (MANDATE-RECIPIENT-011).
-23. For the same leg, the signature recovers to the attester (MANDATE-RECIPIENT-012).
-24. The fee is within the fee cap (MANDATE-FEE-003).
-25. The charge is within the per-payment cap (MANDATE-PAYMENT-001).
-26. The charge is within the remaining budget (MANDATE-BUDGET-001).
-27. The total is within the recipient's daily headroom (MANDATE-DAILY-002).
-28. The charge is within the free balance (MANDATE-FUND-002).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is an agent (MANDATE-ROLE-010).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The mandate is not expired (MANDATE-EXPIRY-002).
+5. The mandate is not paused (MANDATE-PAUSE-001).
+6. The payout ID is unused (MANDATE-PAYOUT-002).
+7. The deadline has not passed (MANDATE-PAYOUT-003).
+8. Total and fee are in their domains (MANDATE-AMOUNT-004).
+9. The leg count is 1 to `MAX_LEGS` (MANDATE-SPLIT-001).
+10. Every leg amount is in its domain (MANDATE-SPLIT-002).
+11. No leg pays the zero address (MANDATE-SPLIT-003).
+12. Every leg tag is canonical (MANDATE-SPLIT-004).
+13. No leg pays the fee address (MANDATE-SPLIT-008).
+14. No two legs share a destination pair (MANDATE-SPLIT-005).
+15. The legs sum to the total (MANDATE-SPLIT-006).
+16. In `ALLOWLIST` mode, there are no attestations (MANDATE-RECIPIENT-003).
+17. In `ATTESTED` and `BOTH` modes, there is one attestation per leg (MANDATE-RECIPIENT-004).
+18. For each leg in order, in `ALLOWLIST` and `BOTH` modes, the destination pair is on the allowlist (MANDATE-RECIPIENT-005).
+19. For the same leg, in `ATTESTED` and `BOTH` modes, the attestation is not expired (MANDATE-RECIPIENT-006).
+20. For the same leg, the attestation window is at most `MAX_ATTESTATION_VALIDITY` (MANDATE-RECIPIENT-007).
+21. For the same leg, the signature is 65 bytes (MANDATE-RECIPIENT-008).
+22. For the same leg, `v` is 27 or 28 (MANDATE-RECIPIENT-009).
+23. For the same leg, `r` is in range (MANDATE-RECIPIENT-010).
+24. For the same leg, `s` is low (MANDATE-RECIPIENT-011).
+25. For the same leg, the signature recovers to the attester (MANDATE-RECIPIENT-012).
+26. The fee is within the fee cap (MANDATE-FEE-003).
+27. The charge is within the per-payment cap (MANDATE-PAYMENT-001).
+28. The charge is within the remaining budget (MANDATE-BUDGET-001).
+29. The total is within the recipient's daily headroom (MANDATE-DAILY-002).
+30. The charge is within the free balance (MANDATE-FUND-002).
 <!-- /check-order -->
 
-Checks 16 to 23 run for one leg before the next leg starts. Effects: `MANDATE-PAYOUT-007` and `MANDATE-APPROVAL-001`.
+Checks 18 to 25 run for one leg before the next leg starts. Effects: `MANDATE-PAYOUT-007` and `MANDATE-APPROVAL-001`.
 
 ### request_payouts
 
 `request_payouts(caller, reqs) -> ItemResult[]`
 
 <!-- check-order: request_payouts -->
-1. The caller is an agent (MANDATE-ROLE-010).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The mandate is not expired (MANDATE-EXPIRY-002).
-4. The mandate is not paused (MANDATE-PAUSE-001).
-5. The batch has 1 to `MAX_BATCH` items (MANDATE-BATCH-001).
-6. Each item runs `request_payout` checks 5 to 28 and its effects, per item (MANDATE-BATCH-002).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is an agent (MANDATE-ROLE-010).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The mandate is not expired (MANDATE-EXPIRY-002).
+5. The mandate is not paused (MANDATE-PAUSE-001).
+6. The batch has 1 to `MAX_BATCH` items (MANDATE-BATCH-001).
+7. Each item runs `request_payout` checks 6 to 30 and its effects, per item (MANDATE-BATCH-002).
 <!-- /check-order -->
 
 ### approve
@@ -1101,14 +1200,16 @@ Checks 16 to 23 run for one leg before the next leg starts. Effects: `MANDATE-PA
 `approve(caller, payout_id) -> status`
 
 <!-- check-order: approve -->
-1. The caller is an approver (MANDATE-ROLE-011).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The mandate is not expired (MANDATE-EXPIRY-002).
-4. The mandate is not paused (MANDATE-PAUSE-001).
-5. The payout exists (MANDATE-PAYOUT-004).
-6. The payout is PENDING (MANDATE-PAYOUT-005).
-7. The payout has not lapsed (MANDATE-PAYOUT-006).
-8. The caller has not approved already, unless the requirement is already met (MANDATE-APPROVAL-003).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is an approver (MANDATE-ROLE-011).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The mandate is not expired (MANDATE-EXPIRY-002).
+5. The mandate is not paused (MANDATE-PAUSE-001).
+6. The payout exists (MANDATE-PAYOUT-004).
+7. The payout is PENDING (MANDATE-PAYOUT-005).
+8. The payout has not lapsed (MANDATE-PAYOUT-006).
+9. The payout's agent is still an agent (MANDATE-PAYOUT-014).
+10. The caller has not approved already, unless the requirement is already met (MANDATE-APPROVAL-003).
 <!-- /check-order -->
 
 Effects: `MANDATE-APPROVAL-004`.
@@ -1118,10 +1219,11 @@ Effects: `MANDATE-APPROVAL-004`.
 `reject(caller, payout_id)`. Allowed while paused and after expiry.
 
 <!-- check-order: reject -->
-1. The caller is an approver or the principal (MANDATE-ROLE-012).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The payout exists (MANDATE-PAYOUT-004).
-4. The payout is PENDING (MANDATE-PAYOUT-005).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is an approver or the principal (MANDATE-ROLE-012).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The payout exists (MANDATE-PAYOUT-004).
+5. The payout is PENDING (MANDATE-PAYOUT-005).
 <!-- /check-order -->
 
 Effects: `MANDATE-APPROVAL-005`.
@@ -1131,10 +1233,11 @@ Effects: `MANDATE-APPROVAL-005`.
 `cancel(caller, payout_id)`
 
 <!-- check-order: cancel -->
-1. The mandate is not revoked (MANDATE-REVOKE-002).
-2. The payout exists (MANDATE-PAYOUT-004).
-3. The payout is PENDING or APPROVED (MANDATE-PAYOUT-005).
-4. The caller may cancel it for reason 1, 2 or 3 (MANDATE-PAYOUT-010).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The mandate is not revoked (MANDATE-REVOKE-002).
+3. The payout exists (MANDATE-PAYOUT-004).
+4. The payout is PENDING or APPROVED (MANDATE-PAYOUT-005).
+5. The caller may cancel it for reason 1, 2 or 3 (MANDATE-PAYOUT-010).
 <!-- /check-order -->
 
 Effects: `MANDATE-PAYOUT-011`.
@@ -1144,8 +1247,9 @@ Effects: `MANDATE-PAYOUT-011`.
 `cancel_batch(caller, ids) -> ItemResult[]`
 
 <!-- check-order: cancel_batch -->
-1. The mandate is not revoked (MANDATE-REVOKE-002).
-2. The batch has 1 to `MAX_BATCH` items, then each item runs `cancel` checks 2 to 4 and its effects, never reverting the call (MANDATE-BATCH-003).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The mandate is not revoked (MANDATE-REVOKE-002).
+3. The batch has 1 to `MAX_BATCH` items, then each item runs `cancel` checks 3 to 5 and its effects, never reverting the call (MANDATE-BATCH-003).
 <!-- /check-order -->
 
 ### execute
@@ -1153,47 +1257,51 @@ Effects: `MANDATE-PAYOUT-011`.
 `execute(caller, payout_id)`
 
 <!-- check-order: execute -->
-1. The caller is the principal, an agent or an executor (MANDATE-ROLE-013).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The mandate is not expired (MANDATE-EXPIRY-002).
-4. The mandate is not paused (MANDATE-PAUSE-001).
-5. The payout exists (MANDATE-PAYOUT-004).
-6. The payout is APPROVED (MANDATE-PAYOUT-005).
-7. The payout has not lapsed (MANDATE-PAYOUT-006).
-8. The charge is within the current per-payment cap (MANDATE-PAYMENT-002).
-9. The fee is within the current fee cap (MANDATE-FEE-003).
-10. In `ALLOWLIST` and `BOTH` modes, every leg's destination pair is still on the allowlist (MANDATE-RECIPIENT-014).
-11. In `ATTESTED` and `BOTH` modes, the policy epoch is unchanged (MANDATE-RECIPIENT-015).
-12. The total is within the recipient's daily headroom against executed usage (MANDATE-DAILY-003).
-13. The charge is within the balance (MANDATE-FUND-003).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is the principal, an agent or an executor (MANDATE-ROLE-013).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The mandate is not expired (MANDATE-EXPIRY-002).
+5. The mandate is not paused (MANDATE-PAUSE-001).
+6. The payout exists (MANDATE-PAYOUT-004).
+7. The payout is APPROVED (MANDATE-PAYOUT-005).
+8. The payout has not lapsed (MANDATE-PAYOUT-006).
+9. The payout's agent is still an agent (MANDATE-PAYOUT-014).
+10. The fee is within the current fee cap (MANDATE-FEE-003).
+11. The charge is within the current per-payment cap (MANDATE-PAYMENT-002).
+12. In `ALLOWLIST` and `BOTH` modes, every leg's destination pair is still on the allowlist (MANDATE-RECIPIENT-014).
+13. In `ATTESTED` and `BOTH` modes, the policy epoch is unchanged (MANDATE-RECIPIENT-015).
+14. The total is within the recipient's daily headroom against executed usage (MANDATE-DAILY-003).
+15. The charge is within the balance (MANDATE-FUND-003).
 <!-- /check-order -->
 
-Effects: `MANDATE-PAYOUT-012`, with every transfer under `MANDATE-PAYOUT-013` and the fee under `MANDATE-FEE-008`.
+The fee cap comes before the per-payment cap here as at request, so both calls report a fee problem the same way. Effects: `MANDATE-PAYOUT-012`, with every transfer under `MANDATE-PAYOUT-013` and the fee under `MANDATE-FEE-008`.
 
 ### execute_batch
 
 `execute_batch(caller, ids)`
 
 <!-- check-order: execute_batch -->
-1. The caller is the principal, an agent or an executor (MANDATE-ROLE-013).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The mandate is not expired (MANDATE-EXPIRY-002).
-4. The mandate is not paused (MANDATE-PAUSE-001).
-5. The batch has 1 to `MAX_BATCH` items (MANDATE-BATCH-004).
-6. Each item in order runs `execute` checks 5 to 13 against the state left by earlier items (MANDATE-BATCH-005).
-7. For the same item, the running transfer count stays within `MAX_BATCH_TRANSFERS` (MANDATE-BATCH-006).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is the principal, an agent or an executor (MANDATE-ROLE-013).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The mandate is not expired (MANDATE-EXPIRY-002).
+5. The mandate is not paused (MANDATE-PAUSE-001).
+6. The batch has 1 to `MAX_BATCH` items (MANDATE-BATCH-004).
+7. Each item in order runs `execute` checks 6 to 15 against the state left by earlier items (MANDATE-BATCH-005).
+8. For the same item, the running transfer count stays within `MAX_BATCH_TRANSFERS` (MANDATE-BATCH-006).
 <!-- /check-order -->
 
-Checks 6 and 7 and the item's effects run for one item before the next starts.
+Checks 7 and 8 and the item's effects, its transfers included, run for one item before the next item's checks start.
 
 ### pause
 
 `pause(caller)`
 
 <!-- check-order: pause -->
-1. The caller is the principal, an approver, a guardian or a recovery approver (MANDATE-ROLE-014).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The mandate is not already paused (MANDATE-PAUSE-002).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is the principal, an approver, a guardian or a recovery approver (MANDATE-ROLE-014).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The mandate is not already paused (MANDATE-PAUSE-002).
 <!-- /check-order -->
 
 ### resume
@@ -1234,10 +1342,11 @@ Effects: `MANDATE-WITHDRAW-004`.
 `sweep(caller) -> amount`. Anyone may call it.
 
 <!-- check-order: sweep -->
-1. The mandate is not active (MANDATE-SWEEP-001).
-2. A caller other than the principal is refused while a principal change is proposed (MANDATE-SWEEP-002).
-3. A caller other than the principal is refused within the grace after expiry, unless revoked (MANDATE-SWEEP-003).
-4. The balance is not zero (MANDATE-SWEEP-004).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The mandate is not active (MANDATE-SWEEP-001).
+3. A caller other than the principal is refused while a principal change is proposed (MANDATE-SWEEP-002).
+4. A caller other than the principal is refused within the grace after expiry, unless revoked (MANDATE-SWEEP-003).
+5. The balance is not zero (MANDATE-SWEEP-004).
 <!-- /check-order -->
 
 Effects: `MANDATE-SWEEP-005`.
@@ -1252,7 +1361,7 @@ Effects: `MANDATE-SWEEP-005`.
 3. The amount is in its domain (MANDATE-RECOVER-002).
 <!-- /check-order -->
 
-Effects: `MANDATE-RECOVER-003`.
+Effects: `MANDATE-RECOVER-003`, then the settlement balance check of `MANDATE-RECOVER-004`.
 
 ### update_limits
 
@@ -1262,7 +1371,9 @@ Effects: `MANDATE-RECOVER-003`.
 1. The caller is the principal (MANDATE-ROLE-015).
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. Every field is in its domain, the cross-field rules hold and `expires_at > now` (MANDATE-CONFIG-007).
-4. The new budget is not below what is reserved and spent (MANDATE-BUDGET-002).
+4. With no approvers, the new threshold is above the new per-payment cap (MANDATE-APPROVAL-009).
+5. The new budget is not below what is reserved and spent (MANDATE-BUDGET-002).
+6. Reactivating an expired mandate needs `balance >= pending + committed` (MANDATE-FUND-004).
 <!-- /check-order -->
 
 ### add_role
@@ -1273,11 +1384,13 @@ Effects: `MANDATE-RECOVER-003`.
 1. The caller is the principal (MANDATE-ROLE-015).
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The role code is known and the account is not already in the set (MANDATE-ROLE-016).
-4. The account would not break role separation (MANDATE-ROLE-009).
-5. The set would not exceed its bound (MANDATE-ROLE-007).
+4. On Celo, the account is not the zero address (MANDATE-ROLE-017).
+5. The account would not break role separation (MANDATE-ROLE-009).
+6. On Celo, the account is not the attester's address (MANDATE-ROLE-018).
+7. The set would not exceed its bound (MANDATE-ROLE-007).
 <!-- /check-order -->
 
-Effects: add the account, emit `role_added { role, account }`, and increase `recovery_epoch` when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
+Effects: add the account, emit `role_added { role, account }`, apply `MANDATE-APPROVAL-007` when it is the first approver, and increase `recovery_epoch` when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
 
 ### remove_role
 
@@ -1287,11 +1400,12 @@ Effects: add the account, emit `role_added { role, account }`, and increase `rec
 1. The caller is the principal (MANDATE-ROLE-015).
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The role code is known and the account is in the set (MANDATE-ROLE-016).
-4. Removing an approver keeps the approval gate working (MANDATE-APPROVAL-006).
-5. Removing a recovery approver keeps the threshold within the set size (MANDATE-RECOVERYSET-002).
+4. Removing one approver among several keeps `approvals_required` reachable (MANDATE-APPROVAL-006).
+5. Removing the last approver needs the threshold above the per-payment cap (MANDATE-APPROVAL-008).
+6. Removing a recovery approver keeps the threshold within the set size (MANDATE-RECOVERYSET-002).
 <!-- /check-order -->
 
-Effects: remove the account, emit `role_removed { role, account }`, and increase `recovery_epoch` when the role is agent or recovery.
+Effects: remove the account, emit `role_removed { role, account }`, apply `MANDATE-APPROVAL-008` when it was the last approver, and increase `recovery_epoch` when the role is agent or recovery.
 
 ### set_approvals_required
 
@@ -1324,7 +1438,7 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The mode is not `ATTESTED` (MANDATE-RECIPIENT-016).
 4. There are 1 to `MAX_BATCH` entries (MANDATE-BATCH-007).
-5. No entry has the zero address or a non-canonical tag (MANDATE-RECIPIENT-016).
+5. No entry has the zero address, a non-canonical tag or the fee address (MANDATE-RECIPIENT-016).
 6. No entry is already present, counting duplicates within the call (MANDATE-RECIPIENT-016).
 <!-- /check-order -->
 
@@ -1337,7 +1451,7 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The mode is not `ATTESTED` (MANDATE-RECIPIENT-016).
 4. There are 1 to `MAX_BATCH` entries (MANDATE-BATCH-007).
-5. No entry has the zero address or a non-canonical tag (MANDATE-RECIPIENT-016).
+5. No entry has the zero address, a non-canonical tag or the fee address (MANDATE-RECIPIENT-016).
 6. Every entry is present, counting duplicates within the call (MANDATE-RECIPIENT-016).
 <!-- /check-order -->
 
@@ -1348,7 +1462,8 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 <!-- check-order: set_attestation_policy -->
 1. The caller is the principal (MANDATE-ROLE-015).
 2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The mode is not `ALLOWLIST`, the key is well formed and, on Celo, its address holds no role (MANDATE-CONFIG-008).
+3. The mode is not `ALLOWLIST` and the key is well formed (MANDATE-CONFIG-008).
+4. On Celo, the key's address holds no role (MANDATE-ROLE-018).
 <!-- /check-order -->
 
 ### propose_principal
@@ -1357,7 +1472,9 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 
 <!-- check-order: propose_principal -->
 1. The caller is the principal (MANDATE-ROLE-015).
-2. The proposed address holds no conflicting role (MANDATE-PRINCIPAL-001).
+2. On Celo, the proposed address is not the zero address (MANDATE-ROLE-017).
+3. The proposed address holds no conflicting role (MANDATE-PRINCIPAL-001).
+4. On Celo, the proposed address is not the attester's address (MANDATE-ROLE-018).
 <!-- /check-order -->
 
 ### accept_principal
@@ -1365,7 +1482,10 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 `accept_principal()`. Allowed in every state.
 
 <!-- check-order: accept_principal -->
-1. The caller is the proposed principal (MANDATE-PRINCIPAL-002).
+1. A proposal is set (MANDATE-PRINCIPAL-005).
+2. The caller is the proposed principal (MANDATE-PRINCIPAL-002).
+3. The proposed principal holds no conflicting role (MANDATE-PRINCIPAL-006).
+4. On Celo, the proposed principal is not the attester's address (MANDATE-ROLE-018).
 <!-- /check-order -->
 
 ### cancel_principal_proposal
@@ -1392,9 +1512,10 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 `recovery_revoke(caller) -> status`. Allowed while paused and after expiry.
 
 <!-- check-order: recovery_revoke -->
-1. The caller is a recovery approver (MANDATE-RECOVERYSET-004).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. The caller has not voted for this action in this epoch (MANDATE-RECOVERYSET-007).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is a recovery approver (MANDATE-RECOVERYSET-004).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. The caller has not voted for this action in this epoch (MANDATE-RECOVERYSET-007).
 <!-- /check-order -->
 
 Effects: `MANDATE-RECOVERYSET-008`.
@@ -1404,11 +1525,13 @@ Effects: `MANDATE-RECOVERYSET-008`.
 `recovery_rotate_agent(caller, old, new) -> status`, where `new` is optional. Allowed while paused and after expiry.
 
 <!-- check-order: recovery_rotate_agent -->
-1. The caller is a recovery approver (MANDATE-RECOVERYSET-004).
-2. The mandate is not revoked (MANDATE-REVOKE-002).
-3. `old` is a current agent and `new`, if given, is not (MANDATE-RECOVERYSET-005).
-4. `new`, if given, holds no conflicting role (MANDATE-RECOVERYSET-006).
-5. The caller has not voted for this action in this epoch (MANDATE-RECOVERYSET-007).
+1. The caller authorizes the call (MANDATE-ROLE-019).
+2. The caller is a recovery approver (MANDATE-RECOVERYSET-004).
+3. The mandate is not revoked (MANDATE-REVOKE-002).
+4. `old` is a current agent and `new`, if given, is not (MANDATE-RECOVERYSET-005).
+5. `new`, if given, holds no conflicting role (MANDATE-RECOVERYSET-006).
+6. On Celo, `new`, if given, is not the attester's address (MANDATE-ROLE-018).
+7. The caller has not voted for this action in this epoch (MANDATE-RECOVERYSET-007).
 <!-- /check-order -->
 
 Effects: `MANDATE-RECOVERYSET-008`.
@@ -1422,7 +1545,7 @@ Effects: `MANDATE-RECOVERYSET-008`.
 The vector runner checks these after every step, and each chain's invariant tests check them under random call sequences.
 
 - I1. `spent + pending + committed <= total_budget`.
-- I2. While active, `balance >= pending + committed`, except when the asset itself freezes or removes the mandate's balance.
+- I2. While active, `balance >= pending + committed`, except when the asset itself freezes or removes the mandate's balance. Reactivating an expired mandate keeps it (`MANDATE-FUND-004`).
 - I3. For every payout, the legs sum to `total`, and `total + fee <= per_payment_cap` at request and at execute.
 - I4. For every recipient and UTC day, the totals executed that day never exceed the cap in force at each execution.
 - I5. The settlement asset leaves the mandate only through `execute`, to destinations bound to the payout's recipient (including recipient-bound forwarders and partner deposit addresses verified off chain under `CHAINOPS-DELIVERY-001` and `CHAINOPS-DELIVERY-002`) plus each executed payout's fee to `fee_address`, and through `withdraw` and `sweep` to the principal. `withdraw` and `sweep` never take a destination argument; this is checked by an ABI test on Celo, a contract interface test on Stellar, and vectors that call them from every role and confirm that only the principal's balance rises.
@@ -1464,7 +1587,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-SUBMIT-002 Submission discipline on Stellar
 
-- Off chain: every Stellar mandate call is built from a fresh simulation, never a hand-built footprint. Calls that may catch a transfer failure add at least 512 bytes to the simulated write bytes and the matching resource fee; since revoke moves no funds no current call does, so the padding applies to none today and stays as the rule for any future call. `ResourceLimitExceeded` or `EntryArchived` results are re-simulated and resubmitted with bounded retries, never read as a mandate rejection. Only the `getTransaction` result proves a transaction landed. After any restore, the TTL of the instance and every touched record is extended. Tested end to end on testnet: a revoke for a principal without a trustline lands with no padding, `frozen` equals the balance, and the funds are withdrawn once the trustline exists.
+- Off chain: every Stellar mandate call is built from a fresh simulation, never a hand-built footprint. Calls that may catch a transfer failure add at least 512 bytes to the simulated write bytes and the matching resource fee; since revoke moves no funds no current call does, so the padding applies to none today and stays as the rule for any future call. `ResourceLimitExceeded` or `EntryArchived` results are re-simulated and resubmitted with bounded retries, never read as a mandate rejection. Only the `getTransaction` result proves a transaction landed. After any restore, the TTL of the instance, every touched record and the asset contract's balance entry for the mandate is extended; the balance entry has its own TTL, so a quiet mandate's money is never archived by surprise. Tested end to end on testnet: a revoke for a principal without a trustline lands with no padding, `frozen` equals the balance, and the funds are withdrawn once the trustline exists.
 
 #### CHAINOPS-CREATE-001 The pause-only guardian is on by default
 
@@ -1534,6 +1657,10 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-ROLE-014` | Who may pause |
 | `MANDATE-ROLE-015` | Principal-only calls |
 | `MANDATE-ROLE-016` | Role change validation |
+| `MANDATE-ROLE-017` | No zero address as principal or role member |
+| `MANDATE-ROLE-018` | The attester's address holds no role |
+| `MANDATE-ROLE-019` | Every caller argument is authorized first |
+| `MANDATE-ROLE-020` | Agents and executors are disjoint |
 | `MANDATE-RECOVERYSET-001` | Only the principal changes the set |
 | `MANDATE-RECOVERYSET-002` | Threshold bounds |
 | `MANDATE-RECOVERYSET-003` | Recovery epoch |
@@ -1567,6 +1694,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-PAYOUT-011` | Cancel effects |
 | `MANDATE-PAYOUT-012` | Execute effects |
 | `MANDATE-PAYOUT-013` | Transfers out are wrapped |
+| `MANDATE-PAYOUT-014` | The requesting agent is still an agent |
 | `MANDATE-AMOUNT-001` | Amounts are integer smallest units |
 | `MANDATE-AMOUNT-002` | Amount domain |
 | `MANDATE-AMOUNT-003` | Only addition, subtraction and comparison |
@@ -1576,6 +1704,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-EXPIRY-001` | Time |
 | `MANDATE-EXPIRY-002` | Expired mandates refuse new work |
 | `MANDATE-EXPIRY-003` | Payout time to live |
+| `MANDATE-EXPIRY-004` | Attested payouts expire with their attestations |
 | `MANDATE-RECIPIENT-001` | A destination is an address and an optional tag |
 | `MANDATE-RECIPIENT-002` | Destination form on each chain |
 | `MANDATE-RECIPIENT-003` | Allowlist mode takes no attestations |
@@ -1601,9 +1730,11 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-SPLIT-005` | No duplicate destination |
 | `MANDATE-SPLIT-006` | Legs sum to the total |
 | `MANDATE-SPLIT-007` | Limits apply to the payout, not its legs |
+| `MANDATE-SPLIT-008` | No leg to the fee address |
 | `MANDATE-FUND-001` | Funding is a plain transfer |
 | `MANDATE-FUND-002` | Free funds at request |
 | `MANDATE-FUND-003` | Balance at execute |
+| `MANDATE-FUND-004` | Reactivation needs the reservations covered |
 | `MANDATE-DUST-001` | Dust is part of the balance |
 | `MANDATE-ASSET-001` | Supported asset |
 | `MANDATE-ASSET-002` | Other tokens are never counted |
@@ -1620,6 +1751,9 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-APPROVAL-004` | M of N approval |
 | `MANDATE-APPROVAL-005` | A single rejection is a veto |
 | `MANDATE-APPROVAL-006` | Approver removal keeps the gate working |
+| `MANDATE-APPROVAL-007` | Adding the first approver |
+| `MANDATE-APPROVAL-008` | Removing the last approver |
+| `MANDATE-APPROVAL-009` | Threshold re-checked when there are no approvers |
 | `MANDATE-BATCH-001` | Request batch length |
 | `MANDATE-BATCH-002` | Request batch runs per item |
 | `MANDATE-BATCH-003` | Cancel batch |
@@ -1645,10 +1779,13 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-RECOVER-001` | Token recovery is for other tokens |
 | `MANDATE-RECOVER-002` | Token recovery amount |
 | `MANDATE-RECOVER-003` | Token recovery effects |
+| `MANDATE-RECOVER-004` | Token recovery never moves the settlement asset |
 | `MANDATE-PRINCIPAL-001` | Propose a new principal |
 | `MANDATE-PRINCIPAL-002` | Accept the transfer |
 | `MANDATE-PRINCIPAL-003` | Cancel a proposal |
 | `MANDATE-PRINCIPAL-004` | The principal changes only in two steps |
+| `MANDATE-PRINCIPAL-005` | Accept needs a proposal |
+| `MANDATE-PRINCIPAL-006` | Roles are re-checked at acceptance |
 | `MANDATE-FEE-001` | One optional fee on top of the total |
 | `MANDATE-FEE-002` | Fee cap |
 | `MANDATE-FEE-003` | Fee within the cap |
