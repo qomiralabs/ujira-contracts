@@ -80,9 +80,12 @@ if [ -z "$json_file" ]; then
   json_file="$tmp/sizes.json"
 fi
 
-# An empty or reshaped report would otherwise pass with nothing checked.
-if ! jq -e 'type == "object" and length > 0
-    and all(.[]; (.runtime_size | type) == "number" and (.init_size | type) == "number")' \
+# An empty or reshaped report would otherwise pass with nothing checked. Sizes
+# must be whole, non-negative and small enough for shell arithmetic: a failed
+# comparison in the loop below would otherwise read as within budget.
+if ! jq -e 'def size: type == "number" and . >= 0 and . == floor and . < 2147483648;
+    type == "object" and length > 0
+    and all(.[]; (.runtime_size | size) and (.init_size | size))' \
   "$json_file" >/dev/null 2>&1; then
   echo "check-sizes: could not read contract sizes from $json_file" >&2
   exit 2
@@ -91,6 +94,12 @@ fi
 checked=0
 failed=0
 while IFS=$'\t' read -r key runtime init; do
+  # jq can print a valid number in a form the shell cannot compare, so check
+  # again here rather than trust the comparison to fail closed.
+  if ! [[ $runtime =~ ^[0-9]{1,10}$ && $init =~ ^[0-9]{1,10}$ ]]; then
+    echo "check-sizes: could not read contract sizes for $key" >&2
+    exit 2
+  fi
   name=${key##*:}
   case "$name" in
     *Factory) kind=factory budget=$factory_budget ;;

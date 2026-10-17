@@ -89,6 +89,25 @@ expect "non JSON report is an error" 2 "--from-json $work/garbage.json" "could n
 report reshaped.json '{"UjiraMandate":{"runtime":100}}'
 expect "reshaped report is an error" 2 "--from-json $work/reshaped.json" "could not read contract sizes"
 
+# Each of these once made the shell comparison error out, which read as within budget.
+report fractional.json "{$(entry UjiraMandate 30000.5 31000)}"
+expect "fractional runtime size is an error" 2 "--from-json $work/fractional.json" "could not read contract sizes"
+
+report negative.json "{$(entry UjiraMandate -1 31000)}"
+expect "negative runtime size is an error" 2 "--from-json $work/negative.json" "could not read contract sizes"
+
+report negative_init.json "{$(entry UjiraFactory 100 -5)}"
+expect "negative initcode size is an error" 2 "--from-json $work/negative_init.json" "could not read contract sizes"
+
+report string_size.json "{$(entry UjiraMandate '"30000"' 31000)}"
+expect "string runtime size is an error" 2 "--from-json $work/string_size.json" "could not read contract sizes"
+
+report huge.json "{$(entry UjiraMandate 1e20 31000)}"
+expect "size too large for shell arithmetic is an error" 2 "--from-json $work/huge.json" "could not read contract sizes"
+
+report one_bad.json "{$(entry Placeholder 116 142),$(entry UjiraMandate 1.5 31000)}"
+expect "one bad size among good ones is an error" 2 "--from-json $work/one_bad.json" "could not read contract sizes"
+
 expect "missing --from-json file argument" 2 "--from-json" "needs a file"
 
 # project <name> starts a throwaway Foundry project; blob <name> <contract> <bytes> adds to it
