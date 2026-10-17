@@ -22,8 +22,9 @@
 # path from the build artifacts. A bare name in a --from-json report has no
 # path, so it is always held to the mandate budget.
 #
-# Sizes come from `forge build --sizes --json`, which lists the contracts in
-# src/. forge refuses anything over 24,576 bytes on its own, whatever
+# Sizes come from `forge build --sizes --json`, run with test/ and script/
+# skipped so only the contracts in src/ are sized. Test helpers such as mocks
+# are never deployed and would otherwise be reported too. forge refuses anything over 24,576 bytes on its own, whatever
 # code_size_limit says, so that one refusal is tolerated and our budgets are
 # applied instead. Any other forge failure stops the check.
 #
@@ -54,6 +55,16 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
+case "${1:-}" in
+  -*)
+    echo "check-sizes: unknown option $1" >&2
+    exit 2
+    ;;
+esac
+if [ $# -gt 1 ]; then
+  echo "check-sizes: unexpected argument after the celo dir: $2 (options go first)" >&2
+  exit 2
+fi
 celo=${1:-"$(cd "$(dirname "$0")/.." && pwd)/celo"}
 factories_file=${factories_file:-"$celo/factory-allowlist.txt"}
 
@@ -70,12 +81,20 @@ if [ ! -f "$factories_file" ]; then
   echo "check-sizes: no factory allowlist at $factories_file" >&2
   exit 2
 fi
+# bash 3.2 cuts a line at a NUL byte and bash 5 drops it, so a control
+# character could turn a rejected entry into an accepted one depending on the
+# shell. Check the raw bytes before reading lines: only tab, line feed and
+# carriage return are allowed.
+if [ "$(LC_ALL=C tr -d '\011\012\015\040-\176\200-\377' <"$factories_file" | wc -c | tr -d ' ')" != 0 ]; then
+  echo "check-sizes: $factories_file contains a NUL byte or another control character" >&2
+  exit 2
+fi
 : >"$tmp/factories"
 while IFS= read -r line || [ -n "$line" ]; do
   line=${line%%#*}
   line=$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
   [ -z "$line" ] && continue
-  if ! [[ $line =~ ^src/([A-Za-z0-9_.-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.sol:[A-Za-z_][A-Za-z0-9_]*$ ]] ||
+  if ! [[ $line =~ ^src/([A-Za-z0-9_.-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.sol:[A-Za-z_$][A-Za-z0-9_$]*$ ]] ||
     [[ $line == *"/../"* || $line == *"/./"* ]]; then
     echo "check-sizes: allowlist entry '$line' is not of the form src/<file>.sol:<Contract>" >&2
     exit 2
@@ -110,7 +129,7 @@ if [ -z "$json_file" ]; then
   # Celo's initcode limit is not EIP-3860's, so forge's own initcode check is
   # switched off and replaced by the one below.
   code=0
-  (cd "$celo" && forge build --sizes --json --ignore-eip-3860) >"$tmp/sizes.json" 2>"$tmp/sizes.err" || code=$?
+  (cd "$celo" && forge build --sizes --json --ignore-eip-3860 --skip './test/**' './script/**') >"$tmp/sizes.json" 2>"$tmp/sizes.err" || code=$?
   if [ "$code" -ne 0 ] && ! grep -q 'exceed the runtime size limit' "$tmp/sizes.err"; then
     cat "$tmp/sizes.err" >&2
     echo "check-sizes: forge build --sizes failed in $celo" >&2
