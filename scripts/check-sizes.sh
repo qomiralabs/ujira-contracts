@@ -23,10 +23,12 @@
 # path, so it is always held to the mandate budget.
 #
 # Sizes come from `forge build --sizes --json`, run with test/ and script/
-# skipped so only the contracts in src/ are sized. Test helpers such as mocks
-# are never deployed and would otherwise be reported too. forge refuses anything over 24,576 bytes on its own, whatever
-# code_size_limit says, so that one refusal is tolerated and our budgets are
-# applied instead. Any other forge failure stops the check.
+# skipped. Test helpers such as mocks are never deployed and would otherwise be
+# reported too. What remains is every contract in src/ plus any vendored
+# contract under lib/ that src/ deploys with `new`. forge refuses anything over
+# 24,576 bytes on its own, whatever code_size_limit says, so that one refusal
+# is tolerated and our budgets are applied instead. Any other forge failure
+# stops the check.
 #
 # Needs forge and jq.
 #
@@ -81,20 +83,27 @@ if [ ! -f "$factories_file" ]; then
   echo "check-sizes: no factory allowlist at $factories_file" >&2
   exit 2
 fi
+if [ ! -r "$factories_file" ]; then
+  echo "check-sizes: cannot read the factory allowlist at $factories_file" >&2
+  exit 2
+fi
 # bash 3.2 cuts a line at a NUL byte and bash 5 drops it, so a control
 # character could turn a rejected entry into an accepted one depending on the
 # shell. Check the raw bytes before reading lines: only tab, line feed and
 # carriage return are allowed.
-if [ "$(LC_ALL=C tr -d '\011\012\015\040-\176\200-\377' <"$factories_file" | wc -c | tr -d ' ')" != 0 ]; then
+control=$(LC_ALL=C tr -d '\011\012\015\040-\176\200-\377' <"$factories_file" | wc -c)
+if [ "$(printf '%s' "$control" | tr -d ' ')" != 0 ]; then
   echo "check-sizes: $factories_file contains a NUL byte or another control character" >&2
   exit 2
 fi
+# src/<dirs>/<file>.sol:<Contract>, where a Solidity identifier may use $.
+entry_pattern='^src/([A-Za-z0-9_.-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.sol:[A-Za-z_$][A-Za-z0-9_$]*$'
 : >"$tmp/factories"
 while IFS= read -r line || [ -n "$line" ]; do
   line=${line%%#*}
   line=$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
   [ -z "$line" ] && continue
-  if ! [[ $line =~ ^src/([A-Za-z0-9_.-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.sol:[A-Za-z_$][A-Za-z0-9_$]*$ ]] ||
+  if ! [[ $line =~ $entry_pattern ]] ||
     [[ $line == *"/../"* || $line == *"/./"* ]]; then
     echo "check-sizes: allowlist entry '$line' is not of the form src/<file>.sol:<Contract>" >&2
     exit 2
@@ -129,7 +138,8 @@ if [ -z "$json_file" ]; then
   # Celo's initcode limit is not EIP-3860's, so forge's own initcode check is
   # switched off and replaced by the one below.
   code=0
-  (cd "$celo" && forge build --sizes --json --ignore-eip-3860 --skip './test/**' './script/**') >"$tmp/sizes.json" 2>"$tmp/sizes.err" || code=$?
+  (cd "$celo" && forge build --sizes --json --ignore-eip-3860 --skip './test/**' './script/**') \
+    >"$tmp/sizes.json" 2>"$tmp/sizes.err" || code=$?
   if [ "$code" -ne 0 ] && ! grep -q 'exceed the runtime size limit' "$tmp/sizes.err"; then
     cat "$tmp/sizes.err" >&2
     echo "check-sizes: forge build --sizes failed in $celo" >&2
@@ -137,13 +147,16 @@ if [ -z "$json_file" ]; then
   fi
   json_file="$tmp/sizes.json"
 
-  # Bare names in the report carry no path; map each source contract to the
-  # file it was compiled from, as `name<TAB>path`.
+  # Bare names in the report carry no path; map each contract to the file it
+  # was compiled from, as `name<TAB>path`. Vendored contracts under lib/ that
+  # src/ deploys with `new` are in the report too and resolve here; only src/
+  # paths can be allowlisted, so they always get the mandate budget.
   out_dir="$celo/out"
   if [ -d "$out_dir" ]; then
     find "$out_dir" -name '*.json' -not -path '*/build-info/*' -print0 |
       xargs -0 jq -r '(.metadata.settings.compilationTarget // {}) | to_entries[]
-        | select(.key | startswith("src/")) | "\(.value)\t\(.key)"' 2>/dev/null |
+        | select(.key | (startswith("test/") or startswith("script/")) | not)
+        | "\(.value)\t\(.key)"' 2>/dev/null |
       sort -u >"$tmp/sources" || true
   fi
 fi
