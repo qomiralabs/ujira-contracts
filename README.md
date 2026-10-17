@@ -45,7 +45,7 @@ git submodule update --init --recursive
 
 Check that `forge --version` prints `1.5.1`. A newer local Foundry can format, lint or compile differently from the pinned one, so switch back with `foundryup --use v1.5.1` if it does not.
 
-`foundry.toml` pins solc 0.8.30, and Foundry downloads it on the first build. Install Slither 0.11.6 with `pipx`. If your default Python is too new for its dependencies, point `pipx` at Python 3.12:
+`foundry.toml` pins solc 0.8.37 and the Prague EVM, and Foundry downloads the compiler on the first build. Install Slither 0.11.6 with `pipx`. If your default Python is too new for its dependencies, point `pipx` at Python 3.12:
 
 ```sh
 pipx install slither-analyzer==0.11.6
@@ -63,6 +63,15 @@ slither . --config-file slither.config.json --fail-low
 ```
 
 Compiler warnings fail `forge build`.
+
+From the repository root, check bytecode sizes (needs `jq`) and run its self test:
+
+```sh
+scripts/check-sizes.sh
+scripts/check-sizes.test.sh
+```
+
+A contract whose name ends in `Factory` may use up to 61,440 bytes of runtime code, Celo's 65,536 byte limit less a 4 KiB margin. Every other contract, the mandate included, must stay within 24,576 bytes. Initcode must stay within Celo's 131,072 byte limit. Name a contract `...Factory` only if it deploys mandates.
 
 Slither ignores only vendored code under `celo/lib/`. Tests and scripts are left out because the build it runs skips them, not because of a path filter. Any vulnerable contract under `celo/src/`, in any subfolder, must make the slither command fail. If it passes, the config is hiding code.
 
