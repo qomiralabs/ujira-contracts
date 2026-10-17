@@ -136,7 +136,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-ROLE-006 Allowed overlaps
 
 - Precondition: none.
-- Effect: these overlaps, and only these, are allowed: the principal may also be an approver or a guardian; a guardian may also be an approver, an agent, an executor or a recovery approver; a recovery approver may also be an approver or a guardian. Pausing only tightens, so these overlaps grant nothing dangerous. Every other pair of roles is disjoint (`MANDATE-ROLE-002` to `MANDATE-ROLE-005`, `MANDATE-ROLE-020`, `MANDATE-ROLE-021`), and the fee address holds no role at all (`MANDATE-ROLE-008`). Payout approvals and recovery votes never count for each other.
+- Effect: these overlaps, and only these, are allowed: the principal may also be an approver or a guardian; a guardian may also be an approver, an agent, an executor or a recovery approver; a recovery approver may also be an approver or a guardian. Pausing only tightens, so these overlaps grant nothing dangerous. Every other pair of roles is disjoint (`MANDATE-ROLE-002` to `MANDATE-ROLE-005`, `MANDATE-ROLE-020`, `MANDATE-ROLE-021`), and the fee address holds no role at all (`MANDATE-ROLE-008`). Payout approvals and recovery votes never count for each other. Accepted property: a recovery quorum whose members are also approvers can rotate in an agent and then approve that agent's payouts above the threshold without the principal. This is intended, because the recovery set exists to act when the principal cannot, and it does not widen where money can go: destinations stay bound by the principal's allowlist or the attester, and every limit still applies.
 - Error: none
 
 #### MANDATE-ROLE-007 Role sets are bounded
@@ -217,16 +217,16 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 - Effect: on Stellar the first check is `caller.require_auth()`, before any lookup or role decision; on Celo the caller is `msg.sender`. Without it, an account could pass the principal's address to get past the sweep guards, cancel as an agent, or forge the `by` field of an event. Vectors on Stellar include a call that names the principal as `caller` without the principal's signature.
 - Error: host authorization failure (Stellar); not reachable on Celo
 
-#### MANDATE-ROLE-021 The principal is not a recovery approver
-
-- Precondition: a configuration, `add_role(5, account)`, principal proposal or acceptance that would put the principal in `recovery`.
-- Effect: refused. The recovery set exists for when the principal's key is lost, so a principal seat in it would be a vote lost at exactly that moment and would overstate the set's real strength.
-- Error: `ROLE_CONFLICT`
-
 #### MANDATE-ROLE-020 Agents and executors are disjoint
 
 - Precondition: a configuration, `add_role` or agent rotation that would put one address in both `agents` and `executors`.
 - Effect: refused. An agent already executes, so the overlap adds no power and only blurs which key did what.
+- Error: `ROLE_CONFLICT`
+
+#### MANDATE-ROLE-021 The principal is not a recovery approver
+
+- Precondition: a configuration, `add_role(5, account)`, principal proposal or acceptance that would put the principal in `recovery`.
+- Effect: refused. The recovery set exists for when the principal's key is lost, so a principal seat in it would be a vote lost at exactly that moment and would overstate the set's real strength.
 - Error: `ROLE_CONFLICT`
 
 ### Recovery approver set
@@ -276,7 +276,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-RECOVERYSET-008 Voting and execution
 
 - Precondition: all checks of the recovery call pass.
-- Effect: record the vote and emit `recovery_vote_added { kind, old, new, votes, required, recovery_epoch }`, where `kind` is `1 REVOKE` or `2 ROTATE_AGENT`. When the votes of distinct current members reach `recovery_threshold`, perform the action exactly as the principal's own path would (the revoke effects of `MANDATE-REVOKE-001`, or `role_removed` for `old` and, if `new` is given, `role_added` for `new`), increase `recovery_epoch`, and emit `recovery_executed { kind, old, new, by }` last. For a revoke, `old` and `new` are empty. Returns `1` when a vote was recorded and `2` when the action ran.
+- Effect: record the vote and emit `recovery_vote_added { kind, old, new, votes, required, recovery_epoch }`, where `kind` is `1 REVOKE` or `2 ROTATE_AGENT`. When the votes of distinct current members reach `recovery_threshold`, perform the action exactly as the principal's own path would (the revoke effects of `MANDATE-REVOKE-001`, or `role_removed` for `old` and, if `new` is given, `role_added` for `new`, where the new agent takes the next `agent_epoch` value: the counter increases first and the agent stores the new value, `MANDATE-PAYOUT-014`), increase `recovery_epoch`, and emit `recovery_executed { kind, old, new, by }` last. For a revoke, `old` and `new` are empty. Returns `1` when a vote was recorded and `2` when the action ran.
 - Error: none
 
 #### MANDATE-RECOVERYSET-009 Recovery powers are limited
@@ -296,7 +296,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-002 Field domains and cross-field rules
 
 - Precondition: a configuration at creation or a later change to any of these fields with a value outside its rule:
-  - `total_budget` in `[1, I128_MAX]` (a budget below what is already reserved or spent is `MANDATE-BUDGET-002`);
+  - `total_budget` in `[1, I128_MAX]`;
   - `per_payment_cap` in `[1, total_budget]`;
   - `per_recipient_daily_cap` in `[1, I128_MAX]`;
   - `approval_threshold` in `[0, I128_MAX]` (0 means every payout needs approval);
@@ -304,7 +304,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
   - `expires_at` greater than `now`;
   - `max_fee_bps` in `[0, MAX_FEE_BPS]`;
   - `country_policy_hash`: 32 bytes, the SHA-256 of the canonical sorted, comma-joined list of ISO 3166-1 alpha-2 codes the principal chose (the contract never sees the list).
-- Effect: refused. This rule covers field domains only. `approvals_required` (`MANDATE-APPROVAL-002`), `recovery_threshold` (`MANDATE-RECOVERYSET-002`) and the attester (`MANDATE-CONFIG-005`) are their own checks, so every check order cites each of them at exactly one step.
+- Effect: refused. This rule covers field domains only; a budget below what is already reserved or spent is `MANDATE-BUDGET-002`. `approvals_required` (`MANDATE-APPROVAL-002`), `recovery_threshold` (`MANDATE-RECOVERYSET-002`) and the attester (`MANDATE-CONFIG-005`) are their own checks, so every check order cites each of them at exactly one step.
 - Error: `CONFIG_INVALID`
 
 #### MANDATE-CONFIG-003 Caller of create is the principal
@@ -328,7 +328,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-006 Deterministic address and creation events
 
 - Precondition: `create` passed every check.
-- Effect: the mandate is deployed at a deterministic address: on Stellar by the deployer with salt `SHA-256(principal_xdr ‖ salt)`, on Celo by `CREATE2` with salt `keccak256(abi.encode(principal, salt))`. The constructor sets `policy_epoch = 0`, `paused = false`, `revoked = false`, `recovery_epoch = 0`. The factory emits `mandate_created` and the mandate emits `mandate_initialized`.
+- Effect: the mandate is deployed at a deterministic address: on Stellar by the deployer with salt `SHA-256(principal_xdr ‖ salt)`, on Celo by `CREATE2` with salt `keccak256(abi.encode(principal, salt))`. The constructor sets `policy_epoch = 0`, `paused = false`, `revoked = false`, `recovery_epoch = 0` and `agent_epoch = 0`, and stores every agent of the configuration with epoch 0 (`MANDATE-PAYOUT-014`). The factory emits `mandate_created` and the mandate emits `mandate_initialized`.
 - Error: none
 
 #### MANDATE-CONFIG-007 update_limits
@@ -408,7 +408,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-007 Request effects
 
 - Precondition: a request passed every check.
-- Effect: store the record with `created_at = now`, `expires_at` as in `MANDATE-EXPIRY-003` and `MANDATE-EXPIRY-004`, and the current `policy_epoch`. The status follows `MANDATE-APPROVAL-001`. Emit `payout_requested`. Return the status. Funds are reserved at request so that `committed` always means covered by the balance and the principal can see and veto what is queued.
+- Effect: store the record with `created_at = now`, `expires_at` as in `MANDATE-EXPIRY-003` and `MANDATE-EXPIRY-004`, the current `policy_epoch`, and the requesting agent's stored epoch as `agent_epoch` (`MANDATE-PAYOUT-014`). The status follows `MANDATE-APPROVAL-001`. Emit `payout_requested`. Return the status. Funds are reserved at request so that `committed` always means covered by the balance and the principal can see and veto what is queued.
 - Error: none
 
 #### MANDATE-PAYOUT-008 IDs are opaque to the contract
@@ -429,18 +429,6 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Effect: refused. Authorization is checked after the lookup here because who may cancel depends on the payout. Reason 2 is limited to the payout's own agent so that one agent, for example an operator-held key, can never cancel payouts that people approved for another.
 - Error: `UNAUTHORIZED`
 
-#### MANDATE-PAYOUT-015 No nested call into the mandate during a transfer
-
-- Precondition: while the mandate is making a token call (a leg, the fee, `withdraw`, `sweep`, `recover_token`, or a balance read), the token or anything it calls tries to call any state-changing function of the same mandate.
-- Effect: the nested call fails, and with it the token call, so the outer call fails as a whole and changes nothing. On Celo every state-changing function carries one reentrancy guard; on Stellar the host refuses to re-enter a contract already on the call stack. Views stay callable. So no reasoning about a call's effects has to consider a nested call from a token, which matters most for `recover_token`, the one call to a token the principal chooses.
-- Error: `TRANSFER_FAILED` (the outer call)
-
-#### MANDATE-PAYOUT-014 The requesting agent is still the same agent
-
-- Precondition: `approve` or `execute` of a payout whose `payout.agent` is no longer in `agents`, or was removed and added again since the request.
-- Effect: refused, so removing or rotating out a compromised agent stops every payout it queued, including when the principal's key is lost and only the recovery set can act, and adding the same address back later does not revive them. The mandate keeps a counter `agent_epoch` that increases by one on every agent addition (`add_role(1, ...)` and the `new` agent of a rotation) and stores, for each agent, the value it was added under; each payout record copies that value at request. The check is that `payout.agent` is an agent and its stored value equals `payout.agent_epoch`. Such payouts can still be cancelled by the principal, or by anyone once they lapse. Cancel reason 2 uses the same test.
-- Error: `AGENT_REMOVED`
-
 #### MANDATE-PAYOUT-011 Cancel effects
 
 - Precondition: `cancel` passed every check.
@@ -456,8 +444,20 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-013 Transfers out are wrapped
 
 - Precondition: any transfer out of the mandate: legs, the fee, `withdraw`, `sweep` and `recover_token` (`revoke` makes none).
-- Effect: on Stellar each transfer is made through a guarded contract call, and any error it returns, of any type, becomes `TRANSFER_FAILED`, which reverts every effect of the call, including legs already paid; a token `transfer` that returns a value instead of unit is also `TRANSFER_FAILED`. Budget or storage-limit exhaustion and host internal errors inside the token cannot be caught and fail the call as a transport failure. On Celo a revert, a `false` return or missing return data from the settlement asset is `TRANSFER_FAILED`; for `recover_token` only, a transfer succeeds when the call does not revert, the token has code, and the return data is empty or decodes to `true`, so tokens that return nothing can still be recovered. The mandate never branches on the token's own error codes.
+- Effect: on Stellar each transfer is made through a guarded contract call, and any error it returns, of any type, becomes `TRANSFER_FAILED`, which reverts every effect of the call, including legs already paid; a token `transfer` that returns a value instead of unit is also `TRANSFER_FAILED`. Budget or storage-limit exhaustion and host internal errors inside the token cannot be caught and fail the call as a transport failure. On Celo a revert, a `false` return or missing return data from the settlement asset is `TRANSFER_FAILED`; for `recover_token` only, a transfer succeeds when the call does not revert, the token has code, and the return data is empty or decodes to `true`, so tokens that return nothing can still be recovered. The mandate never branches on the token's own error codes. Balance reads of the settlement asset are not transfers: on Stellar a failed read is a host abort (the asset contract cannot fail it other than by budget exhaustion), and on Celo a reverting `balanceOf` reverts the whole call without a mandate code; on both chains it is a transport failure, reported to the operator as not landed, never as `TRANSFER_FAILED`.
 - Error: `TRANSFER_FAILED`
+
+#### MANDATE-PAYOUT-014 The requesting agent is still the same agent
+
+- Precondition: `approve` or `execute` of a payout whose `payout.agent` is no longer in `agents`, or was removed and added again since the request.
+- Effect: refused, so removing or rotating out a compromised agent stops every payout it queued, including when the principal's key is lost and only the recovery set can act, and adding the same address back later does not revive them. The mandate keeps a counter `agent_epoch` and stores, for each agent, the value it was added under; each payout record copies its agent's value at request (`MANDATE-PAYOUT-007`). Epoch values: `agent_epoch` starts at 0 and every agent named in the creation configuration is stored with 0; every later addition, by `add_role(1, ...)` or as the `new` agent of a rotation, first increases the counter by one and then stores the new value. So an agent added after creation, or added back after a removal, always holds a value of 1 or more that no payout queued before that addition carries. The check is that `payout.agent` is an agent and its stored value equals `payout.agent_epoch`. Such payouts can still be cancelled by the principal, or by anyone once they lapse. Cancel reason 2 uses the same test.
+- Error: `AGENT_REMOVED`
+
+#### MANDATE-PAYOUT-015 No nested call into the mandate during a transfer
+
+- Precondition: while the mandate is making a token transfer (a leg, the fee, `withdraw`, `sweep` or `recover_token`), the token or anything it calls tries to call any state-changing function of the same mandate.
+- Effect: the nested call is refused and changes nothing. If the token passes that failure on, the transfer fails and the outer call fails with `TRANSFER_FAILED` (`MANDATE-PAYOUT-013`). If the token catches it (`try` and `catch` on Celo, `try_call` on Stellar) and returns success, the outer call continues and stays correct, because no mandate state changed. On Celo every state-changing function carries one reentrancy guard, a transient-storage flag; on Stellar the host refuses to re-enter a contract already on the call stack. Balance reads are not covered here: on Celo `balanceOf` is a static call that cannot change state, and on Stellar the settlement asset contract calls nothing back. So no reasoning about a call's effects has to consider a nested call from a token, which matters most for `recover_token`, the one call to a token the principal chooses. Views stay callable during a callback and may show the mid-call state, so off-chain code must never treat a view read made during a callback as final.
+- Error: `TRANSFER_FAILED` (the outer call, when the token passes the failure on)
 
 ## Amounts, time and identity
 
@@ -659,12 +659,6 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Effect: refused. It can only be reached on Celo; Stellar cannot express the input.
 - Error: `LEGS_INVALID`
 
-#### MANDATE-SPLIT-008 No leg to the fee address
-
-- Precondition: a request with a leg whose address is `fee_address`, with any tag.
-- Effect: refused, so every unit that reaches the fee address is the fee and stays under the fee cap.
-- Error: `LEGS_INVALID`
-
 #### MANDATE-SPLIT-005 No duplicate destination
 
 - Precondition: a request with two legs that have the same `(address, tag)` pair.
@@ -682,6 +676,12 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Precondition: none.
 - Effect: every limit is checked on the payout's `total` or `charged`, never per leg, so splitting a payout never changes which limit applies. Each leg goes straight from the mandate to a destination bound to the recipient.
 - Error: none
+
+#### MANDATE-SPLIT-008 No leg to the fee address
+
+- Precondition: a request with a leg whose address is `fee_address`, with any tag.
+- Effect: refused, so every unit that reaches the fee address is the fee and stays under the fee cap.
+- Error: `LEGS_INVALID`
 
 ## Funding and assets
 
@@ -1005,6 +1005,12 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Effect: refused. On success the proposal clears and `principal_proposal_cancelled { current, proposed }` is emitted. Without this call, a proposal to a wrong address could only be replaced, never withdrawn, and would hold every third-party sweep behind `MANDATE-SWEEP-002`.
 - Error: `CONFIG_INVALID`
 
+#### MANDATE-PRINCIPAL-004 The principal changes only in two steps
+
+- Precondition: none.
+- Effect: the principal changes only through a proposal by the current principal and an acceptance by the proposed address. Proposing, accepting and cancelling are allowed in every state, including after revoke and expiry.
+- Error: none
+
 #### MANDATE-PRINCIPAL-005 Accept needs a proposal
 
 - Precondition: `accept_principal()` with no proposal set. Checked first, because with no proposal there is no address to authorize.
@@ -1016,12 +1022,6 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Precondition: `accept_principal()` while `proposed_principal` is in `agents`, `executors` or `recovery`, which can happen if it gained the role after the proposal.
 - Effect: refused, so the new principal never holds a role `MANDATE-ROLE-002` or `MANDATE-ROLE-021` forbids. The principal removes the role, or cancels the proposal, first. The attester overlap on Celo is `MANDATE-ROLE-018`.
 - Error: `ROLE_CONFLICT`
-
-#### MANDATE-PRINCIPAL-004 The principal changes only in two steps
-
-- Precondition: none.
-- Effect: the principal changes only through a proposal by the current principal and an acceptance by the proposed address. Proposing, accepting and cancelling are allowed in every state, including after revoke and expiry.
-- Error: none
 
 ## Take rate fee
 
@@ -1401,7 +1401,7 @@ Effects: `MANDATE-RECOVER-003`, then the settlement balance check of `MANDATE-RE
 7. The set would not exceed its bound (MANDATE-ROLE-007).
 <!-- /check-order -->
 
-Effects: add the account, emit `role_added { role, account }`, record the new `agent_epoch` for an agent (`MANDATE-PAYOUT-014`), apply `MANDATE-APPROVAL-007` when it is the first approver, and increase `recovery_epoch` when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
+Effects: add the account, emit `role_added { role, account }`; for an agent, increase `agent_epoch` and store the new value with it (`MANDATE-PAYOUT-014`); apply `MANDATE-APPROVAL-007` when it is the first approver, and increase `recovery_epoch` when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
 
 ### remove_role
 
