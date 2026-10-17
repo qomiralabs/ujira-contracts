@@ -13,11 +13,27 @@
 # FOUNDRY_PROFILE names a profile that does not exist. This script checks the
 # profile against celo/foundry.toml first and refuses an unknown one.
 #
+# Some overrides cannot be cleared from here, because forge reads them itself
+# after this script has handed over. The script refuses to run while any of
+# them exists:
+#   - a .env file (or symlink) in the working directory, the config's
+#     directory, or any parent of either: forge loads the first .env it finds
+#     walking up from each
+#   - a user-level $HOME/.foundry/foundry.toml, which forge merges in
+#   - FOUNDRY_CONFIG, in any case, which points forge at another config file
+#   - a foundry.toml in the working directory that is not --config
+# It also refuses an inherited FOUNDRY_ or DAPP_ name that is not a valid
+# shell name, since it could not be removed.
+#
+# This covers what forge 1.5.1 reads. It cannot stop a command that changes
+# directory, or a forge release that reads a new source, so CI also checks
+# its results, for example that tests actually ran.
+#
 # Usage: scripts/foundry-env.sh [--profile <name>] [--config <foundry.toml>] -- <command> [args]...
 #   --profile  defaults to "default"
 #   --config   defaults to celo/foundry.toml next to this script
 # Exit codes: the command's own exit code, or 2 when the profile or the
-# arguments are not valid.
+# arguments are not valid, or the script refuses to run.
 set -euo pipefail
 
 profile=default
@@ -68,18 +84,65 @@ if ! grep -Eq "^[[:space:]]*\[profile\.\"?${profile}\"?\][[:space:]]*(#.*)?$" "$
   exit 2
 fi
 
+refuse() {
+  echo "foundry-env: refusing to run: $1" >&2
+  exit 2
+}
+
+if [ -z "${HOME:-}" ]; then
+  refuse "HOME is not set, so the user-level Foundry config cannot be checked"
+fi
+user_config="$HOME/.foundry/foundry.toml"
+if [ -e "$user_config" ] || [ -L "$user_config" ]; then
+  refuse "$user_config exists and forge would merge it into the build config"
+fi
+
+# The physical path of the config, to compare against the working directory.
+config_dir=$(cd "$(dirname "$config")" && pwd -P)
+config_real="$config_dir/$(basename "$config")"
+here=$(pwd -P)
+if { [ -e "$here/foundry.toml" ] || [ -L "$here/foundry.toml" ]; } && [ "$here/foundry.toml" != "$config_real" ]; then
+  refuse "$here/foundry.toml is not $config, and forge would read it instead"
+fi
+
+# check_dotenv <dir>: refuse if <dir> or any parent holds a .env.
+check_dotenv() {
+  local dir=$1
+  while :; do
+    if [ -e "$dir/.env" ] || [ -L "$dir/.env" ]; then
+      refuse "$dir/.env exists and forge would load it after the environment is cleared"
+    fi
+    [ "$dir" = / ] && break
+    dir=$(dirname "$dir")
+  done
+}
+check_dotenv "$here"
+check_dotenv "$config_dir"
+
+# The names come from awk's ENVIRON, not compgen -e: bash leaves out, or
+# cannot unset, a name that is not a valid identifier, but it still reaches
+# forge. Captured in a variable, so an awk failure stops the script instead of
+# looking like an empty environment.
+names=$(awk 'BEGIN { for (name in ENVIRON) print name }')
+
 # forge matches these prefixes in any case, so foundry_deny counts as much as
 # FOUNDRY_DENY. Bracket patterns rather than ${name^^} or nocasematch, which
 # bash 3.2 (macOS) does not have.
 cleared=0
 while IFS= read -r name; do
   case "$name" in
+    [Ff][Oo][Uu][Nn][Dd][Rr][Yy]_[Cc][Oo][Nn][Ff][Ii][Gg])
+      refuse "$name is set and would point forge at another config file"
+      ;;
     [Ff][Oo][Uu][Nn][Dd][Rr][Yy]_* | [Dd][Aa][Pp][Pp]_*)
+      if ! [[ $name =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        refuse "inherited variable '$name' is not a valid shell name and cannot be cleared"
+      fi
       unset "$name"
       cleared=$((cleared + 1))
       ;;
   esac
-done < <(compgen -e)
+done <<<"$names"
 
 if [ "$cleared" -gt 0 ]; then
   echo "foundry-env: cleared $cleared FOUNDRY_ or DAPP_ variable(s), any case" >&2

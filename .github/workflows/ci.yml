@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request cancels its older run. Runs for pushes to
+# development, staging and main are never cancelled, so every merged commit
+# keeps a complete result.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Every tool is a pinned release binary checked against its SHA256 before it
 # runs. Bump a version and its hash together.
@@ -32,6 +35,9 @@ jobs:
     name: headers
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,9 +163,15 @@ jobs:
             exit 1
           fi
 
+      - name: Test the build script
+        run: ../scripts/soroban-build.test.sh
+
+      # Production contracts only: each cdylib crate under contracts/ is built
+      # with its own --package, and the release folder must then hold exactly
+      # their wasm, so a spike crate can never end up next to them.
       - name: stellar contract build
         run: |
-          stellar contract build --locked
+          ../scripts/soroban-build.sh
           ls -l target/wasm32v1-none/release/*.wasm
 
       - name: Check the tree is clean after the build
@@ -178,6 +190,7 @@ jobs:
     defaults:
       run:
         working-directory: celo
+        shell: bash --noprofile --norc -euo pipefail {0}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -225,23 +238,49 @@ jobs:
           slither --version | grep -qx "${SLITHER_VERSION}" || { echo "slither is not ${SLITHER_VERSION}" >&2; exit 1; }
 
       # Every forge call below goes through foundry-env.sh, which drops all
-      # FOUNDRY_* and DAPP_* variables in any case and refuses a profile
-      # foundry.toml does not define. This step also proves forge reads the pinned settings.
+      # FOUNDRY_* and DAPP_* variables in any case, and refuses to run with an
+      # unknown profile or with a .env or user-level config forge would read
+      # itself. This step also proves forge reads the pinned settings and that
+      # no test filter is set.
       - name: Check Foundry config
         run: |
           ../scripts/foundry-env.sh --profile default -- forge config --json >"${RUNNER_TEMP}/config.json"
-          jq -e '.solc == "0.8.37" and .evm_version == "prague" and .deny == "warnings" and .auto_detect_solc == false' \
+          jq -e '.solc == "0.8.37" and .evm_version == "prague" and .deny == "warnings" and .auto_detect_solc == false
+            and ([.match_test, .no_match_test, .match_contract, .no_match_contract, .match_path, .no_match_path] | all(. == null))' \
             "${RUNNER_TEMP}/config.json"
 
       - name: forge fmt
         run: ../scripts/foundry-env.sh --profile default -- forge fmt --check
 
       # foundry.toml sets deny = "warnings", so a compiler warning fails here.
+      # --force so nothing compiled earlier in the job is reused.
       - name: forge build
-        run: ../scripts/foundry-env.sh --profile default -- forge build
+        run: ../scripts/foundry-env.sh --profile default -- forge build --force
 
+      # forge exits 0 when a filter matches no test, so the step also fails
+      # unless at least one test actually ran and passed.
       - name: forge test
-        run: ../scripts/foundry-env.sh --profile default -- forge test
+        run: |
+          results="${RUNNER_TEMP}/forge-test.json"
+          code=0
+          ../scripts/foundry-env.sh --profile default -- forge test --json >"$results" || code=$?
+          if ! jq -e 'type == "object"' "$results" >/dev/null 2>&1; then
+            cat "$results"
+            echo "forge test did not report any test results" >&2
+            exit 1
+          fi
+          jq -r 'to_entries[] | .key as $suite | .value.test_results | to_entries[]
+            | "\(.value.status)  \($suite) \(.key)\(if .value.reason then "  " + .value.reason else "" end)"' "$results"
+          if [ "$code" -ne 0 ]; then
+            exit "$code"
+          fi
+          total=$(jq '[.[].test_results[]] | length' "$results")
+          passed=$(jq '[.[].test_results[] | select(.status == "Success")] | length' "$results")
+          echo "forge test: ${passed} of ${total} test(s) passed"
+          if [ "$total" -eq 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "no tests ran, or not every test passed" >&2
+            exit 1
+          fi
 
       - name: forge coverage
         run: ../scripts/foundry-env.sh --profile default -- forge coverage --report summary
