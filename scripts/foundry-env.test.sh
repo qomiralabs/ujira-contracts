@@ -57,7 +57,8 @@ fuzz = { runs = 10000 }
 runs = 1000
 TOML
 
-show_env='env | grep -E "^(FOUNDRY|DAPP)_" | sort || true'
+# Case insensitive, because forge reads these names in any case.
+show_env='env | grep -iE "^(FOUNDRY|DAPP)_" | sort || true'
 
 want_out="FOUNDRY_PROFILE=default"
 expect "default profile is exported" 0 \
@@ -75,6 +76,40 @@ expect "FOUNDRY_ variables are cleared" 0 \
 reject_out="DAPP_SOLC_VERSION"
 expect "legacy DAPP_ variables are cleared" 0 \
   env DAPP_SOLC_VERSION=0.8.0 "$script" --config "$config" -- bash -c "$show_env"
+
+reject_out="foundry_deny"
+expect "lowercase foundry_ variables are cleared" 0 \
+  env foundry_deny=never foundry_optimizer_runs=1 \
+  "$script" --config "$config" -- bash -c "$show_env"
+
+reject_out="Foundry_Deny"
+expect "mixed case Foundry_ variables are cleared" 0 \
+  env Foundry_Deny=never FoUnDrY_Solc=0.8.0 \
+  "$script" --config "$config" -- bash -c "$show_env"
+
+reject_out="dapp_solc_version"
+expect "lowercase dapp_ variables are cleared" 0 \
+  env dapp_solc_version=0.8.0 "$script" --config "$config" -- bash -c "$show_env"
+
+reject_out="Dapp_Solc_Version"
+expect "mixed case Dapp_ variables are cleared" 0 \
+  env Dapp_Solc_Version=0.8.0 "$script" --config "$config" -- bash -c "$show_env"
+
+want_out="FOUNDRY_PROFILE=default"
+reject_out="foundry_profile"
+expect "a lowercase foundry_profile cannot pick the profile" 0 \
+  env foundry_profile=ci "$script" --config "$config" -- bash -c "$show_env"
+
+want_out="cleared 4"
+expect "every case variant is counted" 0 \
+  env FOUNDRY_A=1 foundry_b=1 Foundry_C=1 dApP_d=1 \
+  "$script" --config "$config" -- true
+
+want_out="both kept"
+# shellcheck disable=SC2016 # expanded by the inner shell, on purpose
+expect "names that only start like FOUNDRY are kept" 0 \
+  env FOUNDRYX_KEEP=1 FOUNDRY=1 "$script" --config "$config" -- \
+  bash -c '[ "${FOUNDRYX_KEEP:-}" = 1 ] && [ "${FOUNDRY:-}" = 1 ] && echo "both kept"'
 
 want_out="FOUNDRY_PROFILE=default"
 expect "an inherited FOUNDRY_PROFILE is replaced" 0 \
@@ -127,6 +162,11 @@ if command -v forge >/dev/null 2>&1; then
   expect "forge sees foundry.toml, not an inherited FOUNDRY_DENY" 0 \
     env FOUNDRY_DENY=never "$script" --config "$real" -- \
     bash -c "cd '$here/../celo' && forge config --json | jq '{deny}'"
+
+  want_out='"deny":"warnings","optimizer_runs":200'
+  expect "forge sees foundry.toml, not lowercase or mixed case overrides" 0 \
+    env foundry_deny=never Foundry_Optimizer_Runs=1 "$script" --config "$real" -- \
+    bash -c "cd '$here/../celo' && forge config --json | jq -c '{deny,optimizer_runs}'"
 
   want_out="profile 'nope' is not defined"
   expect "an unknown profile is refused for the real config" 2 \
