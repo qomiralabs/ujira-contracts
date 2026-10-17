@@ -334,6 +334,7 @@ const CASES = [
     expect: "ATTESTATION_INVALID",
     attestations: [att({ signOver: { policy: "other" } })],
   },
+  { name: "qa_wrong_ref_again", tamper: "wrong_ref", expect: "ATTESTATION_INVALID", attestations: [att({ signOver: { ref: "other" } })] },
   { name: "wrong_ref", tamper: "wrong_ref", expect: "ATTESTATION_INVALID", attestations: [att({ signOver: { ref: "other" } })] },
   {
     name: "wrong_valid_until",
