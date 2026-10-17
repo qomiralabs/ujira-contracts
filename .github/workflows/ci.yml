@@ -52,6 +52,15 @@ jobs:
       - name: Test the header check
         run: scripts/check-headers.test.sh
 
+      # Literal bidirectional controls and invisible characters can make code
+      # read differently from how it runs. Uses the runner's python3 and its
+      # standard library only.
+      - name: Check invisible characters
+        run: scripts/check-invisible-characters.py
+
+      - name: Test the invisible character check
+        run: scripts/check-invisible-characters.test.sh
+
   soroban:
     name: soroban
     runs-on: ubuntu-24.04

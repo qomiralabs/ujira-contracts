@@ -31,6 +31,16 @@ scripts/check-headers.sh
 
 It names every tracked `.rs` or `.sol` file that is missing the header. Vendored code in `celo/lib/` and build output are skipped. `scripts/check-headers.test.sh` tests the check itself.
 
+## Invisible characters
+
+Literal bidirectional controls and invisible characters can make code read differently from how it runs. To check the tree:
+
+```sh
+scripts/check-invisible-characters.py
+```
+
+It reads every tracked file as bytes, skips binary content (any NUL byte) whatever its extension, and requires the rest to be valid UTF-8. It fails on every character in the Unicode categories Cf, Zl and Zp, such as the byte order mark, zero width characters, the bidirectional controls U+202A to U+202E and U+2066 to U+2069, and U+2028 and U+2029, naming the file, line, column and code point. Categories come from Python's `unicodedata` tables, and the script uses the standard library only. It also fails on the no break space (U+00A0), narrow no break space (U+202F) and minus sign (U+2212), except in files listed in `scripts/invisible-characters-allowlist.txt`. Write any of these characters as an escape, such as `\u{202e}` in Rust or `unicode"\u202e"` in Solidity. `scripts/check-invisible-characters.test.sh` tests the check itself.
+
 ## Local setup
 
 ### Soroban (Stellar)
@@ -145,7 +155,7 @@ Slither is installed in CI from `celo/slither-requirements.txt`, which pins Slit
 
 | Job | What it checks |
 | --- | --- |
-| `headers` | actionlint on the workflows, the license header check and its self test. |
+| `headers` | actionlint on the workflows, the license header check, the invisible character check and their self tests. |
 | `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, `stellar contract build`, and a clean tree afterwards. |
 | `celo` | From `celo/`, through `scripts/foundry-env.sh`: `forge fmt --check`, `forge build` with warnings denied, `forge test`, `forge coverage`, Slither with `--fail-low`, the size check (every compiled `src/` contract must be checked), both self tests, and a clean tree afterwards. |
 
