@@ -31,6 +31,16 @@ scripts/check-headers.sh
 
 It names every tracked `.rs` or `.sol` file that is missing the header. Vendored code in `celo/lib/` and build output are skipped. `scripts/check-headers.test.sh` tests the check itself.
 
+## Invisible characters
+
+Literal bidirectional controls and invisible characters can make code read differently from how it runs. To check the tree:
+
+```sh
+scripts/check-invisible-characters.py
+```
+
+It reads every tracked file as bytes. Only files whose extension is on the short binary list in the script (`png`, `jpg`, `jpeg`, `gif`, `webp`, `ico`, `woff`, `woff2`, `wasm`, `pdf`) are skipped, and only when their content starts with that format's signature; a listed name with other content fails. Every other file must be valid UTF-8 and is checked in full, and a NUL byte is reported as U+0000, so a NUL cannot make a source file skip the check. It fails on every character in the Unicode categories Cf, Zl and Zp, such as the byte order mark, zero width characters, the bidirectional controls U+202A to U+202E and U+2066 to U+2069, and U+2028 and U+2029, naming the file, line, column and code point. Categories come from Python's `unicodedata` tables, and the script uses the standard library only. It also fails on the no break space (U+00A0), narrow no break space (U+202F) and minus sign (U+2212), except in files listed in `scripts/invisible-characters-allowlist.txt`. Write any of these characters as an escape, such as `\u{202e}` in Rust or `unicode"\u202e"` in Solidity. `scripts/check-invisible-characters.test.sh` tests the check itself.
+
 ## Local setup
 
 ### Soroban (Stellar)
@@ -122,7 +132,9 @@ scripts/check-sizes.sh
 scripts/check-sizes.test.sh
 ```
 
-A contract whose name ends in `Factory` may use up to 61,440 bytes of runtime code, Celo's 65,536 byte limit less a 4 KiB margin. Every other contract, the mandate included, must stay within 24,576 bytes. Initcode must stay within Celo's 131,072 byte limit. Name a contract `...Factory` only if it deploys mandates.
+A contract listed in `celo/factory-allowlist.txt` may use up to 61,440 bytes of runtime code, Celo's 65,536 byte limit less a 4 KiB margin. Entries name the source path and the contract, as `src/<file>.sol:<Contract>`; the contract's name plays no part, so a mandate renamed `...Factory` is still held to the mandate budget. Every other contract, the mandate included, must stay within 24,576 bytes. Initcode must stay within Celo's 131,072 byte limit. The check fails on an allowlist entry that is malformed, listed twice or matches no contract. Add a contract to the allowlist only if it deploys mandates, and only through a reviewed change.
+
+Only contracts in `celo/src/` are sized, plus every concrete vendored contract under `celo/lib/` that `src/` compiles, whether `src/` deploys it, calls it or only imports it. Those are held to the mandate budget. Contracts under `celo/test/` and `celo/script/` are never sized. An allowlist containing a NUL byte or any other control character (anything but tab, line feed and carriage return) is rejected.
 
 Slither ignores only vendored code under `celo/lib/`. Tests and scripts are left out because the build it runs skips them, not because of a path filter. Any vulnerable contract under `celo/src/`, in any subfolder, must make the slither command fail. If it passes, the config is hiding code.
 
@@ -157,7 +169,7 @@ Slither is installed in CI from `celo/slither-requirements.txt`, which pins Slit
 
 | Job | What it checks |
 | --- | --- |
-| `headers` | actionlint on the workflows, the license header check and its self test. |
+| `headers` | actionlint on the workflows, the license header check, the invisible character check and their self tests. |
 | `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), and a clean tree afterwards. |
 | `celo` | From `celo/`, through `scripts/foundry-env.sh`: `forge fmt --check`, `forge build --force` with warnings denied, `forge test` (at least one test must run), `forge coverage`, Slither with `--fail-low`, the size check (every compiled `src/` contract must be checked), both self tests, and a clean tree afterwards. |
 
