@@ -41,7 +41,7 @@ EXAMPLE = {
     "mandate": "CDUKSTCG3XKTPTHMNRJZIW23J3T5DKHASDPQ3CIRKQ4YJH3PDOFFULZA",
     "recipient_ref": "187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
     "country_policy_hash": "343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
-    "policy_epoch": 1,
+    "policy_epoch": 0,
     "valid_until": 1767229200,
     "destination": "GDTYAUMMX45E2SU2Q7JRJHCXDIYTEUAXVBHZ7DVCVXZGMAKMWFL7SOY4",
 }
