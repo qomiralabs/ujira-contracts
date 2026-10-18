@@ -39,6 +39,11 @@
 # only mention another rule do so in their Effect. Rule headings must run in
 # numeric order per area.
 #
+# Check ranges: a phrase such as "`create` checks 3 to 16", or a bare
+# "Checks 18 to 23" under the same heading as the order it follows, must name
+# steps that exist; "check", "step" and "N through M", "N-M" and "N and M"
+# are read the same way.
+#
 # Formatting: once the fields of a rule start, a blank line may only be
 # followed by a heading, so every field is contiguous and nothing can hide
 # after a blank line. Two blank lines in a row are refused, every heading
@@ -189,19 +194,38 @@ def tracked_entries():
 
 
 def read_blobs(oids):
-    """Returns {object id: bytes} read from the object store."""
+    """Returns {object id: bytes} read from the object store.
+
+    git cat-file --batch answers one record per requested id, in order. Every
+    record must name the id that was asked for and carry its full size, so a
+    wrong, missing or truncated answer can never be checked in place of the
+    real object.
+    """
     out = git(["cat-file", "--batch"], b"".join(o + b"\n" for o in oids))
     blobs, pos = {}, 0
-    while pos < len(out):
-        end = out.index(b"\n", pos)
+    for oid in oids:
+        name = oid.decode("ascii", "replace")
+        end = out.find(b"\n", pos)
+        if end < 0:
+            fail_read("git cat-file output ended before the record for object %s" % name)
         header = out[pos:end].split(b" ")
-        if len(header) != 3 or header[1] != b"blob":
-            print("check-spec-ids: cannot read object %s from git" % header[0].decode("ascii", "replace"), file=sys.stderr)
-            sys.exit(2)
+        if len(header) != 3 or header[1] != b"blob" or not header[2].isdigit():
+            fail_read("cannot read object %s from git (got %r)" % (name, out[pos:end][:80]))
+        if header[0] != oid:
+            fail_read("git cat-file returned object %s where %s was requested" % (header[0].decode("ascii", "replace"), name))
         size = int(header[2])
-        blobs[header[0]] = out[end + 1:end + 1 + size]
+        if end + 1 + size + 1 > len(out) or out[end + 1 + size:end + 2 + size] != b"\n":
+            fail_read("git cat-file record for object %s was cut short" % name)
+        blobs[oid] = out[end + 1:end + 1 + size]
         pos = end + 1 + size + 1
+    if pos != len(out):
+        fail_read("git cat-file returned more records than were requested")
     return blobs
+
+
+def fail_read(msg):
+    print("check-spec-ids: " + msg, file=sys.stderr)
+    sys.exit(2)
 
 
 def converting_attributes(paths):
@@ -569,24 +593,35 @@ in_order {
   }
 }
 
-# Check ranges: "`op` checks N to M" names an order, and a bare "Checks N to M"
-# means the order just closed. Both are checked at the end, once every block
-# is known.
+# Check ranges: "`op` checks N to M" names an order, and a bare "Checks N to
+# M" means the order closed above it under the same heading. The phrasings
+# "check", "checks", "step" or "steps" followed by "N to M", "N through M",
+# "N-M" or "N and M" are all read. Every range is checked at the end, once
+# every block is known.
+/^#+ / { last_block = "" }
 {
   rest = line
-  while (match(rest, /(`[a-z_]+` )?[Cc]hecks [0-9]+ to [0-9]+/)) {
+  while (match(rest, /(`[^`]+` )?([Cc]hecks?|[Ss]teps?) [0-9]+( to | through |-| and )[0-9]+/)) {
     frag = substr(rest, RSTART, RLENGTH)
     rest = substr(rest, RSTART + RLENGTH)
+    named = (frag ~ /^`/)
     rname = ""
-    if (frag ~ /^`/) { rname = frag; sub(/^`/, "", rname); sub(/`.*$/, "", rname) }
+    phrase = frag
+    if (named) { rname = frag; sub(/^`/, "", rname); sub(/`.*$/, "", rname); sub(/^`[^`]+` /, "", phrase) }
     else rname = last_block
-    nums = frag
-    sub(/^.*[Cc]hecks /, "", nums)
-    split(nums, nn, " to ")
+    nums = phrase
+    sub(/^[A-Za-z]+ /, "", nums)
+    match(nums, /^[0-9]+/)
+    first_n = substr(nums, RSTART, RLENGTH) + 0
+    last_txt = nums
+    sub(/^.*[^0-9]/, "", last_txt)
     nrange++
     range_name[nrange] = rname
-    range_from[nrange] = nn[1] + 0
-    range_to[nrange] = nn[2] + 0
+    range_named[nrange] = named
+    range_phrase[nrange] = phrase
+    range_from[nrange] = first_n
+    range_to[nrange] = last_txt + 0
+    range_and[nrange] = (phrase ~ / and /)
     range_line[nrange] = NR
   }
 }
@@ -616,8 +651,9 @@ END {
   for (i = 1; i <= nrange; i++) {
     rn = range_name[i]
     where = "line " range_line[i] " cites " rn " checks " range_from[i] " to " range_to[i]
-    if (rn == "" || !(rn in order_seen)) order_problem(where ", but there is no " rn " check order")
-    else if (range_from[i] < 1 || range_from[i] > range_to[i] || range_to[i] > block_max[rn] + 0) order_problem(where ", but " rn " has " block_max[rn] + 0 " checks")
+    if (!range_named[i] && rn == "") order_problem("line " range_line[i] " has a bare check range (" range_phrase[i] ") with no check order above it in its section; name the order")
+    else if (!(rn in order_seen)) order_problem(where ", but there is no " rn " check order")
+    else if (range_from[i] < 1 || (!range_and[i] && range_from[i] > range_to[i]) || range_to[i] > block_max[rn] + 0 || range_from[i] > block_max[rn] + 0) order_problem(where ", but " rn " has " block_max[rn] + 0 " checks")
   }
   nl = split(retired_list, rl, " ")
   for (i = 1; i <= nl; i++) {

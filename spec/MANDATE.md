@@ -4,7 +4,7 @@ A mandate is a contract that holds a principal's settlement asset and lets agent
 
 Status: draft for spec version 1. The machine-readable error table (`spec/errors.json`), the constants (`spec/constants.json`), the event encodings and the attestation digest format are added separately and must match this document.
 
-Scope: spec version 1 is in force on Stellar only. Rules and text marked Celo or EVM are kept for reference and are not in force. An EVM chain added later needs a spec revision that defines its `ATTESTATION_SCHEME` (for example secp256k1 with `ecrecover` over the same SHA-256 digest) and its bad-signature behaviour, and must not run `ATTESTED` or `BOTH` mandates until that revision exists. Under ed25519, `MANDATE-ROLE-018` could never match on an EVM chain, because an EVM address is not an ed25519 key.
+Scope: spec version 1 is in force on Stellar only. Rules and text marked Celo or EVM are kept for reference and are not in force. An EVM chain added later needs a spec revision that defines its attestation scheme (for example secp256k1 with `ecrecover` over the same SHA-256 digest) and its bad-signature behaviour, and must not run `ATTESTED` or `BOTH` mandates until that revision exists. Under ed25519, `MANDATE-ROLE-018` could never match on an EVM chain, because an EVM address is not an ed25519 key.
 
 ## How to read this document
 
@@ -20,7 +20,7 @@ Rule areas: `CONFIG`, `ROLE`, `AMOUNT`, `FUND`, `ASSET`, `DUST`, `PAYOUT`, `BATC
 
 ## Constants
 
-The values in force on Stellar.
+The values in force on Stellar. A row marked Stellar only depends on Stellar storage or ledger timing; every other value is chain-neutral.
 
 | Name | Value | Meaning |
 | --- | --- | --- |
@@ -79,7 +79,7 @@ Codes are append only and never reused. `0` means success and appears only in ba
 | 50 | `RECIPIENT_NOT_ALLOWED` | A leg destination is not on the allowlist for the recipient |
 | 51 | `ATTESTATION_INVALID` | An attestation where none is allowed, the wrong number of attestations, a window longer than `MAX_ATTESTATION_VALIDITY`, or a signature that is not 64 bytes. A wrongly signed attestation is a host trap on Stellar, not this code (`MANDATE-RECIPIENT-012`) |
 | 52 | `ATTESTATION_EXPIRED` | An attestation at or after its `valid_until` |
-| 53 | `POLICY_CHANGED` | The attestation policy changed since the request |
+| 53 | `POLICY_CHANGED` | The mandate's policy epoch differs from the epoch the attestation was issued under: at request (`MANDATE-RECIPIENT-019`) or at execute (`MANDATE-RECIPIENT-015`) |
 | 54 | `WRONG_RECIPIENT_MODE` | A call that the recipient mode does not use |
 | 60 | `PAYOUT_ID_EXISTS` | The payout ID was already used |
 | 61 | `PAYOUT_NOT_FOUND` | No payout with that ID |
@@ -466,7 +466,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-016 Payout record lifetime on Stellar
 
 - Precondition: on Stellar, a request stores a payout record.
-- Effect: the request extends the record's TTL so that it stays live until at least `payout.expires_at + RECORD_TTL_MARGIN_SECONDS`, that is, by `ceil((payout.expires_at + RECORD_TTL_MARGIN_SECONDS - now) / STELLAR_LEDGER_SECONDS)` ledgers, clamped to the network's maximum entry TTL. A new persistent entry already starts at the network's minimum TTL and an extension never shortens one, so the TTL is never below that minimum. At the network's current close time the record does not fall short; if the network later closes ledgers faster, a record may archive somewhat before that point, which only costs a restore fee on its next use (`MANDATE-PAYOUT-009`). The submitter pays the rent. Nothing extends a record after that: the tombstone a terminal transition writes keeps the record's remaining TTL and is then left to archive, because an archived record or tombstone still counts as present (`MANDATE-PAYOUT-009`) and a later restore costs only a fee. The one-day margin covers ledger clock drift, a last-moment execute, and the operator's read of the record after the payout lapses, without a restore. Celo storage does not expire, so the rule has no effect there.
+- Effect: the request extends the record's TTL so that it stays live until at least `payout.expires_at + RECORD_TTL_MARGIN_SECONDS`, that is, by `ceil((payout.expires_at + RECORD_TTL_MARGIN_SECONDS - now) / STELLAR_LEDGER_SECONDS)` ledgers, clamped to the network's maximum entry TTL. A new persistent entry already starts at the network's minimum TTL and an extension never shortens one, so the TTL is never below that minimum. At the network's current close time the record does not fall short; if the network later closes ledgers faster, a record may archive somewhat before that point, which only costs a restore fee on its next use (`MANDATE-PAYOUT-009`). The submitter pays the rent. Nothing extends a record after that: the tombstone a terminal transition writes keeps the record's remaining TTL and is then left to archive, because an archived record or tombstone still counts as present (`MANDATE-PAYOUT-009`) and a later restore costs only a fee. Leaving tombstones to archive is safe only while an archived tombstone still blocks its key. The signal to revisit this rule is any protocol change that moves archived state out of validator storage so that restoring needs an outside proof, or that lets a new entry be created at an archived key without restoring it first, because either would let a payout ID be reused. The one-day margin covers ledger clock drift, a last-moment execute, and the operator's read of the record after the payout lapses, without a restore. Celo storage does not expire, so the rule has no effect there.
 - Error: none
 
 ## Amounts, time and identity
@@ -605,7 +605,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 #### MANDATE-RECIPIENT-012 Signed by the attester
 
-- Precondition: a leg's attestation whose signature is not a valid ed25519 signature by the configured `attester` over the attestation message. The message is the 15 ASCII bytes `UJIRA/ATTEST/V2` followed by the SHA-256 of the attested fields, 47 bytes in all, so it can never equal a 32-byte transaction hash. The fields bind the chain, the mandate, `recipient_ref`, `country_policy_hash`, `policy_epoch`, `valid_until` and the destination pair; their byte format, specified separately, gives every field a fixed length or a length prefix, so no two field sequences encode to the same bytes. They do not include the amount or the fee. Version 1, never deployed, was a secp256k1 signature over a keccak digest with the prefix `UJIRA/ATTEST/V1`; the different prefix keeps the two versions apart.
+- Precondition: a leg's attestation whose signature is not a valid ed25519 signature by the configured `attester` over the attestation message. The message is the 15 ASCII bytes `UJIRA/ATTEST/V2` followed by the SHA-256 of the attested fields, 47 bytes in all, so it can never equal a 32-byte transaction hash. The fields bind the chain, the mandate, `recipient_ref`, `country_policy_hash`, `policy_epoch`, `valid_until` and the destination pair; their byte format, specified separately, gives every field a fixed length or a length prefix, so no two field sequences encode to the same bytes. They do not include the amount or the fee. Version 1, never deployed, was a secp256k1 signature over a keccak digest with the prefix `UJIRA/ATTEST/V1`; the different prefix keeps the two versions apart. A future scheme, for example an EVM signature scheme on another chain, takes its own prefix such as `UJIRA/ATTEST/V3` and never reuses `UJIRA/ATTEST/V2`.
 - Effect: the whole call fails with no state change. On Stellar the host's ed25519 verification traps on any failure and the contract cannot catch it, so the failure is a host trap rather than a code, and it rolls back a whole `request_payouts` batch. This is accepted: honest attestations can still fail, after an attester change or through an encoding mismatch between the request builder and the attester, but a policy change is caught per item first (`MANDATE-RECIPIENT-019`), and the operator simulates every attested request, isolates a trapping item and re-attests after a policy change before anything is submitted (`CHAINOPS-SUBMIT-003`). Reusing a valid attestation within its window grants nothing beyond what the agent may already do.
 - Error: host trap (Stellar)
 
@@ -1620,6 +1620,10 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 - Off chain: every request that carries attestations is simulated against the current ledger before it is submitted, and a simulation that traps is never submitted. When a batch simulation traps, the trapping item is isolated by bisection, removed and reported, and the rest is simulated again before submitting. When the mandate's `policy_epoch` changes, every attestation issued under the old epoch is discarded and the affected legs are attested again. So a stale or wrong attestation costs no fee and never aborts a batch on chain.
 
+#### CHAINOPS-SUBMIT-004 Cancel lapsed payouts while their records are live
+
+- Off chain: the operator cancels every lapsed payout (`MANDATE-PAYOUT-006`; anyone may cancel one, `MANDATE-PAYOUT-010`) before its record archives, timing the deadline from the record's `liveUntilLedgerSeq` read with `getLedgerEntries`, not from `expires_at` plus the margin, because faster ledgers can archive a record early (`MANDATE-PAYOUT-016`). Its `pending` or `committed` amount is then released without restoring the record; on a quiet mandate the cancel may still need to restore the contract instance or code. A missed window costs only a restore fee, because an archived record still counts as present (`MANDATE-PAYOUT-009`).
+
 #### CHAINOPS-CREATE-001 The pause-only guardian is on by default
 
 - Off chain: every mandate created through the operator's dashboard or API includes the operator's pause-only guardian by default, shown plainly. The principal can opt out at creation or remove it later, and it is never re-added after removal.
@@ -1634,7 +1638,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-CREATE-004 The attester key signs for no role account
 
-- Off chain: the attester service refuses to sign for a mandate while its key is a signer, of any weight, on the principal, `fee_address` or any role account, including the signers of a contract (`C`) smart wallet read through the wallet's own interface. It checks at mandate creation, on every role change and on every signer change of those accounts it observes, and again before each signature.
+- Off chain: the attester service refuses to sign for a mandate while its key is a signer, of any weight, on the principal, `fee_address` or any role account, including the signers of a contract (`C`) smart wallet read through the wallet's own interface. It checks at mandate creation, on every role change and on every signer change of those accounts it observes, and again before each signature. When it cannot read the full signer set of a smart wallet principal or role account, it refuses to sign: a failed or partial authority read is never treated as clean.
 
 #### CHAINOPS-CREATE-005 Attester key form
 
@@ -1848,6 +1852,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `CHAINOPS-SUBMIT-001` | No memo on contract calls |
 | `CHAINOPS-SUBMIT-002` | Submission discipline on Stellar |
 | `CHAINOPS-SUBMIT-003` | Simulate attested requests before submitting |
+| `CHAINOPS-SUBMIT-004` | Cancel lapsed payouts while their records are live |
 | `CHAINOPS-CREATE-001` | The pause-only guardian is on by default |
 | `CHAINOPS-CREATE-002` | Large mandates need more than one key |
 | `CHAINOPS-CREATE-003` | Custody guard for operator-held agent keys |

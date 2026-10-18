@@ -836,6 +836,63 @@ f="$work/range-unknown.md"
 valid_spec "$f" "Each item runs \`approve\` checks 1 to 2."
 expect "check range of an unknown order" 1 "$f" "--check-order" "cites approve checks 1 to 2, but there is no approve check order"
 
+# More range phrasings, order names of any spelling, and bare ranges kept
+# within their own section.
+f="$work/range-variants-ok.md"
+valid_spec "$f" "Checks 1 through 2 run in order. Steps 1 to 2 also. Checks 1-2 and checks 1 and 2 too."
+expect "range phrasings inside the order pass" 0 "$f" "--check-order" "check orders: 1 block(s)"
+
+for phrase in "check 1 to 30" "checks 1 through 30" "steps 1 to 30" "checks 1-30" "checks 1 and 30"; do
+  f="$work/range-variant-$(printf '%s' "$phrase" | tr ' ' '_').md"
+  valid_spec "$f" "Each item runs \`request_payout\` $phrase."
+  expect "range phrasing past the end: $phrase" 1 "$f" "--check-order" "but request_payout has 2 checks"
+done
+
+f="$work/range-odd-name.md"
+valid_spec "$f" "Each item runs \`request_payouts_v2\` checks 1 to 2."
+expect "check range naming an order that does not exist" 1 "$f" "--check-order" "cites request_payouts_v2 checks 1 to 2, but there is no request_payouts_v2 check order"
+
+f="$work/range-other-section.md"
+valid_spec "$f" "## Invariants
+
+Checks 1 to 2 hold everywhere."
+expect "bare check range outside its order's section" 1 "$f" "--check-order" "has a bare check range (Checks 1 to 2) with no check order above it in its section"
+
+# The object store reads must return the objects asked for, in order.
+mkdir -p "$work/fake-git"
+real_git=$(command -v git)
+cat >"$work/fake-git/git" <<FAKE
+#!/bin/sh
+for arg in "\$@"; do
+  if [ "\$arg" = "cat-file" ]; then
+    case "\$FAKE_CATFILE" in
+      mismatch) "$real_git" "\$@" | sed '1s/^[0-9a-f]*/0000000000000000000000000000000000000000/'; exit 0 ;;
+      truncate) "$real_git" "\$@" | head -c 60; exit 0 ;;
+    esac
+  fi
+done
+exec "$real_git" "\$@"
+FAKE
+chmod +x "$work/fake-git/git"
+charset_case catfile-mismatch ""
+make_repo "$work/catfile-mismatch"
+for mode in mismatch truncate; do
+  code=0
+  out=$(FAKE_CATFILE=$mode PATH="$work/fake-git:$PATH" "$script" "$work/catfile-mismatch/MANDATE.md" 2>&1) || code=$?
+  case $mode in
+    mismatch) want="returned object 0000000000000000000000000000000000000000 where" ; name="cat-file record with a different object id exits 2" ;;
+    truncate) want="cut short" ; name="cat-file record that is truncated exits 2" ;;
+  esac
+  if [ "$code" -eq 2 ] && printf '%s\n' "$out" | grep -qF "$want"; then
+    echo "ok: $name"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: $name: exit $code, want 2"
+    printf '%s\n' "$out" | sed 's/^/    /'
+    failures=$((failures + 1))
+  fi
+done
+
 no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
