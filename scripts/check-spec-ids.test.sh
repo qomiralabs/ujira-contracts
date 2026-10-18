@@ -741,14 +741,41 @@ else
 fi
 
 # Retired rules keep their ID, fail nothing and are cited only in the index.
-f="$work/retired-ok.md"
-valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+# The IDs are listed in retired-ids.txt beside the spec, so a retired rule can
+# be neither deleted nor brought back.
+retired_case() {
+  local dir=$1 extra=$2 index=$3 list=$4
+  mkdir -p "$work/$dir"
+  valid_spec "$work/$dir/MANDATE.md" "$extra" "$index"
+  if [ -n "$list" ]; then printf '# Retired rule IDs, never reused\n%s\n' "$list" >"$work/$dir/retired-ids.txt"; fi
+}
+retired_rule="#### MANDATE-ROLE-002 Retired: an old check
 
 - Precondition: none.
 - Effect: retired in spec version 1 when the check moved elsewhere; the ID is never reused.
 - Error: none
-" "| \`MANDATE-ROLE-002\` | Retired: an old check |"
-expect "retired rule only in the index" 0 "$f" "--check-order" "31 rule ID(s) defined"
+"
+retired_row="| \`MANDATE-ROLE-002\` | Retired: an old check |"
+
+retired_case retired-ok "$retired_rule" "$retired_row" "MANDATE-ROLE-002"
+expect "retired rule only in the index" 0 "$work/retired-ok/MANDATE.md" "--check-order" "31 rule ID(s) defined"
+
+retired_case retired-unlisted "$retired_rule" "$retired_row" ""
+expect "retired rule missing from the list" 1 "$work/retired-unlisted/MANDATE.md" "" "MANDATE-ROLE-002 is retired but not listed in retired-ids.txt"
+
+retired_case retired-deleted "" "" "MANDATE-ROLE-002"
+expect "listed retired rule deleted" 1 "$work/retired-deleted/MANDATE.md" "" "MANDATE-ROLE-002 is listed in retired-ids.txt but not defined; keep retired rules, never delete them"
+
+retired_case retired-revived "#### MANDATE-ROLE-002 A revived check
+
+- Precondition: something.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+" "| \`MANDATE-ROLE-002\` | A revived check |" "MANDATE-ROLE-002"
+expect "listed retired rule brought back" 1 "$work/retired-revived/MANDATE.md" "" "MANDATE-ROLE-002 is listed in retired-ids.txt but its title does not start with Retired:"
+
+retired_case retired-bad-list "" "" "MANDATE-ROLE-2"
+expect "malformed retired list entry" 1 "$work/retired-bad-list/MANDATE.md" "" "retired-ids.txt line 2 is not a rule ID"
 
 f="$work/retired-error.md"
 valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check

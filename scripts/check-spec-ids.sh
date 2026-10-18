@@ -78,7 +78,10 @@
 # Retired rules: a rule whose title starts with "Retired:" keeps its ID so it
 # is never reused. Its Error line must be "none", and it may be cited only in
 # the rule index and inside its own body, never in a check order or another
-# rule.
+# rule. Every retired ID is listed in retired-ids.txt beside the spec (one ID
+# per line, # starts a comment), and the check fails if a listed ID is missing
+# or no longer titled "Retired:", or if a retired rule is not listed, so a
+# retired ID can be neither deleted nor brought back.
 #
 # Usage: scripts/check-spec-ids.sh [--check-order] [path to MANDATE.md]
 # Exit codes: 0 all checks pass, 1 one or more problems named on stderr,
@@ -297,9 +300,30 @@ if [ "$charset_status" -gt 1 ]; then
   exit 2
 fi
 
+# Retired rule IDs committed beside the spec.
+retired_file="$spec_dir/retired-ids.txt"
+retired_list=""
+retired_status=0
+if [ -f "$retired_file" ]; then
+  lineno=0
+  while IFS= read -r entry || [ -n "$entry" ]; do
+    lineno=$((lineno + 1))
+    entry=${entry%%#*}
+    entry=$(printf '%s' "$entry" | tr -d ' ')
+    [ -z "$entry" ] && continue
+    if ! printf '%s\n' "$entry" | grep -Eq '^(MANDATE|CHAINOPS)-[A-Z]+-[0-9]{3}$'; then
+      echo "check-spec-ids: retired-ids.txt line $lineno is not a rule ID: $entry" >&2
+      retired_status=1
+      continue
+    fi
+    retired_list="$retired_list $entry"
+  done <"$retired_file"
+fi
+
 set +e
 LC_ALL=C awk \
   -v check_order="$check_order" \
+  -v retired_list="$retired_list" \
   -v mandate_areas="$mandate_areas" \
   -v chainops_areas="$chainops_areas" '
 function problem(msg) {
@@ -595,6 +619,13 @@ END {
     if (rn == "" || !(rn in order_seen)) order_problem(where ", but there is no " rn " check order")
     else if (range_from[i] < 1 || range_from[i] > range_to[i] || range_to[i] > block_max[rn] + 0) order_problem(where ", but " rn " has " block_max[rn] + 0 " checks")
   }
+  nl = split(retired_list, rl, " ")
+  for (i = 1; i <= nl; i++) {
+    listed[rl[i]] = 1
+    if (!(rl[i] in defined)) problem(rl[i] " is listed in retired-ids.txt but not defined; keep retired rules, never delete them")
+    else if (!(rl[i] in retired)) problem(rl[i] " is listed in retired-ids.txt but its title does not start with Retired:")
+  }
+  for (id in retired) if (!(id in listed)) problem(id " is retired but not listed in retired-ids.txt")
   for (id in retired) {
     if (err_text[id] != "none") problem(id " is retired, so its Error line must be none")
     if (id in cited_elsewhere) problem(id " is retired but cited at line " cited_elsewhere[id] "; cite the rule that replaced it")
@@ -699,4 +730,5 @@ END {
 awk_status=$?
 set -e
 if [ "$awk_status" -ne 0 ]; then exit "$awk_status"; fi
-exit "$charset_status"
+if [ "$charset_status" -ne 0 ]; then exit "$charset_status"; fi
+exit "$retired_status"
