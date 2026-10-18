@@ -307,5 +307,12 @@ jobs:
       - name: Test the dash check
         run: scripts/test-check-dashes.sh
 
+      # Probe only, never merged: stages an em dash written from its bytes, so
+      # the check below must fail.
+      - name: Plant an em dash (probe)
+        run: |
+          printf 'probe \xe2\x80\x94 dash\n' >>README.md
+          git add README.md
+
       - name: Check for dashes
         run: scripts/check-dashes.sh
