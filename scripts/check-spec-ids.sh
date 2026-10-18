@@ -75,6 +75,11 @@
 # An empty "- Error:" line is reported; a rule that adds no failure writes
 # "- Error: none".
 #
+# Retired rules: a rule whose title starts with "Retired:" keeps its ID so it
+# is never reused. Its Error line must be "none", and it may be cited only in
+# the rule index and inside its own body, never in a check order or another
+# rule.
+#
 # Usage: scripts/check-spec-ids.sh [--check-order] [path to MANDATE.md]
 # Exit codes: 0 all checks pass, 1 one or more problems named on stderr,
 # 2 bad usage or an unreadable file.
@@ -397,6 +402,7 @@ in_fence { next }
   close_rule()
   rest = substr(line, 6)
   if (match(rest, "^" tok_re)) {
+    title = substr(rest, RLENGTH + 2)
     found = ids_in(substr(rest, RSTART, RLENGTH), NR)
     sub(/^ /, "", found)
     if (found != "") {
@@ -414,6 +420,7 @@ in_fence { next }
         area_last_txt[area_key] = seq
       }
       current = found
+      if (title ~ /^Retired:/) retired[found] = NR
       field = ""
       fields_started = 0
       pending_blank = 0
@@ -541,7 +548,10 @@ in_order {
 {
   found = ids_in(line, NR)
   k = split(found, got, " ")
-  for (j = 1; j <= k; j++) if (!(got[j] in cited)) cited[got[j]] = NR
+  for (j = 1; j <= k; j++) {
+    if (!(got[j] in cited)) cited[got[j]] = NR
+    if (got[j] != current && !(got[j] in cited_elsewhere)) cited_elsewhere[got[j]] = NR
+  }
 }
 
 # Check order problems count only with --check-order.
@@ -556,6 +566,10 @@ END {
   for (id in defined) if (!(id in indexed)) problem(id " is defined at line " defined[id] " but missing from the rule index")
   for (id in indexed) if (!(id in defined)) problem(id " is in the rule index but not defined")
   for (id in cited) if (!(id in defined)) problem(id " is cited at line " cited[id] " but not defined")
+  for (id in retired) {
+    if (err_text[id] != "none") problem(id " is retired, so its Error line must be none")
+    if (id in cited_elsewhere) problem(id " is retired but cited at line " cited_elsewhere[id] "; cite the rule that replaced it")
+  }
 
   for (name in cited_error) if (!(name in known_error)) problem("error " name " is cited by" cited_error[name] " but not in the error table")
 

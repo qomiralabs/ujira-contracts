@@ -740,6 +740,55 @@ else
   failures=$((failures + 1))
 fi
 
+# Retired rules keep their ID, fail nothing and are cited only in the index.
+f="$work/retired-ok.md"
+valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired in spec version 1 when the check moved elsewhere; the ID is never reused.
+- Error: none
+" "| \`MANDATE-ROLE-002\` | Retired: an old check |"
+expect "retired rule only in the index" 0 "$f" "--check-order" "31 rule ID(s) defined"
+
+f="$work/retired-error.md"
+valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired.
+- Error: \`UNAUTHORIZED\`
+" "| \`MANDATE-ROLE-002\` | Retired: an old check |"
+expect "retired rule with an error" 1 "$f" "" "MANDATE-ROLE-002 is retired, so its Error line must be none"
+
+f="$work/retired-in-order.md"
+valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired.
+- Error: none
+
+### approve
+
+<!-- check-order: approve -->
+1. The old check (MANDATE-ROLE-002).
+<!-- /check-order -->" "| \`MANDATE-ROLE-002\` | Retired: an old check |"
+expect "retired rule cited in a check order" 1 "$f" "--check-order" "MANDATE-ROLE-002 is retired but cited at line"
+
+f="$work/retired-in-rule.md"
+valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired.
+- Error: none
+
+#### MANDATE-ROLE-003 A live rule
+
+- Precondition: something, as MANDATE-ROLE-002 used to say.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+" "| \`MANDATE-ROLE-002\` | Retired: an old check |
+| \`MANDATE-ROLE-003\` | A live rule |"
+expect "retired rule cited in another rule" 1 "$f" "" "MANDATE-ROLE-002 is retired but cited at line"
+
 no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
