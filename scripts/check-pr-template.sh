@@ -31,16 +31,29 @@ for heading in 'Linked issue' 'What and why' 'Tests' 'Docs' 'Checklist' 'Require
   grep -q -x -F -e "## $heading" "$template" || need "missing section: ## $heading"
 done
 
-# Each of these must be an unticked checkbox item.
+# Each of these must be an unticked checkbox item. Matched against a
+# here-string, not a pipe: under pipefail an early exit of grep -q could
+# fail the writer.
+checkboxes=$(grep -E '^- \[ \] ' "$template" || true)
 for item in 'Tests' 'Docs' 'No em or en dashes' 'Plain ASCII' 'No secrets' 'Zero warnings' \
   'integer minor units' 'failing test'; do
-  grep -E '^- \[ \] ' "$template" | grep -q -F -e "$item" || need "missing checklist item: $item"
+  grep -q -F -e "$item" <<<"$checkboxes" || need "missing checklist item: $item"
 done
 
-for text in 'Closes #' 'code review' 'QA' 'hygiene review' 'security review' 'exploit review' \
-  'audit review' 'design review' 'needs review again' 'squash'; do
-  grep -q -F -e "$text" "$template" || need "missing text: $text"
-done
+grep -q -F -e 'Closes #' "$template" || need "missing text: Closes #"
+
+# The review rules and merge rules must be present word for word, so a
+# category cannot be narrowed or dropped without failing here.
+while IFS= read -r line; do
+  grep -q -x -F -e "$line" "$template" || need "missing or changed line: $line"
+done <<'LINES'
+- Every change: code review, QA verification and a hygiene review.
+- Auth, identity, payouts, idempotency, router, secrets, dependencies, CI and infrastructure: add a security review.
+- Contracts: add an exploit review and an audit review.
+- Dashboard, website, embed and `packages/ui`: add a design review.
+- Any new commit after an approval needs review again.
+- Merges are squash only.
+LINES
 
 if [ "$missing" -ne 0 ]; then
   exit 1

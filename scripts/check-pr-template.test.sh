@@ -59,6 +59,23 @@ expect "no design review rule fails" 1 "$(without design 'design review')"
 expect "no re-review reminder fails" 1 "$(without rereview 'needs review again')"
 expect "no squash only reminder fails" 1 "$(without squash 'squash')"
 
+# Each change type that adds a review must keep its full list. Narrowing a
+# line, or dropping a category from it, must fail.
+sed 's/^- Auth, identity, payouts, idempotency, router, secrets, dependencies, CI and infrastructure: add a security review\.$/- Infrastructure: add a security review./' \
+  "$template" >"$work/narrow-security.md"
+expect "a narrowed security review line fails" 1 "$work/narrow-security.md"
+sed 's/^- Contracts: add an exploit review and an audit review\.$/- Contracts: add an exploit review./' \
+  "$template" >"$work/narrow-contracts.md"
+expect "a contracts line without the audit review fails" 1 "$work/narrow-contracts.md"
+# The backticks are Markdown code spans, not shell expansions.
+# shellcheck disable=SC2016
+sed 's/^- Dashboard, website, embed and `packages\/ui`: add a design review\.$/- Dashboard: add a design review./' \
+  "$template" >"$work/narrow-design.md"
+expect "a narrowed design review line fails" 1 "$work/narrow-design.md"
+sed 's/^- Every change: code review, QA verification and a hygiene review\.$/- Every change: code review./' \
+  "$template" >"$work/narrow-every.md"
+expect "a narrowed every change line fails" 1 "$work/narrow-every.md"
+
 # A checklist item must be a checkbox, not plain text.
 sed 's/^- \[ \] No secrets/- No secrets/' "$template" >"$work/plain.md"
 expect "a checklist item without a checkbox fails" 1 "$work/plain.md"
