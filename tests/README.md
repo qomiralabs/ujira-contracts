@@ -1,5 +1,5 @@
 # tests
 
-Behavior tests that run the same vectors from `spec/` against both contracts.
+Behavior tests that run the vectors from `spec/` against the Soroban contract.
 
-A rule that passes on one chain and fails on the other is a failing build. Tests that only concern one contract belong next to that contract, in `soroban/` or `celo/`.
+A vector that fails is a failing build. Tests that only concern one contract belong next to that contract, in `soroban/`.

@@ -11,14 +11,12 @@
     "attester": {
       "derivation": "keccak256(\"UJIRA/TEST-ONLY/S18/attester\")",
       "private_key": "0x42c00064b80537dd63c006e065a27ede9f3738e35df3059c3ebba7880d8461d5",
-      "public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896"
+      "public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c"
     },
     "other_signer": {
       "derivation": "keccak256(\"UJIRA/TEST-ONLY/S18/other-signer\")",
       "private_key": "0x1d9b50b54052a17d003aecdf70252979947402d30b0c6da54469f45ffafe5fe1",
-      "public_key": "0x04420b185ae53235806fe56af5068be84a14f165d5baee6916042bef3419ea2f528d98cc071f940c8c8c66ee1397930fb2aaed494b86db622efad807c94da2b925",
-      "evm_address": "0xa132f1c787e84c83ef9d3116c46f386bf25ed7aa"
+      "public_key": "0x04420b185ae53235806fe56af5068be84a14f165d5baee6916042bef3419ea2f528d98cc071f940c8c8c66ee1397930fb2aaed494b86db622efad807c94da2b925"
     }
   },
   "cases": [
@@ -33,7 +31,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -56,27 +53,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -90,7 +66,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -113,27 +88,6 @@
             "digest": "0xb7a0bc134b0becc0dabd7f6c4f4665af91f5b072a79d7253f805814e2ac5a94a"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "7",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x3b56b3153f11164a48e6259bf898216fd3bc9f6673714c7e92fcc27e8983d576701d45fba75240bc45b8a4e1e2e417666a96b3c264f06f79b3a4c6bd8c90e71b1b",
-            "signed_digest": "0x6450ec7abcfeb900894ac74a76062be7563ae463fb67c5a92940357859e1066f",
-            "digest": "0x6450ec7abcfeb900894ac74a76062be7563ae463fb67c5a92940357859e1066f"
-          }
-        ]
       }
     },
     {
@@ -147,7 +101,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -170,27 +123,6 @@
             "digest": "0xe0e8d604db3c4e76bc7753026cedc048f90c04539152bae233278a9472a841bc"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x808274ec27470d5340c04b52a870363f6826fb1654d5ef8c9ff20a5e1c99e6217ab2c0efdb4ef4caec0d8e9987f60b0126ff6cbe2369f378ddb4194f2aa56d651b",
-            "signed_digest": "0x7c4d087219d560e76f77b2bc6bcffb1ef3157efca992bdedabebb00e1a019c8b",
-            "digest": "0x7c4d087219d560e76f77b2bc6bcffb1ef3157efca992bdedabebb00e1a019c8b"
-          }
-        ]
       }
     },
     {
@@ -204,7 +136,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -227,27 +158,6 @@
             "digest": "0x27bfed79b45aa4b7caf20506e81165ce03543d775099cd55aa6827aefa57fc79"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "18446744073709551615",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x1e0d735c5f52730e6c1cfec5de8b98f77933a2bb5fe8a346227a4e96c870f2c404e0060730efd730e41978cb4b829c4a5ac93115516a5466fa3d14c555c5e2c61c",
-            "signed_digest": "0x3e1af6e8ada4e52af5014fc6119c002ef14ab9a7d569af185d0d99df9dd5416e",
-            "digest": "0x3e1af6e8ada4e52af5014fc6119c002ef14ab9a7d569af185d0d99df9dd5416e"
-          }
-        ]
       }
     },
     {
@@ -261,7 +171,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -284,27 +193,6 @@
             "digest": "0x0bdcdec349f5bda8f8a04f3e43836444ea287e9087e3a714d14495c157bd92f8"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc8e07ed718e380d2efbed09752108b466d31104f",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xc0a0b8b32c320c2de7aae43b92bc4390e32cd4877fff423b341e15f098a5e637571533b94a19b1c56dee96bc07e40629be29ec2a602c5e984a537b7c9bfcd61d1b",
-            "signed_digest": "0x01244d3446b410fb37440d2ac76df2be9fe7964a4a6542e58b3e1e65e07fb54c",
-            "digest": "0x01244d3446b410fb37440d2ac76df2be9fe7964a4a6542e58b3e1e65e07fb54c"
-          }
-        ]
       }
     },
     {
@@ -318,7 +206,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -354,39 +241,6 @@
             "digest": "0x270ed1d0d5c39f36dc6508cf7ecf157837d55c6944ea66736809ccea669a7af9"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "1",
-            "amount": "300"
-          },
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "2",
-            "amount": "200"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x8d9a6191b7bea952cd1d3768494c027c27e4427c28f4be64ff10060b518fa34556f416e81b9cfbe572944674224f92de7aebf0fc91ffa95fed412eec8da2f43d1b",
-            "signed_digest": "0x8c435dbe1eb83f73c9cc3f1815df88129944c0c5b495687b89f8cc2b96c0cf71",
-            "digest": "0x8c435dbe1eb83f73c9cc3f1815df88129944c0c5b495687b89f8cc2b96c0cf71"
-          },
-          {
-            "valid_until": "1767229200",
-            "signature": "0x1c3c2a49d69993e444b8941ada46545f2b1df18a71854783df3014e24b26b11778bf1ebe55c093716956c7fe02ad67da71975e8b29e759ee2a6ed73772a055d81c",
-            "signed_digest": "0x9be33ff1fabf63489fc82cd62ffdabdf6307fd697a2a9725f1b45022e6c8f168",
-            "digest": "0x9be33ff1fabf63489fc82cd62ffdabdf6307fd697a2a9725f1b45022e6c8f168"
-          }
-        ]
       }
     },
     {
@@ -400,7 +254,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -423,27 +276,6 @@
             "digest": "0xc0758d6896b6d90e408a45386e29f99226c09f08f59436c863b3fd72e4fc61bd"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767312000",
-            "signature": "0xb6ff0073c6f819dd0cda3bdf770240584a870161b0293a94d76e558108f4f0d546ff297e2c791b994bbc96e66c55185298a230834c8be3e8970d0503902ca3fd1c",
-            "signed_digest": "0xaf4b4b3d8f4fd8cd9e15d16b83bea21827820b8c1170fd7a3bd8d0d1adaaa30c",
-            "digest": "0xaf4b4b3d8f4fd8cd9e15d16b83bea21827820b8c1170fd7a3bd8d0d1adaaa30c"
-          }
-        ]
       }
     },
     {
@@ -457,7 +289,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -478,27 +309,6 @@
             "signature": "0x4cf05e694a123f0fba071102f31e96aec01c7f2ed744463d95d1f5829e2e83f75358da27a192df113f29916ded3b169311f81747e65093312919f9595b04438c1b",
             "signed_digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84",
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
-          }
-        ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
           }
         ]
       }
@@ -514,7 +324,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -535,27 +344,6 @@
             "signature": "0x4cf05e694a123f0fba071102f31e96aec01c7f2ed744463d95d1f5829e2e83f75358da27a192df113f29916ded3b169311f81747e65093312919f9595b04438c1b",
             "signed_digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84",
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
-          }
-        ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "1"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
           }
         ]
       }
@@ -571,7 +359,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -592,27 +379,6 @@
             "signature": "0x4cf05e694a123f0fba071102f31e96aec01c7f2ed744463d95d1f5829e2e83f75358da27a192df113f29916ded3b169311f81747e65093312919f9595b04438c1b",
             "signed_digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84",
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
-          }
-        ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "170141183460469231731687303715884105727"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
           }
         ]
       }
@@ -628,7 +394,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -651,27 +416,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -685,7 +429,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -708,27 +451,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xb9ee7dcd8f99ca977343307ce44cceb8dda65761fbfde971131ae9870276f30361136eab2bc540d0dad10aa240d83b055b8728adb58a0c37eff94d0e5cf007ab1c",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -742,7 +464,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -765,27 +486,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d0fd3dc6e62a7ca94f4209a3f62ed298fab3c41e86a6b04010d1aec92a252cf3711c",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -799,7 +499,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -822,27 +521,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd000",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -856,7 +534,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -879,27 +556,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd001",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -913,7 +569,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -936,27 +591,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01a",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -970,7 +604,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -993,27 +626,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01d",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1027,7 +639,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1050,27 +661,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01e",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1084,7 +674,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1107,27 +696,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd0ff",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1141,7 +709,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1164,27 +731,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x35037322f6a967b594b77da4b09683a62c70d4ebee1e87adc2426145bd5797482e825424d5af432a4df174483f1f28f68da9308b698e0ba964e68e7fe34c8bad1c",
-            "signed_digest": "0xc90930f8757d04761c92b8daa1570101a39a25257a1a18dc0032519466994e6e",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1198,7 +744,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1221,27 +766,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x727b8038508af6031e4bea7b63c9ae0edc8815a8d7481e872bbace5cb9b00024236e800e21bfa3e7c78210dd84e0100e319d9d28403a5a06d0ac73eda27b93b01b",
-            "signed_digest": "0xfc7a7b547b953ec931cf1a21ecba65812f901b20d7789b09396ad6d69b80861a",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1255,7 +779,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1278,27 +801,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xcdac22180f08861471a4ed7b9b7230d29b5eb55dd9fdf1f45c09ec70e43eb14c1792c6a6b5912cdde5c85c56e451eb2deb0aa8db32942f2a7ba530f7484d7ca11c",
-            "signed_digest": "0x45b2c7d1c7f51e54f0a074ab00a942dc3a13dbd5d7dc43f42a30d7b778c5ed3a",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1312,7 +814,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1335,27 +836,6 @@
             "digest": "0x519c3c4da507041911aaa20a096a53cabf247bee97c83ea0fd0f47189a433816"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "8",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x3b56b3153f11164a48e6259bf898216fd3bc9f6673714c7e92fcc27e8983d576701d45fba75240bc45b8a4e1e2e417666a96b3c264f06f79b3a4c6bd8c90e71b1b",
-            "signed_digest": "0x6450ec7abcfeb900894ac74a76062be7563ae463fb67c5a92940357859e1066f",
-            "digest": "0xe51f7d983e49796af119802c000f75109cb13a178049f56b8b0210053a233802"
-          }
-        ]
       }
     },
     {
@@ -1369,7 +849,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1392,27 +871,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x3b56b3153f11164a48e6259bf898216fd3bc9f6673714c7e92fcc27e8983d576701d45fba75240bc45b8a4e1e2e417666a96b3c264f06f79b3a4c6bd8c90e71b1b",
-            "signed_digest": "0x6450ec7abcfeb900894ac74a76062be7563ae463fb67c5a92940357859e1066f",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1426,7 +884,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1449,27 +906,6 @@
             "digest": "0xe0e8d604db3c4e76bc7753026cedc048f90c04539152bae233278a9472a841bc"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x7c4d087219d560e76f77b2bc6bcffb1ef3157efca992bdedabebb00e1a019c8b"
-          }
-        ]
       }
     },
     {
@@ -1483,7 +919,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1506,27 +941,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x2ce8c9d550d7a4081e5d04decb1cd11d5451f5f4a47ba9512ed4aedfcfdbe34c2da9c0866b435f23c871097de57c86f0c299a1498ed595d73c0c997bcd047ec31c",
-            "signed_digest": "0xa53c89cdf175a722b852bbd9c178f0e5f019def5819ceae07bebfa54483da71b",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1540,7 +954,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1563,27 +976,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x22cd81b575fd49ef15d1a99b2e11b7fbcb8fb2a5aaeba44b177bbaba2f362df845d1e62e45b74a2678870b3b5e8978ec808d85d02af94c825a9c5ddcd8f8899f1b",
-            "signed_digest": "0x13edfbf6b8c0de4dc5ba1a275c0dec8f9e5a36f5a0ada102fd66d25b1761e732",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1597,7 +989,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1620,27 +1011,6 @@
             "digest": "0xd24c637f7eea62839b2bb59a9ac90f6dad05d322e948259f57e517ed0d0b8b02"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229260",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0xf918185bd42d6e63c2d60a0e4d334bdad70c856181e05b9982f5d52c24cd7270"
-          }
-        ]
       }
     },
     {
@@ -1654,7 +1024,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1677,27 +1046,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd0",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1711,7 +1059,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1734,27 +1081,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b00",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1768,7 +1094,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1791,27 +1116,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1825,7 +1129,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1848,27 +1151,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x000000000000000000000000000000000000000000000000000000000000000002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1882,7 +1164,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1905,27 +1186,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d000000000000000000000000000000000000000000000000000000000000000001b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1939,7 +1199,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -1962,27 +1221,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd036414102c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -1996,7 +1234,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2019,27 +1256,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d07fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -2053,7 +1269,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2076,27 +1291,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d07fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a11b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -2110,7 +1304,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2133,27 +1326,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x000000000000000000000000000000000000000000000000000000000000000502c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -2167,7 +1339,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2190,27 +1361,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x50a9c41b4fe2ee0f1e8f803ef6b72367db67b049ae163ce24ad0166e5c85155900000000000000000000000000000000000000000000000000000000000000011c",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -2224,7 +1374,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2245,27 +1394,6 @@
             "signature": "0x4cf05e694a123f0fba071102f31e96aec01c7f2ed744463d95d1f5829e2e83f75358da27a192df113f29916ded3b169311f81747e65093312919f9595b04438c1b",
             "signed_digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84",
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
-          }
-        ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
           }
         ]
       }
@@ -2281,7 +1409,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2304,27 +1431,6 @@
             "digest": "0xb416bfa2b0d6ad96e42bd0da1e6b9a54475a5dfd4c5865ec423e4d9e1e527f84"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          }
-        ]
       }
     },
     {
@@ -2338,7 +1444,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2361,27 +1466,6 @@
             "digest": "0x4136e703ba8a26b8ee27d3c25a0af1cfb062a87bad1c328c68dc8c8e677a8f72"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767312001",
-            "signature": "0x1f08ff96b680ec2483e33fce7a60796945287323e4aa07dd5621af3dd8f3463e26f651b5741f1a1cd9b95c6368f7f80862f7b98ad3c9def445c10910fcc319301b",
-            "signed_digest": "0x4a26762086e83003ac2d9161459b2aa4a36fa0624b2a4e2a3beacef096a60276",
-            "digest": "0x4a26762086e83003ac2d9161459b2aa4a36fa0624b2a4e2a3beacef096a60276"
-          }
-        ]
       }
     },
     {
@@ -2395,7 +1479,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2405,20 +1488,6 @@
           {
             "destination": "GDTYAUMMX45E2SU2Q7JRJHCXDIYTEUAXVBHZ7DVCVXZGMAKMWFL7SOY4",
             "destination_xdr": "0x000000120000000000000000e780518cbf3a4d4a9a87d3149c571a31325017a84f9f8ea2adf266014cb157f9",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": []
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
             "has_tag": false,
             "tag": "0",
             "amount": "500"
@@ -2438,7 +1507,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2467,33 +1535,6 @@
             "digest": null
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "500"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          },
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": null
-          }
-        ]
       }
     },
     {
@@ -2507,7 +1548,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2543,39 +1583,6 @@
             "digest": "0x270ed1d0d5c39f36dc6508cf7ecf157837d55c6944ea66736809ccea669a7af9"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "1",
-            "amount": "300"
-          },
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": true,
-            "tag": "2",
-            "amount": "200"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0x1c3c2a49d69993e444b8941ada46545f2b1df18a71854783df3014e24b26b11778bf1ebe55c093716956c7fe02ad67da71975e8b29e759ee2a6ed73772a055d81c",
-            "signed_digest": "0x9be33ff1fabf63489fc82cd62ffdabdf6307fd697a2a9725f1b45022e6c8f168",
-            "digest": "0x8c435dbe1eb83f73c9cc3f1815df88129944c0c5b495687b89f8cc2b96c0cf71"
-          },
-          {
-            "valid_until": "1767229200",
-            "signature": "0x8d9a6191b7bea952cd1d3768494c027c27e4427c28f4be64ff10060b518fa34556f416e81b9cfbe572944674224f92de7aebf0fc91ffa95fed412eec8da2f43d1b",
-            "signed_digest": "0x8c435dbe1eb83f73c9cc3f1815df88129944c0c5b495687b89f8cc2b96c0cf71",
-            "digest": "0x9be33ff1fabf63489fc82cd62ffdabdf6307fd697a2a9725f1b45022e6c8f168"
-          }
-        ]
       }
     },
     {
@@ -2589,7 +1596,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2625,39 +1631,6 @@
             "digest": "0xeb0e308a63dad306a27c3a275f7eec674283c9f2ca304acb22d98fdea5f9beac"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "300"
-          },
-          {
-            "destination": "0x055e760118e639a4e5deab049f64d1444ec180d7",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "200"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          },
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x45b2c7d1c7f51e54f0a074ab00a942dc3a13dbd5d7dc43f42a30d7b778c5ed3a"
-          }
-        ]
       }
     },
     {
@@ -2671,7 +1644,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2707,39 +1679,6 @@
             "digest": "0x02eabd1c4325734f307d456af49a597447a8578ee65d1a24eccb2b6082767827"
           }
         ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "300"
-          },
-          {
-            "destination": "0x055e760118e639a4e5deab049f64d1444ec180d7",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "200"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229200",
-            "signature": "0xe1ff48729f1e1c235443988c34b84db019bd0626e39ebf7d7c8d564d054427d002c23919d58356b0bdf65c09d12d670406eabe600898602aee239562ab094dd01b",
-            "signed_digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5",
-            "digest": "0x0e8d26b819abaff17d83823001d623b80d63134c3d0e74d04fdec955d1052fa5"
-          },
-          {
-            "valid_until": "1767229260",
-            "signature": "0xa9a83b3a04b4b15cd8bb03f108e829d705b583cdc7b2921f25948c4b51a7041d71c64cecfad636b52189fb624162c727e51a3b96fe5c1fab6b411887fa5bf8c31c",
-            "signed_digest": "0x4209be66c77b622e30f8851ebb28e3e2faf59c311ca97d8f6a5a7bc118910b72",
-            "digest": "0x4209be66c77b622e30f8851ebb28e3e2faf59c311ca97d8f6a5a7bc118910b72"
-          }
-        ]
       }
     },
     {
@@ -2753,7 +1692,6 @@
       "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
       "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
       "attester_public_key": "0x04678799abacf2917bc7de0b5d890d32fe8aa13ded48b835503eee57dd4ffa23a6c80aa9add479996c4fd6e3965914054d4ff152763615edd2f8c1cc697102356c",
-      "attester_evm_address": "0x0eb91e2fdbcee9a4599b08b0362721cb7b9dd896",
       "soroban": {
         "network_passphrase": "Test SDF Network ; September 2015",
         "chain_tag": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
@@ -2787,39 +1725,6 @@
             "signature": "0x6cef2b8bacd63d351973604daf876ee2f703d63a147a9c7b318ff7a3bd7132026baad4819a51fddae1405aa1a78056a1eb1f1dbf3b621f818fa32d2eb848beb11c",
             "signed_digest": "0xeb0e308a63dad306a27c3a275f7eec674283c9f2ca304acb22d98fdea5f9beac",
             "digest": "0xeb0e308a63dad306a27c3a275f7eec674283c9f2ca304acb22d98fdea5f9beac"
-          }
-        ]
-      },
-      "celo": {
-        "chain_id": "11142220",
-        "chain_tag": "0x0000000000000000000000000000000000000000000000000000000000aa044c",
-        "mandate": "0xb47878285722f4ae1ffa77c6e5422e7183d57c80",
-        "legs": [
-          {
-            "destination": "0xc6e138d9b98b9c691d20bb395061379e38d33eca",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "300"
-          },
-          {
-            "destination": "0x055e760118e639a4e5deab049f64d1444ec180d7",
-            "has_tag": false,
-            "tag": "0",
-            "amount": "200"
-          }
-        ],
-        "attestations": [
-          {
-            "valid_until": "1767229260",
-            "signature": "0x195225a7b9d183f45ab5e57620d65af99b9f2fec8c3556a33c0d88a65b3f6d080b858b18067d9bee1d7706f31f268bb452acdff4122afd32068739089bbb26121b",
-            "signed_digest": "0xf918185bd42d6e63c2d60a0e4d334bdad70c856181e05b9982f5d52c24cd7270",
-            "digest": "0xf918185bd42d6e63c2d60a0e4d334bdad70c856181e05b9982f5d52c24cd7270"
-          },
-          {
-            "valid_until": "1767229200",
-            "signature": "0xcdac22180f08861471a4ed7b9b7230d29b5eb55dd9fdf1f45c09ec70e43eb14c1792c6a6b5912cdde5c85c56e451eb2deb0aa8db32942f2a7ba530f7484d7ca11c",
-            "signed_digest": "0x45b2c7d1c7f51e54f0a074ab00a942dc3a13dbd5d7dc43f42a30d7b778c5ed3a",
-            "digest": "0x45b2c7d1c7f51e54f0a074ab00a942dc3a13dbd5d7dc43f42a30d7b778c5ed3a"
           }
         ]
       }

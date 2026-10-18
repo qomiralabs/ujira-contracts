@@ -60,8 +60,8 @@ expect "empty tree passes" 0
 new_repo good
 write soroban/src/lib.rs "$header
 #![no_std]"
-write celo/src/Mandate.sol "$header
-pragma solidity 0.8.28;"
+write soroban/contracts/mandate/src/lib.rs "$header
+#![no_std]"
 expect "files with header pass" 0 "2 file(s) checked"
 
 new_repo rust_missing
@@ -69,14 +69,10 @@ write soroban/src/ok.rs "$header"
 write soroban/src/lib.rs '#![no_std]'
 expect "rust file without header" 1 "soroban/src/lib.rs"
 
-new_repo sol_missing
-write celo/src/Mandate.sol 'pragma solidity 0.8.28;'
-expect "solidity file without header" 1 "celo/src/Mandate.sol"
-
-new_repo sol_spdx_not_first
-write celo/src/Mandate.sol "pragma solidity 0.8.28;
+new_repo spdx_not_first
+write soroban/src/lib.rs "#![no_std]
 $header"
-expect "solidity header not on first line" 1 "celo/src/Mandate.sol"
+expect "header not on first line" 1 "soroban/src/lib.rs"
 
 new_repo copyright_missing
 write soroban/src/lib.rs '// SPDX-License-Identifier: Apache-2.0
@@ -92,15 +88,14 @@ new_repo crlf
 write soroban/src/lib.rs "$(printf '// SPDX-License-Identifier: Apache-2.0\r\n// Copyright 2026 Qomira Labs\r')"
 expect "header with CRLF line endings passes" 0
 
-new_repo vendored
-write celo/lib/forge-std/src/Test.sol 'pragma solidity ^0.8.0;'
-write celo/src/Mandate.sol "$header"
-expect "vendored lib ignored" 0 "1 file(s) checked"
+new_repo other_languages
+write soroban/src/lib.rs "$header"
+write scripts/tool.py 'print(1)'
+write README.md 'no header'
+expect "only Rust files are checked" 0 "1 file(s) checked"
 
 new_repo build_output
 write soroban/target/debug/build/gen.rs 'fn main() {}'
-write celo/out/Gen.sol 'pragma solidity ^0.8.0;'
-write celo/cache/Gen.sol 'pragma solidity ^0.8.0;'
 expect "build output ignored" 0 "0 file(s) checked"
 
 new_repo untracked
@@ -110,8 +105,8 @@ expect "untracked file ignored" 0 "1 file(s) checked"
 
 new_repo reports_all
 write a.rs 'fn a() {}'
-write b.sol 'contract B {}'
-expect "every offending file is named" 1 "a.rs" "b.sol" "2 of 2 file(s)"
+write b.rs 'fn b() {}'
+expect "every offending file is named" 1 "a.rs" "b.rs" "2 of 2 file(s)"
 
 new_repo root_target
 write target/debug/build/gen.rs 'fn main() {}'
@@ -131,11 +126,15 @@ ln -s missing.rs "$repo/soroban/src/link.rs"
 git -C "$repo" add -- soroban/src/link.rs
 expect "dangling symlink is reported" 1 "soroban/src/link.rs (dangling symlink)"
 
+# The header-less a.rs sits outside the folder the check is pointed at, so it
+# is only reported if the check climbs to the top level first. The build
+# output under soroban/target/ must still be skipped from there.
 new_repo subfolder_root
-write celo/lib/forge-std/src/Test.sol 'pragma solidity ^0.8.0;'
-write celo/src/Mandate.sol "$header"
-target="$repo/celo"
-expect "subfolder root resolves to the top level" 0 "1 file(s) checked"
+write a.rs 'fn a() {}'
+write soroban/target/debug/build/gen.rs 'fn main() {}'
+write soroban/src/lib.rs "$header"
+target="$repo/soroban"
+expect "subfolder root resolves to the top level" 1 "missing header: a.rs" "1 of 2 file(s)"
 unset target
 
 mkdir -p "$work/not_a_repo"

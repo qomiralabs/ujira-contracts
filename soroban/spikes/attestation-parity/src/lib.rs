@@ -2,8 +2,8 @@
 // Copyright 2026 Qomira Labs
 
 //! Spike only, never deployed outside testnet. Verifies per-leg recipient
-//! attestations the way the mandate will, so the same fixture can be run here
-//! and on Celo and every accept or reject decision compared.
+//! attestations the way the mandate will, so every accept or reject decision
+//! can be compared with the reference signer's fixture.
 
 #![no_std]
 
@@ -30,8 +30,8 @@ pub struct Leg {
 }
 
 /// The signature is `Bytes`, not `BytesN<65>`, so a short or long signature
-/// reaches the contract and gets the same error code Celo returns, instead of
-/// failing argument decoding before any contract code runs.
+/// reaches the contract and gets a contract error code, instead of failing
+/// argument decoding before any contract code runs.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Attestation {
@@ -68,8 +68,8 @@ const ZERO: [u8; 32] = [0; 32];
 
 /// The host's recover traps on out-of-range r or s, high s and recovery ids
 /// above 3. Rejecting those here first is what keeps the error code a
-/// contract error, matching what Celo returns for the same bytes. Fixed-width
-/// big-endian arrays compare like the numbers they encode.
+/// contract error the caller can match on. Fixed-width big-endian arrays
+/// compare like the numbers they encode.
 pub fn scalars_in_range(r: &[u8; 32], s: &[u8; 32]) -> bool {
     *r != ZERO && *r < ORDER && *s != ZERO && *s <= HALF_ORDER
 }
