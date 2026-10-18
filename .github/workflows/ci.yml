@@ -64,6 +64,15 @@ jobs:
           [ "$version" = "${GITLEAKS_VERSION}" ] || { echo "gitleaks is $version, not ${GITLEAKS_VERSION}" >&2; exit 1; }
           echo "${RUNNER_TEMP}/gitleaks" >> "$GITHUB_PATH"
 
+      # Probe only, never merged: commits a generated fake key to the checkout
+      # so the scan below must fail.
+      - name: Plant a fake key (probe)
+        run: |
+          body=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 36 || true)
+          printf 'token = "%s%s"\n' 'gh''p_' "$body" >probe.txt
+          git add probe.txt
+          git -c user.name=probe -c user.email=probe@example.invalid commit -q -m "probe"
+
       - name: Scan the full history for secrets
         run: scripts/secret-scan.sh
 
