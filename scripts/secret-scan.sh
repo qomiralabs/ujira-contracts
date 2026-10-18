@@ -17,15 +17,18 @@
 # scan, so the reviewed .gitleaks.toml is the only allowlist. Findings are
 # redacted.
 #
-# Key files (.pem, .key, .p12, .pfx, .jks, id_rsa and the other ssh key
-# names) are refused by name in any commit, binary or not, because a binary
-# key store cannot be line scanned. gitleaks still reads every file as text,
-# so a key stored as plain text inside a binary is found, but a compressed or
-# encoded one is not, and neither is a token split across lines.
+# Secret files are refused by name in any commit, binary or not, because a
+# binary key store cannot be line scanned: .pem, .key, .p12, .pfx, .jks,
+# .keystore, .ppk, .p8, .der, private ssh keys (id_rsa and the like, but not
+# their .pub halves), and .env, .env.*, .envrc and *.env files other than the
+# .env.example template, all in any case. gitleaks still reads every file as
+# text, so a key stored as plain text inside a binary is found, but a
+# compressed or encoded one is not, and neither is a token split across
+# lines.
 #
-# Completeness: gitleaks must report scanning at least every commit that adds
-# a line of text (the only commits that can add a secret) and at most every
-# commit on HEAD, and a shallow clone is refused.
+# Completeness: gitleaks must report scanning exactly the commits that have a
+# hunk in a file they do not delete, which is what it counts, and a shallow
+# clone is refused.
 #
 # Usage: [SECRET_SCAN_BASE_REF=<branch>] scripts/secret-scan.sh [path inside
 # a git repo, default this repo]
@@ -96,22 +99,24 @@ if ! git -C "$root" log -p -U0 --no-color --format='commit %H' "${log_opts[@]}" 
   echo "secret-scan: git log failed in $root" >&2
   exit 2
 fi
-# Commits with at least one added line. With -U0 every line after a hunk
-# header is a change, and "+++" file headers only appear before the first
-# hunk of a file.
-adding=$(LC_ALL=C awk '
-  /^commit [0-9a-f]+( |$)/ { sha = $2; next }
-  /^diff --git / { header = 1; next }
-  /^@@/ { header = 0; next }
-  !header && /^\+/ { print sha }
+# The commits gitleaks counts as scanned: those with at least one hunk in a
+# file that is not deleted. Delete, rename and mode only commits have none.
+expected=$(LC_ALL=C awk '
+  /^commit [0-9a-f]+( |$)/ { sha = $2; dead = 0; next }
+  /^diff --git / { dead = 0; next }
+  /^deleted file mode/ || /^\+\+\+ \/dev\/null/ { dead = 1; next }
+  /^@@/ { if (!dead) print sha }
 ' "$tmp/log" | LC_ALL=C sort -u | wc -l | tr -d ' ')
 
 # Every path any commit added or changed, merges included, checked by name.
-if ! git -C "$root" log -m --no-renames --name-only --diff-filter=AMCRT --format= HEAD >"$tmp/paths"; then
+# Unquoted and NUL separated, so no name can hide behind git's quoting.
+if ! git -C "$root" -c core.quotePath=false log -z -m --no-renames --name-only --diff-filter=AMCRT --format= HEAD >"$tmp/paths"; then
   echo "secret-scan: git log failed in $root" >&2
   exit 2
 fi
-keyfiles=$(LC_ALL=C grep -i -E '\.(pem|key|p12|pfx|jks)$|(^|/)id_(rsa|dsa|ecdsa|ed25519)[^/]*$' "$tmp/paths" | LC_ALL=C sort -u || true)
+secretfiles=$(LC_ALL=C grep -z -i -E \
+  '\.(pem|key|p12|pfx|jks|keystore|ppk|p8|der)$|(^|/)id_(rsa|dsa|ecdsa|ed25519)[^/]*$|(^|/)(\.env(\.[^/]*)?|\.envrc|[^/]*\.env)$' \
+  "$tmp/paths" | LC_ALL=C grep -z -v -i -E '(^|/)id_[^/]*\.pub$|(^|/)\.env\.example$' | tr '\0' '\n' | LC_ALL=C sort -u || true)
 
 # Leaks exit 3 so they can be told apart from gitleaks failing to run.
 code=0
@@ -127,8 +132,8 @@ gitleaks git "$root" \
   --exit-code 3 >"$tmp/out" 2>&1 || code=$?
 cat "$tmp/out"
 
-if [ -n "$keyfiles" ]; then
-  printf '%s\n' "$keyfiles" | sed 's/^/secret-scan: key file committed: /' >&2
+if [ -n "$secretfiles" ]; then
+  printf '%s\n' "$secretfiles" | sed 's/^/secret-scan: secret file committed: /' >&2
 fi
 if [ "$code" -eq 3 ]; then
   echo "secret-scan: secrets found in the history of $root" >&2
@@ -140,13 +145,13 @@ if [ "$code" -ne 0 ]; then
 fi
 
 scanned=$(sed -n 's/.* \([0-9][0-9]*\) commits scanned.*/\1/p' "$tmp/out" | head -n 1)
-echo "secret-scan: ${scanned:-no} commits scanned; HEAD has ${total} commits, ${adding} of them add text"
-if [ -z "$scanned" ] || [ "$scanned" -lt "$adding" ] || [ "$scanned" -gt "$total" ]; then
-  echo "secret-scan: gitleaks did not scan every commit that adds text" >&2
+echo "secret-scan: ${scanned:-no} commits scanned, ${expected} expected; HEAD has ${total} commits"
+if [ -z "$scanned" ] || [ "$scanned" -ne "$expected" ]; then
+  echo "secret-scan: gitleaks did not scan exactly the commits it should" >&2
   exit 2
 fi
-if [ -n "$keyfiles" ]; then
-  echo "secret-scan: key files are not allowed in git, keep them in the secret manager" >&2
+if [ -n "$secretfiles" ]; then
+  echo "secret-scan: key and env files are not allowed in git, keep their contents in the secret manager" >&2
   exit 1
 fi
 echo "secret-scan: no secrets found"

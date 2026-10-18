@@ -86,6 +86,7 @@ echo "main" >"$work/clean/main.txt"
 commit "$work/clean" "main"
 git -C "$work/clean" merge -q --no-edit side
 commit "$work/clean" "empty"
+want_out="4 commits scanned, 4 expected"
 expect "clean history with a merge and an empty commit passes" 0 "$work/clean"
 
 repo delete-only
@@ -117,6 +118,7 @@ repo removal
 : >"$work/removal/README.md"
 touch "$work/removal/empty.txt"
 commit "$work/removal" "empty a file and add an empty one"
+want_out="2 commits scanned, 2 expected"
 expect "commit that only removes lines or adds an empty file passes" 0 "$work/removal"
 
 repo merge-delete
@@ -196,35 +198,60 @@ for path in pnpm-lock.yaml package-lock.json yarn.lock node_modules/pkg/index.js
   expect "key in $path is reported by gitleaks" 1 "$work/skip-$n"
 done
 
-# Key files are refused by name anywhere in history, binary or not, since
-# their content cannot be line scanned.
+# Key and env files are refused by name anywhere in history, binary or not,
+# since a key store cannot be line scanned.
 n=0
-for path in certs/client.p12 certs/client.pfx keystore/app.jks deploy/id_rsa home/.ssh/id_ed25519 certs/tls.KEY; do
+for path in certs/client.p12 certs/client.pfx keystore/app.jks deploy/id_rsa home/.ssh/id_ed25519 certs/tls.KEY \
+  android/release.keystore putty/server.ppk apple/AuthKey.p8 certs/root.der "certs/caf\303\251.pem" "certs/a b.pem" \
+  .env config/.env.local deploy/prod.env .envrc .ENV.Production; do
   n=$((n + 1))
-  repo "keyfile-$n"
-  mkdir -p "$(dirname "$work/keyfile-$n/$path")"
-  printf '\060\202\001\000%s' "$(random 'A-Za-z0-9' 16)" >"$work/keyfile-$n/$path"
-  commit "$work/keyfile-$n" "add $path"
-  want_out="key file"
-  expect "$path is refused" 1 "$work/keyfile-$n"
+  path=$(printf '%b' "$path")
+  repo "secretfile-$n"
+  mkdir -p "$(dirname "$work/secretfile-$n/$path")"
+  printf '\060\202\001\000%s' "$(random 'A-Za-z0-9' 16)" >"$work/secretfile-$n/$path"
+  commit "$work/secretfile-$n" "add file"
+  git -C "$work/secretfile-$n" rm -q -- "$path"
+  commit "$work/secretfile-$n" "remove file"
+  want_out="secret file committed"
+  expect "$path is refused, also after removal" 1 "$work/secretfile-$n"
 done
-
-repo keyfile-removed
-mkdir -p "$work/keyfile-removed/certs"
-printf '\060\202\001\000' >"$work/keyfile-removed/certs/old.p12"
-commit "$work/keyfile-removed" "add"
-git -C "$work/keyfile-removed" rm -q certs/old.p12
-commit "$work/keyfile-removed" "remove"
-want_out="key file"
-expect "key file removed in a later commit is still refused" 1 "$work/keyfile-removed"
 
 repo keylike-names
 mkdir -p "$work/keylike-names/src"
 echo "x" >"$work/keylike-names/src/keys.ts"
 echo "x" >"$work/keylike-names/src/monkey.txt"
 echo "x" >"$work/keylike-names/src/keyboard.key.md"
+mkdir -p "$work/keylike-names/home/.ssh"
+echo "ssh-ed25519 AAAA test" >"$work/keylike-names/home/.ssh/id_ed25519.pub"
+echo "A=" >"$work/keylike-names/.env.example"
+echo "x" >"$work/keylike-names/src/environment.ts"
 commit "$work/keylike-names" "names"
-expect "names that only contain key words pass" 0 "$work/keylike-names"
+expect "public keys, the env template and names that only contain key words pass" 0 "$work/keylike-names"
+
+# The config must hold no key shaped literal of its own. It is committed to
+# a throwaway repo and scanned with every allowlist stripped out, so an
+# upstream sample key kept in an allowlist would be reported.
+repo config-self
+cp "$here/.gitleaks.toml" "$work/config-self/gitleaks-under-test.toml"
+commit "$work/config-self" "config"
+awk '/^\[\[/ { skip = ($0 == "[[rules.allowlists]]" || $0 == "[[allowlists]]") } !skip' \
+  "$here/.gitleaks.toml" >"$work/strict.toml"
+if grep -q -E '^\[\[(rules\.)?allowlists\]\]|^\[allowlist\]' "$work/strict.toml"; then
+  failures=$((failures + 1))
+  echo "FAIL  strict config still has an allowlist"
+fi
+mkdir -p "$work/strict-empty"
+code=0
+out=$(gitleaks git "$work/config-self" --config "$work/strict.toml" --log-opts "-m --text --no-ext-diff --no-textconv HEAD" \
+  --gitleaks-ignore-path "$work/strict-empty" --ignore-gitleaks-allow --redact --verbose --no-banner --no-color --exit-code 3 2>&1) || code=$?
+if [ "$code" -eq 0 ]; then
+  passed=$((passed + 1))
+  echo "PASS  .gitleaks.toml holds no key shaped literal under the rules without allowlists"
+else
+  failures=$((failures + 1))
+  echo "FAIL  .gitleaks.toml holds no key shaped literal under the rules without allowlists (exit $code)"
+  printf '%s\n' "$out" | grep -E 'RuleID|Line' | sed 's/^/      /'
+fi
 
 repo shallow
 echo "two" >"$work/shallow/two.txt"
