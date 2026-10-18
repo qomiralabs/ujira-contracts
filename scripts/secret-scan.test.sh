@@ -301,12 +301,30 @@ base_ref=development
 expect "missing base branch is refused" 2 "$work/pr-missing-base"
 
 # The attestation parity fixture is the one allowlisted file, and only for
-# the two exact public test keys it holds, on its private_key lines, under the
-# generic rule. The real values are read from the committed fixture at run
-# time so this file holds nothing key shaped.
+# the two exact public test keys its earlier versions held, on their
+# private_key lines, under the generic rule. The current fixture lists public
+# keys only, but the full history scan still reads the old lines. The real
+# values are read at run time from the newest fixture in history that has
+# them, so this file holds nothing key shaped; with no such fixture the
+# allowlist is no longer needed and the test says so.
 fixture=spikes/attestation-parity/fixture.json
 real_key() {
-  python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["keys"][sys.argv[2]]["private_key"])' "$here/$fixture" "$1"
+  python3 - "$here" "$fixture" "$1" <<'PY'
+import json, subprocess, sys
+root, path, name = sys.argv[1:]
+revs = subprocess.run(["git", "-C", root, "rev-list", "HEAD", "--", path],
+                      check=True, capture_output=True, text=True).stdout.split()
+for rev in revs:
+    shown = subprocess.run(["git", "-C", root, "show", f"{rev}:{path}"],
+                           capture_output=True, text=True)
+    if shown.returncode != 0:
+        continue
+    key = json.loads(shown.stdout).get("keys", {}).get(name, {}).get("private_key")
+    if key:
+        print(key)
+        sys.exit(0)
+sys.exit(f"no fixture in history holds a private_key for {name}; drop the allowlist entry")
+PY
 }
 attester_key=$(real_key attester)
 other_key=$(real_key other_signer)
