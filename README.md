@@ -94,6 +94,10 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
 
    The contract wasm lands in `soroban/target/wasm32v1-none/release/`. Build it with `stellar contract build`, not `cargo build --target wasm32v1-none`. A plain `stellar contract build` also builds any spike crate in the workspace; to build only the production contracts (the cdylib crates under `soroban/contracts/`) as CI does, run `scripts/soroban-build.sh`. It builds each one with `--package` and fails unless the release folder then holds exactly their wasm. `scripts/soroban-build.test.sh` tests it. Since soroban-sdk 28 the SDK refuses a plain cargo build for wasm, because the contract spec embedded in the wasm is only correct after stellar-cli has trimmed it.
 
+## Dashes
+
+No file may contain an em dash or an en dash. `scripts/check-dashes.sh` searches the content git holds for every tracked file, skipping binary files, prints each hit as `path:line:text` and exits 1 on any. `scripts/test-check-dashes.sh` is its self test. The `dashes` CI job runs the self test, then the check. Both scripts are shared, byte for byte, with ujira, ujira-contracts, ujira-docs and ujira-mcp, so a change is made in all four.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to `development`, `staging` and `main`, with read-only permissions and no secrets. A newer push to a pull request cancels that pull request's older run. Runs for pushes to `development`, `staging` and `main` are never cancelled, so every merged commit keeps a complete result.
@@ -104,6 +108,7 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
 | `fixtures` | Rebuilds the attestation parity fixture from its generator under `spikes/attestation-parity/generator/` and fails unless it matches the committed file byte for byte. |
 | `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), a clean tree afterwards, the wasm fixture check's self test, and the spike wasm fixtures rebuilt from source byte for byte. |
 | `secrets` | gitleaks over the full history with `.gitleaks.toml`, and the scan's self test. See Secret scanning below. |
+| `dashes` | The shared dash check and its self test. See Dashes above. |
 
 Every action is pinned to a full commit SHA. actionlint, stellar-cli, cargo-deny and gitleaks are release binaries checked against a SHA256 in the workflow; bump a version and its hash together.
 
