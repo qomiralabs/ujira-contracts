@@ -16,3 +16,4 @@ The contracts in `soroban/` and `celo/` are implementations of this spec. When t
 - `MANDATE.md`: the rules, each with a stable ID (`MANDATE-*` for the contracts, `CHAINOPS-*` for the off-chain services), the check order of every operation, the invariants and the rule index.
 
 `scripts/check-spec-ids.sh --check-order` checks that every rule ID is unique, defined and indexed, that every rule area is covered, that every error a rule cites is in the error table, and that every numbered check cites exactly one rule. `scripts/check-spec-ids.test.sh` is its self test. CI runs both.
+Look-alike rule ID: MANDATE‑SWEEP‑004 and café.
