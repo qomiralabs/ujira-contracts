@@ -1,0 +1,6 @@
+# Retired rule IDs. A retired rule stays in MANDATE.md with a title starting
+# "Retired:" and is never deleted or reused. scripts/check-spec-ids.sh checks this list.
+MANDATE-RECIPIENT-009
+MANDATE-RECIPIENT-010
+MANDATE-RECIPIENT-011
+MANDATE-RECIPIENT-013
