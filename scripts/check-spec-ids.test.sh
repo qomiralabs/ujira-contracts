@@ -740,6 +740,102 @@ else
   failures=$((failures + 1))
 fi
 
+# Retired rules keep their ID, fail nothing and are cited only in the index.
+# The IDs are listed in retired-ids.txt beside the spec, so a retired rule can
+# be neither deleted nor brought back.
+retired_case() {
+  local dir=$1 extra=$2 index=$3 list=$4
+  mkdir -p "$work/$dir"
+  valid_spec "$work/$dir/MANDATE.md" "$extra" "$index"
+  if [ -n "$list" ]; then printf '# Retired rule IDs, never reused\n%s\n' "$list" >"$work/$dir/retired-ids.txt"; fi
+}
+retired_rule="#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired in spec version 1 when the check moved elsewhere; the ID is never reused.
+- Error: none
+"
+retired_row="| \`MANDATE-ROLE-002\` | Retired: an old check |"
+
+retired_case retired-ok "$retired_rule" "$retired_row" "MANDATE-ROLE-002"
+expect "retired rule only in the index" 0 "$work/retired-ok/MANDATE.md" "--check-order" "31 rule ID(s) defined"
+
+retired_case retired-unlisted "$retired_rule" "$retired_row" ""
+expect "retired rule missing from the list" 1 "$work/retired-unlisted/MANDATE.md" "" "MANDATE-ROLE-002 is retired but not listed in retired-ids.txt"
+
+retired_case retired-deleted "" "" "MANDATE-ROLE-002"
+expect "listed retired rule deleted" 1 "$work/retired-deleted/MANDATE.md" "" "MANDATE-ROLE-002 is listed in retired-ids.txt but not defined; keep retired rules, never delete them"
+
+retired_case retired-revived "#### MANDATE-ROLE-002 A revived check
+
+- Precondition: something.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+" "| \`MANDATE-ROLE-002\` | A revived check |" "MANDATE-ROLE-002"
+expect "listed retired rule brought back" 1 "$work/retired-revived/MANDATE.md" "" "MANDATE-ROLE-002 is listed in retired-ids.txt but its title does not start with Retired:"
+
+retired_case retired-bad-list "" "" "MANDATE-ROLE-2"
+expect "malformed retired list entry" 1 "$work/retired-bad-list/MANDATE.md" "" "retired-ids.txt line 2 is not a rule ID"
+
+f="$work/retired-error.md"
+valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired.
+- Error: \`UNAUTHORIZED\`
+" "| \`MANDATE-ROLE-002\` | Retired: an old check |"
+expect "retired rule with an error" 1 "$f" "" "MANDATE-ROLE-002 is retired, so its Error line must be none"
+
+f="$work/retired-in-order.md"
+valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired.
+- Error: none
+
+### approve
+
+<!-- check-order: approve -->
+1. The old check (MANDATE-ROLE-002).
+<!-- /check-order -->" "| \`MANDATE-ROLE-002\` | Retired: an old check |"
+expect "retired rule cited in a check order" 1 "$f" "--check-order" "MANDATE-ROLE-002 is retired but cited at line"
+
+f="$work/retired-in-rule.md"
+valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
+
+- Precondition: none.
+- Effect: retired.
+- Error: none
+
+#### MANDATE-ROLE-003 A live rule
+
+- Precondition: something, as MANDATE-ROLE-002 used to say.
+- Effect: refused.
+- Error: \`UNAUTHORIZED\`
+" "| \`MANDATE-ROLE-002\` | Retired: an old check |
+| \`MANDATE-ROLE-003\` | A live rule |"
+expect "retired rule cited in another rule" 1 "$f" "" "MANDATE-ROLE-002 is retired but cited at line"
+
+# Check ranges ("`op` checks N to M", or "Checks N to M" after a block) must
+# exist in the order they name.
+f="$work/range-ok.md"
+valid_spec "$f" "Checks 1 to 2 run in order.
+
+Each item runs \`request_payout\` checks 1 to 2."
+expect "check ranges inside the order pass" 0 "$f" "--check-order" "check orders: 1 block(s)"
+
+f="$work/range-named-over.md"
+valid_spec "$f" "Each item runs \`request_payout\` checks 1 to 30."
+expect "named check range past the end" 1 "$f" "--check-order" "cites request_payout checks 1 to 30, but request_payout has 2 checks"
+
+f="$work/range-after-over.md"
+valid_spec "$f" "Checks 1 to 3 run for one leg."
+expect "check range after a block past the end" 1 "$f" "--check-order" "cites request_payout checks 1 to 3, but request_payout has 2 checks"
+
+f="$work/range-unknown.md"
+valid_spec "$f" "Each item runs \`approve\` checks 1 to 2."
+expect "check range of an unknown order" 1 "$f" "--check-order" "cites approve checks 1 to 2, but there is no approve check order"
+
 no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 

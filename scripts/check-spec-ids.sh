@@ -75,6 +75,14 @@
 # An empty "- Error:" line is reported; a rule that adds no failure writes
 # "- Error: none".
 #
+# Retired rules: a rule whose title starts with "Retired:" keeps its ID so it
+# is never reused. Its Error line must be "none", and it may be cited only in
+# the rule index and inside its own body, never in a check order or another
+# rule. Every retired ID is listed in retired-ids.txt beside the spec (one ID
+# per line, # starts a comment), and the check fails if a listed ID is missing
+# or no longer titled "Retired:", or if a retired rule is not listed, so a
+# retired ID can be neither deleted nor brought back.
+#
 # Usage: scripts/check-spec-ids.sh [--check-order] [path to MANDATE.md]
 # Exit codes: 0 all checks pass, 1 one or more problems named on stderr,
 # 2 bad usage or an unreadable file.
@@ -292,9 +300,30 @@ if [ "$charset_status" -gt 1 ]; then
   exit 2
 fi
 
+# Retired rule IDs committed beside the spec.
+retired_file="$spec_dir/retired-ids.txt"
+retired_list=""
+retired_status=0
+if [ -f "$retired_file" ]; then
+  lineno=0
+  while IFS= read -r entry || [ -n "$entry" ]; do
+    lineno=$((lineno + 1))
+    entry=${entry%%#*}
+    entry=$(printf '%s' "$entry" | tr -d ' ')
+    [ -z "$entry" ] && continue
+    if ! printf '%s\n' "$entry" | grep -Eq '^(MANDATE|CHAINOPS)-[A-Z]+-[0-9]{3}$'; then
+      echo "check-spec-ids: retired-ids.txt line $lineno is not a rule ID: $entry" >&2
+      retired_status=1
+      continue
+    fi
+    retired_list="$retired_list $entry"
+  done <"$retired_file"
+fi
+
 set +e
 LC_ALL=C awk \
   -v check_order="$check_order" \
+  -v retired_list="$retired_list" \
   -v mandate_areas="$mandate_areas" \
   -v chainops_areas="$chainops_areas" '
 function problem(msg) {
@@ -397,6 +426,7 @@ in_fence { next }
   close_rule()
   rest = substr(line, 6)
   if (match(rest, "^" tok_re)) {
+    title = substr(rest, RLENGTH + 2)
     found = ids_in(substr(rest, RSTART, RLENGTH), NR)
     sub(/^ /, "", found)
     if (found != "") {
@@ -414,6 +444,7 @@ in_fence { next }
         area_last_txt[area_key] = seq
       }
       current = found
+      if (title ~ /^Retired:/) retired[found] = NR
       field = ""
       fields_started = 0
       pending_blank = 0
@@ -497,6 +528,7 @@ section == "Rule index" && /^\| *`/ {
 /^<!-- \/check-order -->$/ {
   if (!in_order) order_problem("check order block closed at line " NR " without being opened")
   else if (order_lines == 0) order_problem("check order " order_name " has no numbered checks")
+  else { block_max[order_name] = prev_n; last_block = order_name }
   in_order = 0
   next
 }
@@ -537,11 +569,36 @@ in_order {
   }
 }
 
+# Check ranges: "`op` checks N to M" names an order, and a bare "Checks N to M"
+# means the order just closed. Both are checked at the end, once every block
+# is known.
+{
+  rest = line
+  while (match(rest, /(`[a-z_]+` )?[Cc]hecks [0-9]+ to [0-9]+/)) {
+    frag = substr(rest, RSTART, RLENGTH)
+    rest = substr(rest, RSTART + RLENGTH)
+    rname = ""
+    if (frag ~ /^`/) { rname = frag; sub(/^`/, "", rname); sub(/`.*$/, "", rname) }
+    else rname = last_block
+    nums = frag
+    sub(/^.*[Cc]hecks /, "", nums)
+    split(nums, nn, " to ")
+    nrange++
+    range_name[nrange] = rname
+    range_from[nrange] = nn[1] + 0
+    range_to[nrange] = nn[2] + 0
+    range_line[nrange] = NR
+  }
+}
+
 # Every ID cited anywhere, outside headings and the index.
 {
   found = ids_in(line, NR)
   k = split(found, got, " ")
-  for (j = 1; j <= k; j++) if (!(got[j] in cited)) cited[got[j]] = NR
+  for (j = 1; j <= k; j++) {
+    if (!(got[j] in cited)) cited[got[j]] = NR
+    if (got[j] != current && !(got[j] in cited_elsewhere)) cited_elsewhere[got[j]] = NR
+  }
 }
 
 # Check order problems count only with --check-order.
@@ -556,6 +613,23 @@ END {
   for (id in defined) if (!(id in indexed)) problem(id " is defined at line " defined[id] " but missing from the rule index")
   for (id in indexed) if (!(id in defined)) problem(id " is in the rule index but not defined")
   for (id in cited) if (!(id in defined)) problem(id " is cited at line " cited[id] " but not defined")
+  for (i = 1; i <= nrange; i++) {
+    rn = range_name[i]
+    where = "line " range_line[i] " cites " rn " checks " range_from[i] " to " range_to[i]
+    if (rn == "" || !(rn in order_seen)) order_problem(where ", but there is no " rn " check order")
+    else if (range_from[i] < 1 || range_from[i] > range_to[i] || range_to[i] > block_max[rn] + 0) order_problem(where ", but " rn " has " block_max[rn] + 0 " checks")
+  }
+  nl = split(retired_list, rl, " ")
+  for (i = 1; i <= nl; i++) {
+    listed[rl[i]] = 1
+    if (!(rl[i] in defined)) problem(rl[i] " is listed in retired-ids.txt but not defined; keep retired rules, never delete them")
+    else if (!(rl[i] in retired)) problem(rl[i] " is listed in retired-ids.txt but its title does not start with Retired:")
+  }
+  for (id in retired) if (!(id in listed)) problem(id " is retired but not listed in retired-ids.txt")
+  for (id in retired) {
+    if (err_text[id] != "none") problem(id " is retired, so its Error line must be none")
+    if (id in cited_elsewhere) problem(id " is retired but cited at line " cited_elsewhere[id] "; cite the rule that replaced it")
+  }
 
   for (name in cited_error) if (!(name in known_error)) problem("error " name " is cited by" cited_error[name] " but not in the error table")
 
@@ -656,4 +730,5 @@ END {
 awk_status=$?
 set -e
 if [ "$awk_status" -ne 0 ]; then exit "$awk_status"; fi
-exit "$charset_status"
+if [ "$charset_status" -ne 0 ]; then exit "$charset_status"; fi
+exit "$retired_status"
