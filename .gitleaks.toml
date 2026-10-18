@@ -1,0 +1,22 @@
+# Secret scanning rules for gitleaks, used by scripts/secret-scan.sh in CI.
+# The full default rule set applies. An allowlist entry may only cover one
+# synthetic test fixture, must say why it is safe, and is reviewed like code.
+# No path wide or rule wide exclusions.
+
+[extend]
+useDefault = true
+
+# spikes/attestation-parity/fixture.json holds two test private keys. Each is
+# keccak256 of a public label ("UJIRA/TEST-ONLY/S18/attester" and
+# "UJIRA/TEST-ONLY/S18/other-signer"), as the file's own warning says, so
+# anyone can derive them and they must never hold funds. CI regenerates the
+# fixture from its generator and fails on any difference. Only the
+# private_key lines of that one file are allowed, and only for the generic
+# rule; any other key or rule in the file still fails.
+[[allowlists]]
+description = "Public test keys in the attestation parity fixture"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^spikes/attestation-parity/fixture\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"private_key": "0x[0-9a-f]{64}",?$''']

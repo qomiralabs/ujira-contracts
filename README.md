@@ -172,8 +172,24 @@ Slither is installed in CI from `celo/slither-requirements.txt`, which pins Slit
 | `headers` | actionlint on the workflows, the license header check, the invisible character check and their self tests. |
 | `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), and a clean tree afterwards. |
 | `celo` | From `celo/`, through `scripts/foundry-env.sh`: `forge fmt --check`, `forge build --force` with warnings denied, `forge test` (at least one test must run), `forge coverage`, Slither with `--fail-low`, the size check (every compiled `src/` contract must be checked), both self tests, and a clean tree afterwards. |
+| `secrets` | gitleaks over the full history with `.gitleaks.toml`, and the scan's self test. See Secret scanning below. |
 
-Every action is pinned to a full commit SHA. actionlint, stellar-cli, cargo-deny and Foundry are release binaries checked against a SHA256 in the workflow; bump a version and its hash together.
+Every action is pinned to a full commit SHA. actionlint, stellar-cli, cargo-deny, gitleaks and Foundry are release binaries checked against a SHA256 in the workflow; bump a version and its hash together.
+
+## Secret scanning
+
+The `secrets` job in `.github/workflows/ci.yml` runs `scripts/secret-scan.sh` with gitleaks 8.30.1 (MIT licensed), downloaded from its GitHub release and checked against a pinned SHA-256. It checks out the full history and scans every commit reachable from the checked out commit, not only the change, so a key that was committed and later deleted still fails. The scan refuses a shallow clone, and fails unless gitleaks reports scanning as many commits as `git log --no-merges HEAD` lists with file changes (merge commits have no diff of their own). Findings are redacted in the log.
+
+`.gitleaks.toml` extends the default gitleaks rules. Inline `gitleaks:allow` comments are ignored and any `.gitleaksignore` fails the scan, so the config is the only allowlist. Each allowlist entry must cover a single synthetic test fixture and say why it is safe; path wide and rule wide exclusions are not allowed. The one entry today allows the `private_key` lines of `spikes/attestation-parity/fixture.json` for the generic rule only: both keys are keccak256 of public `TEST-ONLY` labels and the `fixtures` job regenerates the file, so any other finding in that file still fails. `scripts/secret-scan.test.sh` plants generated fake keys in throwaway repositories, including one deleted in a later commit, and checks that every one fails the scan.
+
+Both run locally once gitleaks is installed (`brew install gitleaks`):
+
+```sh
+scripts/secret-scan.sh
+scripts/secret-scan.test.sh
+```
+
+Keep `.env` files untracked; only `.env.example` belongs in git.
 
 ## License
 
