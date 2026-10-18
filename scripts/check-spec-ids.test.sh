@@ -609,6 +609,10 @@ expect "non-ascii character in a subfolder file" 1 "$work/subfolder/MANDATE.md" 
 charset_case allowed "Concatenation is written a $(printf '\342\200\226') b."
 expect "allowlisted double vertical line in MANDATE.md passes" 0 "$work/allowed/MANDATE.md" "--check-order" "30 rule ID(s) defined"
 
+charset_case allowed-encoding ""
+printf 'fields = a %s b\n' "$(printf '\342\200\226')" >"$work/allowed-encoding/ENCODING.md"
+expect "allowlisted double vertical line in ENCODING.md passes" 0 "$work/allowed-encoding/MANDATE.md" "" "30 rule ID(s) defined"
+
 charset_case allowed-elsewhere ""
 printf 'a %s b\n' "$(printf '\342\200\226')" >"$work/allowed-elsewhere/README.md"
 expect "double vertical line outside MANDATE.md fails" 1 "$work/allowed-elsewhere/MANDATE.md" "" "README.md:1:3 has U+2016 DOUBLE VERTICAL LINE"

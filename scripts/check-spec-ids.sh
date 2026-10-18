@@ -138,8 +138,9 @@ chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE"
 
 # Characters allowed beyond printable ASCII and LF, per file relative to the
 # spec directory. U+2016 (DOUBLE VERTICAL LINE) is the byte concatenation
-# operator in MANDATE.md (the deploy salt and the r, s, v signature layout).
-charset_allow="MANDATE.md:2016"
+# operator in MANDATE.md (the deploy salt) and in ENCODING.md (the ID and
+# attestation message layouts).
+charset_allow="MANDATE.md:2016 ENCODING.md:2016"
 
 spec_dir=$(dirname "$spec")
 charset_status=0
