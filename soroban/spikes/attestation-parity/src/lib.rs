@@ -20,6 +20,7 @@ pub enum Error {
     ConfigInvalid = 34,
     AttestationInvalid = 51,
     AttestationExpired = 52,
+    PolicyChanged = 53,
 }
 
 #[contracttype]
@@ -29,84 +30,114 @@ pub struct Leg {
     pub amount: i128,
 }
 
-/// The signature is `Bytes`, not `BytesN<65>`, so a short or long signature
+/// The signature is `Bytes`, not `BytesN<64>`, so a short or long signature
 /// reaches the contract and gets a contract error code, instead of failing
 /// argument decoding before any contract code runs.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Attestation {
     pub valid_until: u64,
+    pub policy_epoch: u64,
     pub signature: Bytes,
 }
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttestationPolicySet {
-    pub attester: BytesN<65>,
+    pub attester: BytesN<32>,
     pub country_policy_hash: BytesN<32>,
+    pub policy_epoch: u64,
 }
 
 #[contracttype]
 enum Key {
     Attester,
     PolicyHash,
+    PolicyEpoch,
 }
 
-const DOMAIN: &[u8; 15] = b"UJIRA/ATTEST/V1";
+pub const PREFIX: &[u8; 15] = b"UJIRA/ATTEST/V2";
+pub const MESSAGE_BYTES: u32 = 47;
+pub const SIGNATURE_BYTES: u32 = 64;
 const MAX_ATTESTATION_VALIDITY: u64 = 86_400;
-
-// secp256k1 group order n and floor(n / 2), big-endian.
-const ORDER: [u8; 32] = [
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,
-    0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41,
-];
-const HALF_ORDER: [u8; 32] = [
-    0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0x5d, 0x57, 0x6e, 0x73, 0x57, 0xa4, 0x50, 0x1d, 0xdf, 0xe9, 0x2f, 0x46, 0x68, 0x1b, 0x20, 0xa0,
-];
-const ZERO: [u8; 32] = [0; 32];
-
-/// The host's recover traps on out-of-range r or s, high s and recovery ids
-/// above 3. Rejecting those here first is what keeps the error code a
-/// contract error the caller can match on. Fixed-width big-endian arrays
-/// compare like the numbers they encode.
-pub fn scalars_in_range(r: &[u8; 32], s: &[u8; 32]) -> bool {
-    *r != ZERO && *r < ORDER && *s != ZERO && *s <= HALF_ORDER
-}
 
 #[contract]
 pub struct AttestationParity;
 
 #[contractimpl]
 impl AttestationParity {
-    pub fn __constructor(env: Env, attester: BytesN<65>, country_policy_hash: BytesN<32>) {
-        if attester.get(0) != Some(0x04) {
+    /// The mandate starts at policy epoch 0 and bumps it on every policy
+    /// change. The spike takes the epoch directly so the fixture can put a
+    /// mandate at any epoch without replaying policy changes.
+    pub fn __constructor(
+        env: Env,
+        attester: Bytes,
+        country_policy_hash: BytesN<32>,
+        policy_epoch: u64,
+    ) {
+        // Variable length on purpose, so a key of the wrong size is a
+        // contract error rather than an argument decoding failure.
+        let attester: BytesN<32> = match attester.try_into() {
+            Ok(key) => key,
+            Err(_) => panic_with_error!(&env, Error::ConfigInvalid),
+        };
+        if attester.to_array() == [0u8; 32] {
             panic_with_error!(&env, Error::ConfigInvalid);
         }
         let store = env.storage().instance();
         store.set(&Key::Attester, &attester);
         store.set(&Key::PolicyHash, &country_policy_hash);
+        store.set(&Key::PolicyEpoch, &policy_epoch);
         AttestationPolicySet {
             attester,
             country_policy_hash,
+            policy_epoch,
         }
         .publish(&env);
     }
 
-    /// The digest the attester signs for one leg, computed from this
-    /// contract's own network and address.
-    pub fn digest(
+    /// The attested fields for one leg, from this contract's own network and
+    /// address. Exposed so the encoding can be compared byte for byte.
+    pub fn fields(
         env: Env,
         recipient_ref: BytesN<32>,
         destination: MuxedAddress,
         valid_until: u64,
-    ) -> BytesN<32> {
-        let policy: BytesN<32> = env.storage().instance().get(&Key::PolicyHash).unwrap();
-        attestation_digest(&env, &recipient_ref, &policy, &destination, valid_until)
+        policy_epoch: u64,
+    ) -> Bytes {
+        let policy = policy_hash(&env);
+        attested_fields(
+            &env,
+            &recipient_ref,
+            &policy,
+            policy_epoch,
+            &destination,
+            valid_until,
+        )
+    }
+
+    /// The 47 byte message the attester signs for one leg.
+    pub fn message(
+        env: Env,
+        recipient_ref: BytesN<32>,
+        destination: MuxedAddress,
+        valid_until: u64,
+        policy_epoch: u64,
+    ) -> Bytes {
+        let policy = policy_hash(&env);
+        attestation_message(
+            &env,
+            &recipient_ref,
+            &policy,
+            policy_epoch,
+            &destination,
+            valid_until,
+        )
     }
 
     /// The request-time attestation check, one attestation per leg, in leg
-    /// order, first failure wins.
+    /// order, first failure wins. A bad signature is not a code: the host's
+    /// ed25519 verification traps and the whole call fails.
     pub fn verify(
         env: Env,
         recipient_ref: BytesN<32>,
@@ -117,8 +148,12 @@ impl AttestationParity {
             return Err(Error::AttestationInvalid);
         }
         let store = env.storage().instance();
-        let attester: BytesN<65> = store.get(&Key::Attester).unwrap();
-        let policy: BytesN<32> = store.get(&Key::PolicyHash).unwrap();
+        let attester: BytesN<32> = match store.get(&Key::Attester) {
+            Some(key) => key,
+            None => return Err(Error::ConfigInvalid),
+        };
+        let policy = policy_hash(&env);
+        let epoch: u64 = store.get(&Key::PolicyEpoch).unwrap_or(0);
         let now = env.ledger().timestamp();
 
         for (leg, att) in legs.iter().zip(attestations.iter()) {
@@ -130,54 +165,42 @@ impl AttestationParity {
             if att.valid_until - now > MAX_ATTESTATION_VALIDITY {
                 return Err(Error::AttestationInvalid);
             }
-            if att.signature.len() != 65 {
-                return Err(Error::AttestationInvalid);
+            let signature: BytesN<64> = match att.signature.clone().try_into() {
+                Ok(sig) => sig,
+                Err(_) => return Err(Error::AttestationInvalid),
+            };
+            // Checked before the signature, so an attestation from before a
+            // policy change gets a code the caller can act on per item
+            // instead of a trap that would sink an honest batch.
+            if att.policy_epoch != epoch {
+                return Err(Error::PolicyChanged);
             }
-            let v = att.signature.get_unchecked(64);
-            if v != 27 && v != 28 {
-                return Err(Error::AttestationInvalid);
-            }
-            let mut r = [0u8; 32];
-            let mut s = [0u8; 32];
-            att.signature.slice(0..32).copy_into_slice(&mut r);
-            att.signature.slice(32..64).copy_into_slice(&mut s);
-            if !scalars_in_range(&r, &s) {
-                return Err(Error::AttestationInvalid);
-            }
-
-            let digest = keccak_digest(
+            let message = attestation_message(
                 &env,
                 &recipient_ref,
                 &policy,
+                att.policy_epoch,
                 &leg.destination,
                 att.valid_until,
             );
-            let rs: BytesN<64> = att.signature.slice(0..64).try_into().unwrap();
-            // Still traps when r is not the x coordinate of a curve point or
-            // the result is the point at infinity. Only a submitter that made
-            // up the signature can hit this, and the whole call fails.
-            let recovered = env
-                .crypto()
-                .secp256k1_recover(&digest, &rs, u32::from(v - 27));
-            if recovered != attester {
-                return Err(Error::AttestationInvalid);
-            }
+            env.crypto().ed25519_verify(&attester, &message, &signature);
         }
         Ok(())
     }
+}
 
-    /// Measurement only: the cost of the ed25519 alternative on the same
-    /// digest. Traps on any failure; the host gives no way to catch it.
-    pub fn verify_ed25519(env: Env, public_key: BytesN<32>, message: Bytes, signature: BytesN<64>) {
-        env.crypto()
-            .ed25519_verify(&public_key, &message, &signature);
+fn policy_hash(env: &Env) -> BytesN<32> {
+    match env.storage().instance().get(&Key::PolicyHash) {
+        Some(hash) => hash,
+        None => panic_with_error!(env, Error::ConfigInvalid),
     }
 }
 
-fn digest_preimage(
+fn attested_fields(
     env: &Env,
     recipient_ref: &BytesN<32>,
     policy: &BytesN<32>,
+    policy_epoch: u64,
     destination: &MuxedAddress,
     valid_until: u64,
 ) -> Bytes {
@@ -188,13 +211,13 @@ fn digest_preimage(
         None => (0u8, 0u64),
     };
 
-    let mut b = Bytes::from_array(env, DOMAIN);
-    b.append(&env.ledger().network_id().into());
-    b.append(&recipient_ref.clone().into());
-    b.append(&policy.clone().into());
-    b.extend_from_array(&valid_until.to_be_bytes());
+    let mut b: Bytes = env.ledger().network_id().into();
     b.push_back(xdr_len(env, &mandate));
     b.append(&mandate);
+    b.append(&recipient_ref.clone().into());
+    b.append(&policy.clone().into());
+    b.extend_from_array(&policy_epoch.to_be_bytes());
+    b.extend_from_array(&valid_until.to_be_bytes());
     b.push_back(xdr_len(env, &dest));
     b.append(&dest);
     b.push_back(has_tag);
@@ -202,30 +225,25 @@ fn digest_preimage(
     b
 }
 
-fn keccak_digest(
+fn attestation_message(
     env: &Env,
     recipient_ref: &BytesN<32>,
     policy: &BytesN<32>,
+    policy_epoch: u64,
     destination: &MuxedAddress,
     valid_until: u64,
-) -> soroban_sdk::crypto::Hash<32> {
-    env.crypto().keccak256(&digest_preimage(
+) -> Bytes {
+    let fields = attested_fields(
         env,
         recipient_ref,
         policy,
+        policy_epoch,
         destination,
         valid_until,
-    ))
-}
-
-fn attestation_digest(
-    env: &Env,
-    recipient_ref: &BytesN<32>,
-    policy: &BytesN<32>,
-    destination: &MuxedAddress,
-    valid_until: u64,
-) -> BytesN<32> {
-    keccak_digest(env, recipient_ref, policy, destination, valid_until).to_bytes()
+    );
+    let mut m = Bytes::from_array(env, PREFIX);
+    m.append(&env.crypto().sha256(&fields).to_bytes().into());
+    m
 }
 
 // Address XDR is 40 bytes for a contract and 44 for an account, so this never

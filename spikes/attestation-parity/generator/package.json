@@ -2,7 +2,7 @@
   "name": "attestation-parity-generator",
   "private": true,
   "type": "module",
-  "description": "Builds the attestation parity fixture for the Soroban suite.",
+  "description": "Builds the ed25519 attestation parity fixture for the Soroban suite.",
   "license": "Apache-2.0",
   "scripts": {
     "generate": "node generate.mjs ../fixture.json",
