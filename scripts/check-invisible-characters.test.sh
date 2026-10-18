@@ -73,9 +73,9 @@ expect "ordinary text passes" 0 "2 text file(s) checked"
 for point in FEFF 200B 200C 200D 200E 200F 202A 202B 202C 202D 202E \
   2066 2067 2068 2069 2028 2029 00AD 2060 E0001 00A0 202F 2212; do
   new_repo "planted_$point"
-  write celo/src/Planted.sol "ok
+  write soroban/src/planted.rs "ok
 x$(char "$point")"
-  expect "planted U+$point fails" 1 "celo/src/Planted.sol:2:2: U+$point"
+  expect "planted U+$point fails" 1 "soroban/src/planted.rs:2:2: U+$point"
 done
 
 new_repo columns
@@ -170,8 +170,8 @@ expect "symlinks are not followed" 0 "0 text file(s) checked"
 
 new_repo subfolder_root
 write a.rs "$(char 200B)"
-mkdir -p "$repo/celo"
-target="$repo/celo"
+mkdir -p "$repo/soroban"
+target="$repo/soroban"
 expect "subfolder root resolves to the top level" 1 "a.rs:1:1: U+200B"
 unset target
 

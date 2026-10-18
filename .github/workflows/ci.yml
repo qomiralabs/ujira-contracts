@@ -24,11 +24,6 @@ env:
   STELLAR_CLI_SHA256: c1680deee94301d33ada7a17f98411e642a4248c727afbd2e43050d345746462
   CARGO_DENY_VERSION: 0.20.2
   CARGO_DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
-  # Not FOUNDRY_*: forge reads every FOUNDRY_ variable as a config override.
-  FORGE_VERSION: 1.5.1
-  FORGE_COMMIT: b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2
-  FORGE_SHA256: 73640b01bd9ed29fdb4965085099371f8cf0dbbec3e2086cf54564efc4dcfe88
-  SLITHER_VERSION: 0.11.6
   NODE_VERSION: 24.21.0
   # gitleaks is MIT licensed. Bump the version and its hash together, and
   # only to a release at least 14 days old.
@@ -126,9 +121,9 @@ jobs:
       - name: Test the spec ID check
         run: scripts/check-spec-ids.test.sh
 
-  # The attestation parity fixture is generated, and both chain suites trust
+  # The attestation parity fixture is generated, and the Soroban suite trusts
   # it. Rebuilding it from the reference signer must give the committed bytes,
-  # so a hand edit or a signer change cannot drift from what the suites run.
+  # so a hand edit or a signer change cannot drift from what the suite runs.
   fixtures:
     name: fixtures
     runs-on: ubuntu-24.04
@@ -293,151 +288,3 @@ jobs:
       # write spike wasm under target/.
       - name: Check wasm fixtures match their source
         run: ../scripts/check-wasm-fixtures.sh
-
-  celo:
-    name: celo
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: celo
-        shell: bash --noprofile --norc -euo pipefail {0}
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          submodules: recursive
-
-      - name: Install Foundry
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bin"
-          curl -fsSLo foundry.tar.gz "https://github.com/foundry-rs/foundry/releases/download/v${FORGE_VERSION}/foundry_v${FORGE_VERSION}_linux_amd64.tar.gz"
-          echo "${FORGE_SHA256}  foundry.tar.gz" | sha256sum --check --strict
-          tar -xzf foundry.tar.gz -C "${RUNNER_TEMP}/bin" forge
-          rm foundry.tar.gz
-          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
-          version=$("${RUNNER_TEMP}/bin/forge" --version)
-          printf '%s\n' "$version"
-          # The release build prints its tag after the version, a local
-          # foundryup build prints "stable", so the commit is the real check.
-          printf '%s\n' "$version" | grep -q "^forge Version: ${FORGE_VERSION}-" \
-            || { echo "forge is not ${FORGE_VERSION}" >&2; exit 1; }
-          printf '%s\n' "$version" | grep -qx "Commit SHA: ${FORGE_COMMIT}" \
-            || { echo "forge was not built from ${FORGE_COMMIT}" >&2; exit 1; }
-
-      # Only the compiler is cached. Build output is rebuilt every run so a
-      # stale artifact can never stand in for a deleted contract.
-      - name: Cache solc
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.svm
-          key: svm-${{ runner.os }}-${{ hashFiles('celo/foundry.toml') }}
-
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: celo/slither-requirements.txt
-
-      # Every package is pinned by hash, so this installs exactly the locked
-      # set or fails.
-      - name: Install Slither
-        run: |
-          python -m pip install --require-hashes --no-deps -r slither-requirements.txt
-          slither --version | grep -qx "${SLITHER_VERSION}" || { echo "slither is not ${SLITHER_VERSION}" >&2; exit 1; }
-
-      # Every forge call below goes through foundry-env.sh, which drops all
-      # FOUNDRY_* and DAPP_* variables in any case, and refuses to run with an
-      # unknown profile or with a .env or user-level config forge would read
-      # itself. This step also proves forge reads the pinned settings and that
-      # no test filter is set.
-      - name: Check Foundry config
-        run: |
-          ../scripts/foundry-env.sh --profile default -- forge config --json >"${RUNNER_TEMP}/config.json"
-          jq -e '.solc == "0.8.37" and .evm_version == "prague" and .deny == "warnings" and .auto_detect_solc == false
-            and ([.match_test, .no_match_test, .match_contract, .no_match_contract, .match_path, .no_match_path] | all(. == null))' \
-            "${RUNNER_TEMP}/config.json"
-
-      - name: forge fmt
-        run: ../scripts/foundry-env.sh --profile default -- forge fmt --check
-
-      # foundry.toml sets deny = "warnings", so a compiler warning fails here.
-      # --force so nothing compiled earlier in the job is reused.
-      - name: forge build
-        run: ../scripts/foundry-env.sh --profile default -- forge build --force
-
-      # forge exits 0 when a filter matches no test, so the step also fails
-      # unless at least one test actually ran and passed.
-      - name: forge test
-        run: |
-          results="${RUNNER_TEMP}/forge-test.json"
-          code=0
-          ../scripts/foundry-env.sh --profile default -- forge test --json >"$results" || code=$?
-          if ! jq -e 'type == "object"' "$results" >/dev/null 2>&1; then
-            cat "$results"
-            echo "forge test did not report any test results" >&2
-            exit 1
-          fi
-          jq -r 'to_entries[] | .key as $suite | .value.test_results | to_entries[]
-            | "\(.value.status)  \($suite) \(.key)\(if .value.reason then "  " + .value.reason else "" end)"' "$results"
-          if [ "$code" -ne 0 ]; then
-            exit "$code"
-          fi
-          total=$(jq '[.[].test_results[]] | length' "$results")
-          passed=$(jq '[.[].test_results[] | select(.status == "Success")] | length' "$results")
-          echo "forge test: ${passed} of ${total} test(s) passed"
-          if [ "$total" -eq 0 ] || [ "$passed" -ne "$total" ]; then
-            echo "no tests ran, or not every test passed" >&2
-            exit 1
-          fi
-
-      - name: forge coverage
-        run: ../scripts/foundry-env.sh --profile default -- forge coverage --report summary
-
-      - name: slither
-        run: ../scripts/foundry-env.sh --profile default -- slither . --config-file slither.config.json --fail-low
-
-      # check-sizes.sh reports how many contracts it checked, which must match
-      # the contracts it passed. The ones it passed from src/ must match the
-      # deployable contracts forge compiled from src/, so a contract dropped
-      # from the size report cannot pass unchecked. Every concrete vendored
-      # contract under lib/ that src/ compiles is checked too, so the total
-      # can be larger.
-      - name: Check contract sizes
-        working-directory: .
-        run: |
-          out=$(scripts/foundry-env.sh --profile default -- scripts/check-sizes.sh)
-          printf '%s\n' "$out"
-          checked=$(printf '%s\n' "$out" | sed -n 's/^check-sizes: \([0-9][0-9]*\) contract(s) within budget$/\1/p')
-          validated=$(printf '%s\n' "$out" | grep -c '^ok: ' || true)
-          validated_src=$(printf '%s\n' "$out" | grep -c '^ok: src/' || true)
-          compiled=$(find celo/out -name '*.json' -not -path 'celo/out/build-info/*' -print0 \
-            | xargs -0 jq -r 'select((.metadata.settings.compilationTarget // {} | keys | any(startswith("src/")))
-                and ((.deployedBytecode.object // "0x") | length > 2)) | input_filename' \
-            | wc -l | tr -d ' ')
-          echo "checked=${checked:-none} validated=${validated} validated_src=${validated_src} compiled=${compiled}"
-          if [ -z "$checked" ] || [ "$checked" -eq 0 ] || [ "$checked" -ne "$validated" ] \
-            || [ "$validated_src" -ne "$compiled" ]; then
-            echo "check-sizes did not check every contract in celo/src" >&2
-            exit 1
-          fi
-
-      - name: Test the size check
-        working-directory: .
-        run: scripts/foundry-env.sh --profile default -- scripts/check-sizes.test.sh
-
-      - name: Test the Foundry environment wrapper
-        working-directory: .
-        run: scripts/foundry-env.test.sh
-
-      - name: Check the tree is clean
-        working-directory: .
-        run: |
-          status=$(git status --porcelain --untracked-files=all)
-          if [ -n "$status" ]; then
-            printf '%s\n' "$status"
-            echo "the gate changed tracked files or wrote untracked ones" >&2
-            exit 1
-          fi

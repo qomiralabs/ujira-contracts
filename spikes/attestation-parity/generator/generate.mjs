@@ -3,9 +3,9 @@
 //
 // Reference signer and fixture builder for the attestation parity spike.
 //
-// It does three jobs, so the Soroban and Celo suites have something independent
-// to agree with:
-//   1. encodes the digest inputs for each chain and hashes them,
+// It does three jobs, so the Soroban suite has something independent to agree
+// with:
+//   1. encodes the digest inputs and hashes them,
 //   2. signs with a test-only key (and builds the tampered variants),
 //   3. runs its own verifier over every case and refuses to write a fixture
 //      whose declared outcome disagrees with it.
@@ -34,7 +34,6 @@ const ERR = { ATTESTATION_INVALID: 51, ATTESTATION_EXPIRED: 52 };
 
 const enc = new TextEncoder();
 const hex = (b) => "0x" + Buffer.from(b).toString("hex");
-const unhex = (h) => Uint8Array.from(Buffer.from(h.replace(/^0x/, ""), "hex"));
 const concat = (...parts) => {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let o = 0;
@@ -70,84 +69,65 @@ const KEYS = {
   other: testKey("other-signer"),
 };
 const pub = (sk) => secp256k1.getPublicKey(sk, false);
-const evmAddress = (pk65) => hex(keccak_256(pk65.slice(1)).slice(12));
 
-// Chain encodings. The contract side computes the same bytes from its own
-// environment: network id and contract address on Soroban, chainid and
-// address(this) on Celo.
+// The contract computes the same bytes from its own environment: the network
+// id and its own contract address.
 const SOROBAN_NETWORKS = {
   primary: "Test SDF Network ; September 2015",
   other: "Public Global Stellar Network ; September 2015",
 };
-const CELO_CHAINS = { primary: 11142220n, other: 42220n };
 
 const stellarAccount = (name) => Keypair.fromRawEd25519Seed(Buffer.from(sha256(label(name)))).publicKey();
 const stellarContract = (name) => StrKey.encodeContract(Buffer.from(sha256(label(name))));
 const scAddressXdr = (strkey) => Uint8Array.from(Address.fromString(strkey).toScVal().toXDR());
-const celoAddress = (name) => hex(keccak_256(label(name)).slice(12));
 
 const DEST = {
-  primary: { soroban: stellarAccount("dest-primary"), celo: celoAddress("dest-primary") },
-  other: { soroban: stellarAccount("dest-other"), celo: celoAddress("dest-other") },
-  contract: { soroban: stellarContract("dest-forwarder"), celo: celoAddress("dest-forwarder") },
+  primary: stellarAccount("dest-primary"),
+  other: stellarAccount("dest-other"),
+  contract: stellarContract("dest-forwarder"),
 };
 const MANDATE = {
-  primary: { soroban: stellarContract("mandate-primary"), celo: celoAddress("mandate-primary") },
-  other: { soroban: stellarContract("mandate-other"), celo: celoAddress("mandate-other") },
+  primary: stellarContract("mandate-primary"),
+  other: stellarContract("mandate-other"),
 };
 const POLICY = { primary: sha256(label("policy-primary")), other: sha256(label("policy-other")) };
 const REF = { primary: sha256(label("recipient-primary")), other: sha256(label("recipient-other")) };
 
-function chainContext(chain, ctx) {
-  if (chain === "soroban") {
-    const passphrase = SOROBAN_NETWORKS[ctx.chain];
-    const mandate = MANDATE[ctx.mandate].soroban;
-    return {
-      fields: { network_passphrase: passphrase, chain_tag: hex(sha256(enc.encode(passphrase))), mandate },
-      chainTag: sha256(enc.encode(passphrase)),
-      mandateBytes: scAddressXdr(mandate),
-      extra: { mandate_xdr: hex(scAddressXdr(mandate)) },
-    };
-  }
-  const id = CELO_CHAINS[ctx.chain];
-  const mandate = MANDATE[ctx.mandate].celo;
+function chainContext(ctx) {
+  const passphrase = SOROBAN_NETWORKS[ctx.chain];
+  const mandate = MANDATE[ctx.mandate];
   return {
-    fields: { chain_id: id.toString(), chain_tag: hex(beBytes(id, 32)), mandate },
-    chainTag: beBytes(id, 32),
-    mandateBytes: unhex(mandate),
-    extra: {},
+    fields: {
+      network_passphrase: passphrase,
+      chain_tag: hex(sha256(enc.encode(passphrase))),
+      mandate,
+      mandate_xdr: hex(scAddressXdr(mandate)),
+    },
+    chainTag: sha256(enc.encode(passphrase)),
+    mandateBytes: scAddressXdr(mandate),
   };
 }
 
 // A Soroban destination with a tag is an M address over the same G; the digest
 // uses the base address bytes plus the tag, so G and M share one encoding.
-function chainLeg(chain, leg) {
+function chainLeg(leg) {
   const hasTag = leg.tag !== null;
   const tag = hasTag ? leg.tag : 0n;
-  if (chain === "soroban") {
-    const base = DEST[leg.dest].soroban;
-    let destination = base;
-    if (hasTag) {
-      if (!base.startsWith("G")) throw new Error("only account destinations can carry a tag on Stellar");
-      destination = new MuxedAccount(new Account(base, "0"), tag.toString()).accountId();
-    }
-    return {
-      out: {
-        destination,
-        destination_xdr: hex(scAddressXdr(base)),
-        has_tag: hasTag,
-        tag: tag.toString(),
-        amount: leg.amount.toString(),
-      },
-      destBytes: scAddressXdr(base),
-      hasTag,
-      tag,
-    };
+  const base = DEST[leg.dest];
+  let destination = base;
+  if (hasTag) {
+    if (!base.startsWith("G")) throw new Error("only account destinations can carry a tag on Stellar");
+    destination = new MuxedAccount(new Account(base, "0"), tag.toString()).accountId();
   }
-  const destination = DEST[leg.dest].celo;
   return {
-    out: { destination, has_tag: hasTag, tag: tag.toString(), amount: leg.amount.toString() },
-    destBytes: unhex(destination),
+    out: {
+      destination,
+      destination_xdr: hex(scAddressXdr(base)),
+      has_tag: hasTag,
+      tag: tag.toString(),
+      amount: leg.amount.toString(),
+    },
+    destBytes: scAddressXdr(base),
     hasTag,
     tag,
   };
@@ -176,7 +156,7 @@ export function digest({ chainTag, recipientRef, policyHash, validUntil, mandate
   );
 }
 
-// r || s || v with v in {27, 28}, low s, the layout both contracts read.
+// r || s || v with v in {27, 28}, low s, the layout the contract reads.
 function sign(d, sk) {
   const rec = secp256k1.sign(d, sk, { prehash: false, lowS: true, format: "recovered" });
   return concat(rec.slice(1, 65), u8(27 + rec[0]));
@@ -219,7 +199,7 @@ const MUTATIONS = {
   },
 };
 
-// The rules both contracts implement, in their order. Returns
+// The rules the contract implements, in its order. Returns
 // { code, hostAbort } where hostAbort means Soroban's recover host function
 // traps instead of letting the contract return the code.
 function referenceVerify(now, attesterPub, pairs, legCount, attCount) {
@@ -427,85 +407,75 @@ function buildCase(c) {
   const atts = c.attestations ?? legs.map(() => att());
   const attesterPub = pub(KEYS.attester);
 
-  const chains = {};
-  const decisions = {};
-  for (const chain of ["soroban", "celo"]) {
-    const presented = chainContext(chain, ctx);
-    const chainLegs = legs.map((l) => chainLeg(chain, l));
-    const pairs = [];
-    const outAtts = atts.map((a, i) => {
-      const legSpec = legs[Math.min(i, legs.length - 1)];
-      const so = a.signOver;
-      const signedCtx = chainContext(chain, {
-        chain: so.chain ?? ctx.chain,
-        mandate: so.mandate ?? ctx.mandate,
-        policy: so.policy ?? ctx.policy,
-      });
-      const signedLeg = chainLeg(chain, {
-        ...legSpec,
-        dest: so.dest ?? legSpec.dest,
-        tag: "tag" in so ? so.tag : legSpec.tag,
-      });
-      const signedDigest = digest({
-        chainTag: signedCtx.chainTag,
-        recipientRef: REF[so.ref ?? ref],
-        policyHash: POLICY[so.policy ?? ctx.policy],
-        validUntil: so.validUntil ?? a.validUntil,
-        mandateBytes: signedCtx.mandateBytes,
-        destBytes: signedLeg.destBytes,
-        hasTag: signedLeg.hasTag,
-        tag: signedLeg.tag,
-      });
-      // What the contract will hash: its own context, the presented leg at the
-      // same index, the presented valid_until. Null when there is no leg.
-      const l = chainLegs[i];
-      const presentedDigest = l
-        ? digest({
-            chainTag: presented.chainTag,
-            recipientRef: REF[ref],
-            policyHash: POLICY[ctx.policy],
-            validUntil: a.validUntil,
-            mandateBytes: presented.mandateBytes,
-            destBytes: l.destBytes,
-            hasTag: l.hasTag,
-            tag: l.tag,
-          })
-        : null;
-      const signature = mutate(sign(signedDigest, KEYS[a.signer]), a.mutate, presentedDigest ?? signedDigest);
-      if (presentedDigest) pairs.push({ validUntil: a.validUntil, signature, digest: presentedDigest });
-      return {
-        valid_until: a.validUntil.toString(),
-        signature: hex(signature),
-        signed_digest: hex(signedDigest),
-        digest: presentedDigest ? hex(presentedDigest) : null,
-      };
+  const presented = chainContext(ctx);
+  const chainLegs = legs.map((l) => chainLeg(l));
+  const pairs = [];
+  const outAtts = atts.map((a, i) => {
+    const legSpec = legs[Math.min(i, legs.length - 1)];
+    const so = a.signOver;
+    const signedCtx = chainContext({
+      chain: so.chain ?? ctx.chain,
+      mandate: so.mandate ?? ctx.mandate,
+      policy: so.policy ?? ctx.policy,
     });
-    decisions[chain] = referenceVerify(now, attesterPub, pairs, legs.length, atts.length);
-    chains[chain] = {
-      ...presented.fields,
-      ...presented.extra,
-      legs: chainLegs.map((l) => l.out),
-      attestations: outAtts,
+    const signedLeg = chainLeg({
+      ...legSpec,
+      dest: so.dest ?? legSpec.dest,
+      tag: "tag" in so ? so.tag : legSpec.tag,
+    });
+    const signedDigest = digest({
+      chainTag: signedCtx.chainTag,
+      recipientRef: REF[so.ref ?? ref],
+      policyHash: POLICY[so.policy ?? ctx.policy],
+      validUntil: so.validUntil ?? a.validUntil,
+      mandateBytes: signedCtx.mandateBytes,
+      destBytes: signedLeg.destBytes,
+      hasTag: signedLeg.hasTag,
+      tag: signedLeg.tag,
+    });
+    // What the contract will hash: its own context, the presented leg at the
+    // same index, the presented valid_until. Null when there is no leg.
+    const l = chainLegs[i];
+    const presentedDigest = l
+      ? digest({
+          chainTag: presented.chainTag,
+          recipientRef: REF[ref],
+          policyHash: POLICY[ctx.policy],
+          validUntil: a.validUntil,
+          mandateBytes: presented.mandateBytes,
+          destBytes: l.destBytes,
+          hasTag: l.hasTag,
+          tag: l.tag,
+        })
+      : null;
+    const signature = mutate(sign(signedDigest, KEYS[a.signer]), a.mutate, presentedDigest ?? signedDigest);
+    if (presentedDigest) pairs.push({ validUntil: a.validUntil, signature, digest: presentedDigest });
+    return {
+      valid_until: a.validUntil.toString(),
+      signature: hex(signature),
+      signed_digest: hex(signedDigest),
+      digest: presentedDigest ? hex(presentedDigest) : null,
     };
-  }
+  });
+  const decision = referenceVerify(now, attesterPub, pairs, legs.length, atts.length);
 
-  const { soroban, celo } = decisions;
-  if (soroban.code !== celo.code) throw new Error(`${c.name}: reference decision differs per chain`);
-  if (soroban.code !== c.expect) throw new Error(`${c.name}: expected ${c.expect}, reference says ${soroban.code}`);
+  if (decision.code !== c.expect) throw new Error(`${c.name}: expected ${c.expect}, reference says ${decision.code}`);
   return {
     name: c.name,
     tamper: c.tamper,
     expect: c.expect,
     expect_code: c.expect === "ok" ? 0 : ERR[c.expect],
-    soroban_host_abort: soroban.hostAbort,
+    soroban_host_abort: decision.hostAbort,
     calls: c.calls ?? 1,
     now: now.toString(),
     recipient_ref: hex(REF[ref]),
     country_policy_hash: hex(POLICY[ctx.policy]),
     attester_public_key: hex(attesterPub),
-    attester_evm_address: evmAddress(attesterPub),
-    soroban: chains.soroban,
-    celo: chains.celo,
+    soroban: {
+      ...presented.fields,
+      legs: chainLegs.map((l) => l.out),
+      attestations: outAtts,
+    },
   };
 }
 
@@ -524,13 +494,11 @@ function build() {
         derivation: 'keccak256("UJIRA/TEST-ONLY/S18/attester")',
         private_key: hex(KEYS.attester),
         public_key: hex(attesterPub),
-        evm_address: evmAddress(attesterPub),
       },
       other_signer: {
         derivation: 'keccak256("UJIRA/TEST-ONLY/S18/other-signer")',
         private_key: hex(KEYS.other),
         public_key: hex(otherPub),
-        evm_address: evmAddress(otherPub),
       },
     },
     cases: CASES.map(buildCase),
