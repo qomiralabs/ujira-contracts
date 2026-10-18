@@ -96,13 +96,13 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request and on pushes to `development`, `staging` and `main`, with read-only permissions and no secrets. A newer push to the same branch cancels the run in progress.
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `development`, `staging` and `main`, with read-only permissions and no secrets. A newer push to a pull request cancels that pull request's older run. Runs for pushes to `development`, `staging` and `main` are never cancelled, so every merged commit keeps a complete result.
 
 | Job | What it checks |
 | --- | --- |
 | `headers` | actionlint on the workflows, the license header check, the invisible character check, the mandate spec rule ID check and their self tests. |
 | `fixtures` | Rebuilds the attestation parity fixture from its generator under `spikes/attestation-parity/generator/` and fails unless it matches the committed file byte for byte. |
-| `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), a clean tree afterwards, and the spike wasm fixtures rebuilt from source byte for byte. |
+| `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), a clean tree afterwards, the wasm fixture check's self test, and the spike wasm fixtures rebuilt from source byte for byte. |
 
 Every action is pinned to a full commit SHA. actionlint, stellar-cli and cargo-deny are release binaries checked against a SHA256 in the workflow; bump a version and its hash together.
 

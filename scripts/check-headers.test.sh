@@ -126,11 +126,15 @@ ln -s missing.rs "$repo/soroban/src/link.rs"
 git -C "$repo" add -- soroban/src/link.rs
 expect "dangling symlink is reported" 1 "soroban/src/link.rs (dangling symlink)"
 
+# The header-less a.rs sits outside the folder the check is pointed at, so it
+# is only reported if the check climbs to the top level first. The build
+# output under soroban/target/ must still be skipped from there.
 new_repo subfolder_root
+write a.rs 'fn a() {}'
 write soroban/target/debug/build/gen.rs 'fn main() {}'
 write soroban/src/lib.rs "$header"
 target="$repo/soroban"
-expect "subfolder root resolves to the top level" 0 "1 file(s) checked"
+expect "subfolder root resolves to the top level" 1 "missing header: a.rs" "1 of 2 file(s)"
 unset target
 
 mkdir -p "$work/not_a_repo"
