@@ -193,6 +193,10 @@ scripts/secret-scan.sh
 scripts/secret-scan.test.sh
 ```
 
+A manual run of gitleaks must pass the config as an absolute path, as `scripts/secret-scan.sh` does (`--config "$PWD/.gitleaks.toml"`, not `--config .gitleaks.toml`). When a relative config path matches the path of the file inside the repository, gitleaks silently skips findings in the config file itself.
+
+Merging: this repository must stay squash-only. A pull request branch may hold commits, such as test probes or fixups, that never reach `development` only because every merge is a squash merge, and the scan on `development` relies on that. Enabling merge commits or rebase merging requires revisiting the secret scan first.
+
 Keep `.env` files untracked; only `.env.example` belongs in git.
 
 ## License

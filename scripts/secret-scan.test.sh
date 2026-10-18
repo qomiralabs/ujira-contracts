@@ -157,6 +157,18 @@ printf '{\n  "private_key": "%s"\n}\n' "$secret" >"$work/generic/test/keys.json"
 commit "$work/generic" "plant"
 expect "private key in a test file fails" 1 "$work/generic"
 
+# Hex only words must not act as stopwords: a hex private key that happens to
+# contain one is still a key. Each word sits in the middle of the key.
+for word in 000000 aaaaaa dead feed DEAD; do
+  repo "hexword-$word"
+  half=$(( (64 - ${#word}) / 2 ))
+  secret="0x$(random '0-9a-f' "$half")${word}$(random '0-9a-f' $((64 - ${#word} - half)))"
+  mkdir -p "$work/hexword-$word/test"
+  printf '{\n  "private_key": "%s"\n}\n' "$secret" >"$work/hexword-$word/test/keys.json"
+  commit "$work/hexword-$word" "plant"
+  expect "hex private key containing $word fails" 1 "$work/hexword-$word"
+done
+
 # A merge resolution can add content that is in neither parent.
 repo evil-merge
 git -C "$work/evil-merge" checkout -q -b side
