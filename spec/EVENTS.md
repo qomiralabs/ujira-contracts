@@ -7,7 +7,7 @@ The canonical event set of spec version 1, in force on Stellar. Event shapes are
 - Topics: `[Symbol(name), key]`, where `key` is the `payout_id` (`BytesN<32>`) for payout events and the mandate's `tenant_ref` (`BytesN<32>`) for every other event, including `mandate_created` from the factory.
 - Data: one `#[contracttype]` struct per event whose fields are exactly the fields below, in that order, with snake_case names.
 - Destinations: every destination, including each entry of `legs`, is the canonical pair `{ address, tag }` with `tag` null when absent (`MANDATE-EVENT-002`), encoded as a `MuxedAddress`, so an `M` address carries the tag.
-- Amounts are `i128`, times are `u64` unix seconds, `day` is `u64` (`now / SECONDS_PER_DAY`), counts and epochs are `u32`, role and kind codes are `u32` with the values in `constants.json`.
+- Amounts are `i128`, times are `u64` unix seconds, `day` is `u64` (`now / SECONDS_PER_DAY`), `policy_epoch` is `u64` (`MANDATE-RECIPIENT-017`), other counts and epochs are `u32`, role and kind codes are `u32` with the values in `constants.json`.
 - Funding emits no mandate event; the asset's own transfer event is the record (`MANDATE-EVENT-003`).
 
 ## Events

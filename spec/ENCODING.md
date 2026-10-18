@@ -49,7 +49,7 @@ message = "UJIRA/ATTEST/V2" ‖ SHA-256(fields)
 
 - `network_id` is the Stellar network ID, the SHA-256 of the network passphrase; the contract reads it from its environment.
 - `mandate` is the mandate's own address and `destination` the leg's base address, both as `Address::to_xdr` bytes (40 bytes for a contract, 44 for an account), each after a one-byte length.
-- `policy_epoch` is the mandate's policy epoch the attestation is issued under (`MANDATE-RECIPIENT-019`), encoded as `u64be`, 8 bytes, right after `country_policy_hash`.
+- `policy_epoch` is the mandate's policy epoch the attestation is issued under (`MANDATE-RECIPIENT-019`), encoded as `u64be`, 8 bytes, right after `country_policy_hash`. The mandate stores it as a `u64` too (`MANDATE-RECIPIENT-017`), so the encoded value is exactly the stored one.
 - `has_tag` is 0 or 1. With no tag, `has_tag = 0` and `tag = 0`, so an attestation for an address never covers a sub-account of it, and a tag of 0 is distinct from no tag.
 - `message` is exactly `ATTESTATION_MESSAGE_BYTES` = 47 bytes: the 15 ASCII bytes of the prefix and the 32-byte SHA-256. It can never equal a 32-byte transaction hash, and the prefix sets it apart from any other UJIRA signature.
 - The amount and the fee are not attested.

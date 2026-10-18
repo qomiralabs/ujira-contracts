@@ -639,7 +639,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-RECIPIENT-017 Policy epoch
 
 - Precondition: none.
-- Effect: `policy_epoch` increases on every attester or country policy change. Allowlist removals do not change it, because execute re-checks the allowlist directly.
+- Effect: `policy_epoch` is a `u64` that starts at 0 at creation and increases by one on every attester or country policy change. It has the same 64-bit width in the mandate's state, in each attestation, in the signed attestation fields (`spec/ENCODING.md`) and in events, so it is never widened or narrowed between them. An increase past the `u64` maximum is unreachable in practice and falls under `MANDATE-AMOUNT-006`. Allowlist removals do not change it, because execute re-checks the allowlist directly.
 - Error: none
 
 #### MANDATE-RECIPIENT-018 Choosing the recipient mode
