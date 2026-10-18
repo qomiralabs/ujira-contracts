@@ -789,6 +789,26 @@ valid_spec "$f" "#### MANDATE-ROLE-002 Retired: an old check
 | \`MANDATE-ROLE-003\` | A live rule |"
 expect "retired rule cited in another rule" 1 "$f" "" "MANDATE-ROLE-002 is retired but cited at line"
 
+# Check ranges ("`op` checks N to M", or "Checks N to M" after a block) must
+# exist in the order they name.
+f="$work/range-ok.md"
+valid_spec "$f" "Checks 1 to 2 run in order.
+
+Each item runs \`request_payout\` checks 1 to 2."
+expect "check ranges inside the order pass" 0 "$f" "--check-order" "check orders: 1 block(s)"
+
+f="$work/range-named-over.md"
+valid_spec "$f" "Each item runs \`request_payout\` checks 1 to 30."
+expect "named check range past the end" 1 "$f" "--check-order" "cites request_payout checks 1 to 30, but request_payout has 2 checks"
+
+f="$work/range-after-over.md"
+valid_spec "$f" "Checks 1 to 3 run for one leg."
+expect "check range after a block past the end" 1 "$f" "--check-order" "cites request_payout checks 1 to 3, but request_payout has 2 checks"
+
+f="$work/range-unknown.md"
+valid_spec "$f" "Each item runs \`approve\` checks 1 to 2."
+expect "check range of an unknown order" 1 "$f" "--check-order" "cites approve checks 1 to 2, but there is no approve check order"
+
 no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 

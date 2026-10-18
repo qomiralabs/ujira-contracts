@@ -504,6 +504,7 @@ section == "Rule index" && /^\| *`/ {
 /^<!-- \/check-order -->$/ {
   if (!in_order) order_problem("check order block closed at line " NR " without being opened")
   else if (order_lines == 0) order_problem("check order " order_name " has no numbered checks")
+  else { block_max[order_name] = prev_n; last_block = order_name }
   in_order = 0
   next
 }
@@ -544,6 +545,28 @@ in_order {
   }
 }
 
+# Check ranges: "`op` checks N to M" names an order, and a bare "Checks N to M"
+# means the order just closed. Both are checked at the end, once every block
+# is known.
+{
+  rest = line
+  while (match(rest, /(`[a-z_]+` )?[Cc]hecks [0-9]+ to [0-9]+/)) {
+    frag = substr(rest, RSTART, RLENGTH)
+    rest = substr(rest, RSTART + RLENGTH)
+    rname = ""
+    if (frag ~ /^`/) { rname = frag; sub(/^`/, "", rname); sub(/`.*$/, "", rname) }
+    else rname = last_block
+    nums = frag
+    sub(/^.*[Cc]hecks /, "", nums)
+    split(nums, nn, " to ")
+    nrange++
+    range_name[nrange] = rname
+    range_from[nrange] = nn[1] + 0
+    range_to[nrange] = nn[2] + 0
+    range_line[nrange] = NR
+  }
+}
+
 # Every ID cited anywhere, outside headings and the index.
 {
   found = ids_in(line, NR)
@@ -566,6 +589,12 @@ END {
   for (id in defined) if (!(id in indexed)) problem(id " is defined at line " defined[id] " but missing from the rule index")
   for (id in indexed) if (!(id in defined)) problem(id " is in the rule index but not defined")
   for (id in cited) if (!(id in defined)) problem(id " is cited at line " cited[id] " but not defined")
+  for (i = 1; i <= nrange; i++) {
+    rn = range_name[i]
+    where = "line " range_line[i] " cites " rn " checks " range_from[i] " to " range_to[i]
+    if (rn == "" || !(rn in order_seen)) order_problem(where ", but there is no " rn " check order")
+    else if (range_from[i] < 1 || range_from[i] > range_to[i] || range_to[i] > block_max[rn] + 0) order_problem(where ", but " rn " has " block_max[rn] + 0 " checks")
+  }
   for (id in retired) {
     if (err_text[id] != "none") problem(id " is retired, so its Error line must be none")
     if (id in cited_elsewhere) problem(id " is retired but cited at line " cited_elsewhere[id] "; cite the rule that replaced it")
