@@ -325,7 +325,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 #### MANDATE-CONFIG-005 Attester presence and form
 
-- Precondition: a configuration where `recipient_mode` is `ATTESTED` or `BOTH` and `attester` is missing, or `ALLOWLIST` and `attester` is set; or an `attester` that is not exactly 32 bytes (an ed25519 public key) or is 32 zero bytes.
+- Precondition: a configuration where `recipient_mode` is `ATTESTED` or `BOTH` and `attester` is missing, or `ALLOWLIST` and `attester` is set; or an `attester` that is not exactly 32 bytes (an ed25519 public key) or is 32 zero bytes. The attester is passed as a variable-length byte string so this check can run; whether the bytes are a valid curve point is checked off chain (`CHAINOPS-CREATE-005`).
 - Effect: refused.
 - Error: `CONFIG_INVALID`
 
@@ -606,7 +606,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-RECIPIENT-012 Signed by the attester
 
 - Precondition: a leg's attestation whose signature is not a valid ed25519 signature by the configured `attester` over the attestation message. The message is the 15 ASCII bytes `UJIRA/ATTEST/V2` followed by the SHA-256 of the attested fields, 47 bytes in all, so it can never equal a 32-byte transaction hash. The fields bind the chain, the mandate, `recipient_ref`, `country_policy_hash`, `policy_epoch`, `valid_until` and the destination pair; their byte format, specified separately, gives every field a fixed length or a length prefix, so no two field sequences encode to the same bytes. They do not include the amount or the fee. Version 1, never deployed, was a secp256k1 signature over a keccak digest with the prefix `UJIRA/ATTEST/V1`; the different prefix keeps the two versions apart.
-- Effect: the whole call fails with no state change. On Stellar the host's ed25519 verification traps on a bad signature and the contract cannot catch it, so the failure is a host trap rather than a code, and it aborts a whole `request_payouts` batch. Only the submitting agent can submit such a signature, and an honest attester never produces one. Reusing a valid attestation within its window grants nothing beyond what the agent may already do.
+- Effect: the whole call fails with no state change. On Stellar the host's ed25519 verification traps on any failure and the contract cannot catch it, so the failure is a host trap rather than a code, and it rolls back a whole `request_payouts` batch. This is accepted: honest attestations can still fail, after an attester change or through an encoding mismatch between the request builder and the attester, but a policy change is caught per item first (`MANDATE-RECIPIENT-019`), and the operator simulates every attested request, isolates a trapping item and re-attests after a policy change before anything is submitted (`CHAINOPS-SUBMIT-003`). Reusing a valid attestation within its window grants nothing beyond what the agent may already do.
 - Error: host trap (Stellar)
 
 #### MANDATE-RECIPIENT-013 Retired: unrecoverable signatures
@@ -1618,7 +1618,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-SUBMIT-003 Simulate attested requests before submitting
 
-- Off chain: every request that carries attestations is simulated against the current ledger before it is submitted, and a simulation that traps on a signature is never submitted, so a stale or wrong attestation costs no fee and never aborts a batch on chain.
+- Off chain: every request that carries attestations is simulated against the current ledger before it is submitted, and a simulation that traps is never submitted. When a batch simulation traps, the trapping item is isolated by bisection, removed and reported, and the rest is simulated again before submitting. When the mandate's `policy_epoch` changes, every attestation issued under the old epoch is discarded and the affected legs are attested again. So a stale or wrong attestation costs no fee and never aborts a batch on chain.
 
 #### CHAINOPS-CREATE-001 The pause-only guardian is on by default
 
@@ -1638,7 +1638,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-CREATE-005 Attester key form
 
-- Off chain: when an attester key is configured or rotated, the operator checks that it decompresses to a canonical ed25519 point that is not of small order, and refuses it otherwise; the contract only checks its length and that it is not all zero (`MANDATE-CONFIG-005`).
+- Off chain: when an attester key is configured or rotated, the operator checks that it decompresses to a canonical ed25519 point that is not of small order, and refuses it otherwise; it may also require the key to prove possession by signing a configuration challenge. The contract only checks its length and that it is not all zero (`MANDATE-CONFIG-005`).
 
 #### CHAINOPS-SWEEP-001 Every sweep is booked once
 
