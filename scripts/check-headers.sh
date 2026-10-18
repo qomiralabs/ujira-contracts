@@ -2,17 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Qomira Labs
 #
-# Checks that every tracked Rust and Solidity source file starts with the
-# Apache 2.0 header:
+# Checks that every tracked Rust source file starts with the Apache 2.0 header:
 #
 #   // SPDX-License-Identifier: Apache-2.0
 #   // Copyright <year> Qomira Labs
 #
-# Both lines must be the first two lines of the file. Solidity recommends the
-# SPDX line first, and Rust follows the same rule so there is one convention.
+# Both lines must be the first two lines of the file, so a license scanner
+# finds the SPDX line without parsing anything.
 #
-# Skipped: vendored Foundry dependencies (celo/lib/), Cargo build output
-# (target/, soroban/target/) and Foundry build output (celo/out/, celo/cache/).
+# Skipped: Cargo build output (target/, soroban/target/).
 #
 # The file list comes from git (tracked files only), but the contents are read
 # from the working tree, not the index. A file staged without a header and then
@@ -39,7 +37,7 @@ trap 'rm -f "$list"' EXIT
 
 # Listing into a file, not a process substitution, so a git failure stops the
 # check instead of looking like an empty tree.
-if ! git -C "$root" ls-files -z -- '*.rs' '*.sol' >"$list"; then
+if ! git -C "$root" ls-files -z -- '*.rs' >"$list"; then
   echo "check-headers: git ls-files failed in $root" >&2
   exit 2
 fi
@@ -49,7 +47,7 @@ copyright_re='^// Copyright [0-9]{4} Qomira Labs$'
 
 skipped() {
   case "$1" in
-    celo/lib/* | celo/out/* | celo/cache/* | target/* | soroban/target/*) return 0 ;;
+    target/* | soroban/target/*) return 0 ;;
     *) return 1 ;;
   esac
 }

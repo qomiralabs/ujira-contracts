@@ -1,6 +1,6 @@
-# Batch limits on Soroban and Celo
+# Batch limits on Soroban
 
-How many payouts one `request_payouts` or `execute_batch` call can carry, measured instead of guessed, and the value of `MAX_BATCH` that follows. `MAX_BATCH` is a spec constant, identical on both chains, that cannot change after mainnet without a new version.
+How many payouts one `request_payouts` or `execute_batch` call can carry, measured instead of guessed, and the value of `MAX_BATCH` that follows. `MAX_BATCH` is a spec constant that cannot change after mainnet without a new version.
 
 ## Recommendation
 
@@ -32,21 +32,18 @@ Tagged legs are the worst case, so the cap is set on them. The worst plan for a 
 
 19 is 69.3 percent in the test env, and the network runs about half a point above the env, so it leaves no margin at all. 18 keeps 32.8 percent on testnet. With `MAX_BATCH = 20` alone, a batch of 4-leg payouts with a fee needs 39,844 event bytes, 243 percent of the limit. A single `MAX_BATCH` of 5 would fit the worst case, but it would halve throughput for the common 1-leg payout for no reason.
 
-Headroom under the recommended limits (at least 30 percent required on every resource, both chains):
+Headroom under the recommended limits (at least 30 percent required on every resource):
 
-| Worst case under the limits | Chain | Binding resource | Use | Headroom |
+| Worst case under the limits | Measured on | Binding resource | Use | Headroom |
 | --- | --- | --- | --- | --- |
-| `execute_batch`, 10 items, 18 tagged legs, no fee | Soroban, test env | events | 10,932 of 16,384 bytes, 66.7% | 33.3% |
-| same, submitted to testnet (tx `c5fa1fd2...`, ledger 5248153) | Soroban, testnet | events | 11,004 bytes, 67.2% | 32.8% |
-| `execute_batch`, 10 items, 18 untagged legs, no fee | Soroban, test env | events | 9,780 bytes, 59.7% | 40.3% |
-| `execute_batch`, 4 items x 4 tagged legs, 2 with a fee (18 transfers) | Soroban, test env | events | 8,516 bytes, 52.0% | 48.0% |
-| `execute_batch`, 9 items x (1 tagged leg + fee) | Soroban, test env | events | 9,004 bytes, 55.0% | 45.0% |
-| `request_payouts`, 10 items x 4 tagged legs, BOTH mode | Soroban, test env | events | 10,332 bytes, 63.1% (instructions 103.8M, 26.0%) | 36.9% |
-| `requestPayouts`, 10 items x (4 legs + fee), BOTH mode | Celo, forge | gas | 3,827,534, 12.8% of 30M, **22.8% of 2^24** | 77.2% |
-| `requestPayouts`, 10 items x 4 legs, ATTESTED, real USDC | Celo Sepolia `eth_estimateGas` | gas | 3,745,048, 12.5% of 30M, 22.3% of 2^24 | 77.7% |
-| `executeBatch`, 10 items, 18 tagged legs, no fee | Celo, forge | gas | 1,317,755, 7.8% of 2^24 | 92.2% |
+| `execute_batch`, 10 items, 18 tagged legs, no fee | test env | events | 10,932 of 16,384 bytes, 66.7% | 33.3% |
+| same, submitted to testnet (tx `c5fa1fd2...`, ledger 5248153) | testnet | events | 11,004 bytes, 67.2% | 32.8% |
+| `execute_batch`, 10 items, 18 untagged legs, no fee | test env | events | 9,780 bytes, 59.7% | 40.3% |
+| `execute_batch`, 4 items x 4 tagged legs, 2 with a fee (18 transfers) | test env | events | 8,516 bytes, 52.0% | 48.0% |
+| `execute_batch`, 9 items x (1 tagged leg + fee) | test env | events | 9,004 bytes, 55.0% | 45.0% |
+| `request_payouts`, 10 items x 4 tagged legs, BOTH mode | test env | events | 10,332 bytes, 63.1% (instructions 103.8M, 26.0%) | 36.9% |
 
-Celo has room for much larger batches, so the shared value is set by Soroban. Its worst case is the BOTH-mode request: an allowlist read and a signature recovery on every leg, and a fee on every item. Tagged legs make no measurable difference on Celo: the tag shares the leg's storage slot, and the tagged request is 3,920 gas lower. Both test suites assert that every case in the table stays at or under 70 percent of every limit (`recommended_limits_keep_headroom` in Rust, `test_recommended_limits_keep_headroom` in forge). Every case is measured, including plans that use exactly `MAX_BATCH_TRANSFERS` transfers, so a protocol or SDK change that eats the margin fails CI.
+The test suite asserts that every case in the table stays at or under 70 percent of every limit (`recommended_limits_keep_headroom`). Every case is measured, including plans that use exactly `MAX_BATCH_TRANSFERS` transfers, so a protocol or SDK change that eats the margin fails CI.
 
 ## Limits compared against
 
@@ -62,20 +59,16 @@ Soroban, per transaction, read with `stellar network settings` on 2026-10-17. Te
 | Contract events and return value | 16,384 bytes |
 | Transaction size | 132,096 bytes |
 
-Celo: block gas limit 30,000,000 on Celo Sepolia (`eth_getBlockByNumber`, block 0x25276ac, 2026-10-17; the same on mainnet). Celo runs Prague, which has no separate per-transaction cap. Osaka's EIP-7825 would cap a transaction at 2^24 = 16,777,216 gas, so the limits are also checked against that, in case Celo adopts it.
-
 ## What was measured
 
-A prototype of the batch path of the mandate on each chain. Each keeps the real storage layout, check order, events and transfers, and leaves out what a batch does not touch: approvals, cancel, pause and most roles. The prototypes are never deployed outside testnet.
+A prototype of the batch path of the mandate. It keeps the real storage layout, check order, events and transfers, and leaves out what a batch does not touch: approvals, cancel, pause and most roles. The prototype is never deployed outside testnet.
 
-- **Soroban:** `soroban/spikes/batch-limits/proto` holds the contract. Its compiled wasm is committed as `soroban/spikes/batch-limits/fixtures/batch_limits_proto.wasm` (sha256 `03132e3672d80f41...`; rebuild with `stellar contract build --package batch-limits-proto`). `soroban/spikes/batch-limits` loads that wasm into the SDK test env, because the native build meters host functions only and misses most of the cost. The token is a real SAC. Destinations are fresh classic accounts with trustlines, one per leg, so every transfer touches a new trustline. Tagged series pay the same kind of account through a muxed `M` address with a full 64-bit id. One series uses contract addresses instead. Attestations are real secp256k1 signatures, one per leg, over the attestation digest that binds chain, mandate, recipient, country policy, expiry, destination and tag. Resources come from the env's cost estimate, plus the XDR size of the return value, because the network counts that against the events limit. The `tx_size` share is an estimate of the whole envelope: the arguments twice (the auth entry repeats the call), plus 100 bytes per footprint key and 400 for the rest. That is calibrated on testnet, where a 16-item 4-leg request had a 47,016 byte envelope and the estimate gives 46,976. It is never the binding resource.
-- **Celo:** tagged legs carry `hasTag` and a full 64-bit tag, signed into the attestation, for parity with Soroban. `celo/test/spikes/BatchLimitsMandate.sol` (prototype) and `BatchLimitsToken.sol` (mock ERC-20 with 6 or 18 decimals) are measured by `celo/test/spikes/BatchLimits.t.sol`. Gas is a `gasleft()` delta around a call that copies no return data, with the mandate and token storage cooled first. Copying return data would charge memory expansion in the test contract, and that cost grows with everything allocated earlier. Transaction gas adds the 21,000 intrinsic and the calldata cost, or the EIP-7623 calldata floor if higher. The figure is about 3,000 high, because the top-level call of a real transaction does not pay the cold account access.
+- `soroban/spikes/batch-limits/proto` holds the contract. Its compiled wasm is committed as `soroban/spikes/batch-limits/fixtures/batch_limits_proto.wasm` (sha256 `03132e3672d80f41...`; rebuild with `stellar contract build --package batch-limits-proto`). `soroban/spikes/batch-limits` loads that wasm into the SDK test env, because the native build meters host functions only and misses most of the cost. The token is a real SAC. Destinations are fresh classic accounts with trustlines, one per leg, so every transfer touches a new trustline. Tagged series pay the same kind of account through a muxed `M` address with a full 64-bit id. One series uses contract addresses instead. Attestations are real secp256k1 signatures, one per leg, over the attestation digest that binds chain, mandate, recipient, country policy, expiry, destination and tag. Resources come from the env's cost estimate, plus the XDR size of the return value, because the network counts that against the events limit. The `tx_size` share is an estimate of the whole envelope: the arguments twice (the auth entry repeats the call), plus 100 bytes per footprint key and 400 for the rest. That is calibrated on testnet, where a 16-item 4-leg request had a 47,016 byte envelope and the estimate gives 46,976. It is never the binding resource.
 - Batch sizes 1, 10, 20 and 40; 1, 2 and 4 legs; ALLOWLIST, ATTESTED and BOTH modes; a fee on every row except one 1-leg series. Every item is checked to land APPROVED and then EXECUTED.
-- Both suites were run twice; the numbers are identical.
+- The suite was run twice; the numbers are identical.
 
 ```
 cd soroban && cargo test -p batch-limits --release -- --nocapture
-cd celo && forge test --match-contract BatchLimits -vv
 ```
 
 ## Network cross-checks
@@ -96,25 +89,11 @@ Soroban testnet, the prototype in ATTESTED mode, protocol 29. The untagged rows 
 
 The 17-item request only fails if the return value counts. It does, and the test env model, which adds it, predicts that failure. The env is within 1 percent of the network on event bytes and within 3 percent on instructions; simulation declares about 4 percent more instructions than are used.
 
-Celo Sepolia (chain 11142220), with no funded key. The prototype ran on a local anvil fork of Celo Sepolia, using the real USDC (`0x01C5C0122039549AD1493B8220cABEdD739BC44E`) and USDm (`0xdE9e4C3ce781b4bA68120d6261cbad65ce0aB00b`). Then `eth_estimateGas` ran on the real node, overriding the mandate's code and storage and its token balance slot with that state:
-
-| Call | Celo Sepolia estimate | Fork estimate | Forge, mock token, same shape |
-| --- | --- | --- | --- |
-| `requestPayouts` 10 x 4 legs, ATTESTED, USDC | 3,745,048 | 3,714,401 | 3,704,893 |
-| `executeBatch` 10 x (4 legs + fee), USDC | 2,356,198 | 2,348,417 | 2,049,953 |
-| `requestPayouts` 10 x 4 legs, ATTESTED, USDm | 3,745,756 | 3,715,104 | 3,707,173 |
-| `executeBatch` 10 x (4 legs + fee), USDm | 2,283,255 | 2,275,648 | 2,049,953 |
-| `requestPayouts` 20 x 4 legs, ATTESTED, USDC | 7,416,488 | 7,356,932 | 7,347,148 |
-| `executeBatch` 20 x (4 legs + fee), USDC | 4,591,591 | 4,561,400 | 4,015,800 |
-
-Requests agree with forge within about 1 percent. Execute on the real tokens costs 11 to 15 percent more than on the mock token, because the real tokens run more checks per transfer (USDC is a proxy with a blocklist), so execute rows from forge understate the network by that much. Both are linear in the item count.
-
 ## Findings beyond the limit
 
 - The return value of `request_payouts` (an `ItemResult` per item, about 116 bytes each) is charged against the same 16,384 bytes as the events. A request batch that fits on events alone can still fail.
 - On Soroban, ATTESTED 4-leg requests cost about 10.05M instructions per item, almost all signature recovery. That alone would allow about 27 items with headroom, so instructions are the second constraint after events.
 - Fees on testnet are dominated by rent. Extending each payout record for 31 days cost about 0.25 XLM per item: 2.46 of the 2.47 XLM charged for a 10-item request. The first call after deploy also extended the wasm and the instance, and paid 46 XLM. How long records are kept alive, and who pays for it, is a sponsorship cost question.
-- Celo calldata stays far above the EIP-7623 floor on every row, so the floor never applies at these sizes.
 
 ## Soroban measurements (test env, compiled wasm)
 
@@ -306,247 +285,3 @@ The worst cases under the recommended limits (`recommended_limits_keep_headroom`
 | request_payouts | both | 4 | no | Tagged | 10 | 103819014 | 2285975 | 0 | 66 | 12 | 0 | 10964 | 9160 | 1172 | 13692 | 66 | events | 63.1% |
 | request_payouts | attested | 4 | yes | Tagged | 10 | 100887089 | 2020287 | 0 | 26 | 12 | 0 | 10964 | 9160 | 1172 | 13692 | 26 | events | 63.1% |
 | request_payouts | both | 4 | no | Account | 10 | 103172734 | 2252695 | 0 | 66 | 12 | 0 | 10804 | 9000 | 1172 | 13532 | 66 | events | 62.1% |
-
-## Celo measurements (forge, mock tokens)
-
-`tx gas` is the execution gas plus the intrinsic and calldata gas, or the EIP-7623 floor if higher. The 6 and 18 decimal series are within a few hundred gas of each other; only calldata bytes differ. The last rows come from `test_recommended_limits_keep_headroom`, the plans under the recommended limits, including the ones at exactly 18 transfers.
-
-| op | mode | legs | fee | tags | decimals | items | execution gas | calldata bytes | tx gas | share of 30M | share of 2^24 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| requestPayouts | allowlist | 1 | yes | no | 18 | 1 | 214211 | 548 | 239167 | 0.7% | 1.4% |
-| executeBatch | allowlist | 1 | yes | no | 18 | 1 | 164882 | 100 | 186726 | 0.6% | 1.1% |
-| requestPayouts | allowlist | 1 | yes | no | 18 | 10 | 1794526 | 4868 | 1852146 | 6.1% | 11.0% |
-| executeBatch | allowlist | 1 | yes | no | 18 | 10 | 1069529 | 388 | 1095969 | 3.6% | 6.5% |
-| requestPayouts | allowlist | 1 | yes | no | 18 | 20 | 3550584 | 9668 | 3644468 | 12.1% | 21.7% |
-| executeBatch | allowlist | 1 | yes | no | 18 | 20 | 2074971 | 708 | 2106507 | 7.0% | 12.5% |
-| requestPayouts | allowlist | 1 | yes | no | 18 | 40 | 7063122 | 19268 | 7229630 | 24.0% | 43.0% |
-| executeBatch | allowlist | 1 | yes | no | 18 | 40 | 4086721 | 1348 | 4128521 | 13.7% | 24.6% |
-| requestPayouts | allowlist | 2 | yes | no | 18 | 1 | 266904 | 676 | 292696 | 0.9% | 1.7% |
-| executeBatch | allowlist | 2 | yes | no | 18 | 1 | 200153 | 100 | 222009 | 0.7% | 1.3% |
-| requestPayouts | allowlist | 2 | yes | no | 18 | 10 | 2321412 | 6148 | 2387212 | 7.9% | 14.2% |
-| executeBatch | allowlist | 2 | yes | no | 18 | 10 | 1422491 | 388 | 1448919 | 4.8% | 8.6% |
-| requestPayouts | allowlist | 2 | yes | no | 18 | 20 | 4604520 | 12228 | 4714944 | 15.7% | 28.1% |
-| executeBatch | allowlist | 2 | yes | no | 18 | 20 | 2781445 | 708 | 2813029 | 9.3% | 16.7% |
-| requestPayouts | allowlist | 2 | yes | no | 18 | 40 | 9171655 | 24388 | 9371027 | 31.2% | 55.8% |
-| executeBatch | allowlist | 2 | yes | no | 18 | 40 | 5501877 | 1348 | 5543605 | 18.4% | 33.0% |
-| requestPayouts | allowlist | 4 | yes | no | 18 | 1 | 374481 | 932 | 401909 | 1.3% | 2.3% |
-| executeBatch | allowlist | 4 | yes | no | 18 | 1 | 270700 | 100 | 292556 | 0.9% | 1.7% |
-| requestPayouts | allowlist | 4 | yes | no | 18 | 10 | 3397147 | 8708 | 3479499 | 11.5% | 20.7% |
-| executeBatch | allowlist | 4 | yes | no | 18 | 10 | 2128850 | 388 | 2155314 | 7.1% | 12.8% |
-| requestPayouts | allowlist | 4 | yes | no | 18 | 20 | 6756512 | 17348 | 6899764 | 22.9% | 41.1% |
-| executeBatch | allowlist | 4 | yes | no | 18 | 20 | 4196114 | 708 | 4227662 | 14.0% | 25.1% |
-| requestPayouts | allowlist | 4 | yes | no | 18 | 40 | 13477720 | 34628 | 13742916 | 45.8% | 81.9% |
-| executeBatch | allowlist | 4 | yes | no | 18 | 40 | 8339048 | 1348 | 8380788 | 27.9% | 49.9% |
-| requestPayouts | attested | 1 | yes | no | 18 | 1 | 222041 | 772 | 248769 | 0.8% | 1.4% |
-| executeBatch | attested | 1 | yes | no | 18 | 1 | 162466 | 100 | 184322 | 0.6% | 1.0% |
-| requestPayouts | attested | 1 | yes | no | 18 | 10 | 1836748 | 7108 | 1912064 | 6.3% | 11.3% |
-| executeBatch | attested | 1 | yes | no | 18 | 10 | 1045329 | 388 | 1071769 | 3.5% | 6.3% |
-| requestPayouts | attested | 1 | yes | no | 18 | 20 | 3630980 | 14148 | 3760352 | 12.5% | 22.4% |
-| executeBatch | attested | 1 | yes | no | 18 | 20 | 2026475 | 708 | 2058023 | 6.8% | 12.2% |
-| requestPayouts | attested | 1 | yes | no | 18 | 40 | 7220116 | 28228 | 7457300 | 24.8% | 44.4% |
-| executeBatch | attested | 1 | yes | no | 18 | 40 | 3989342 | 1348 | 4031070 | 13.4% | 24.0% |
-| requestPayouts | attested | 2 | yes | no | 18 | 1 | 278550 | 1124 | 307874 | 1.0% | 1.8% |
-| executeBatch | attested | 2 | yes | no | 18 | 1 | 195049 | 100 | 216905 | 0.7% | 1.2% |
-| requestPayouts | attested | 2 | yes | no | 18 | 10 | 2401950 | 10628 | 2503130 | 8.3% | 14.9% |
-| executeBatch | attested | 2 | yes | no | 18 | 10 | 1371307 | 388 | 1397735 | 4.6% | 8.3% |
-| requestPayouts | attested | 2 | yes | no | 18 | 20 | 4761522 | 21188 | 4942454 | 16.4% | 29.4% |
-| executeBatch | attested | 2 | yes | no | 18 | 20 | 2678754 | 708 | 2710338 | 9.0% | 16.1% |
-| requestPayouts | attested | 2 | yes | no | 18 | 40 | 9482312 | 42308 | 9822352 | 32.7% | 58.5% |
-| executeBatch | attested | 2 | yes | no | 18 | 40 | 5295200 | 1348 | 5336940 | 17.7% | 31.8% |
-| requestPayouts | attested | 4 | yes | no | 18 | 1 | 393822 | 1828 | 428338 | 1.4% | 2.5% |
-| executeBatch | attested | 4 | yes | no | 18 | 1 | 260217 | 100 | 282073 | 0.9% | 1.6% |
-| requestPayouts | attested | 4 | yes | no | 18 | 10 | 3554313 | 17668 | 3707173 | 12.3% | 22.0% |
-| executeBatch | attested | 4 | yes | no | 18 | 10 | 2023501 | 388 | 2049953 | 6.8% | 12.2% |
-| requestPayouts | attested | 4 | yes | no | 18 | 20 | 7067224 | 35268 | 7351708 | 24.5% | 43.8% |
-| executeBatch | attested | 4 | yes | no | 18 | 20 | 3984252 | 708 | 4015800 | 13.3% | 23.9% |
-| requestPayouts | attested | 4 | yes | no | 18 | 40 | 14096508 | 70468 | 14644096 | 48.8% | 87.2% |
-| executeBatch | attested | 4 | yes | no | 18 | 40 | 7910658 | 1348 | 7952386 | 26.5% | 47.3% |
-| requestPayouts | both | 1 | yes | no | 18 | 1 | 225036 | 772 | 251764 | 0.8% | 1.5% |
-| executeBatch | both | 1 | yes | no | 18 | 1 | 165154 | 100 | 187010 | 0.6% | 1.1% |
-| requestPayouts | both | 1 | yes | no | 18 | 10 | 1866676 | 7108 | 1942040 | 6.4% | 11.5% |
-| executeBatch | both | 1 | yes | no | 18 | 10 | 1072249 | 388 | 1098701 | 3.6% | 6.5% |
-| requestPayouts | both | 1 | yes | no | 18 | 20 | 3691130 | 14148 | 3820466 | 12.7% | 22.7% |
-| executeBatch | both | 1 | yes | no | 18 | 20 | 2080411 | 708 | 2111959 | 7.0% | 12.5% |
-| requestPayouts | both | 1 | yes | no | 18 | 40 | 7340507 | 28228 | 7577643 | 25.2% | 45.1% |
-| executeBatch | both | 1 | yes | no | 18 | 40 | 4097601 | 1348 | 4139341 | 13.7% | 24.6% |
-| requestPayouts | both | 2 | yes | no | 18 | 1 | 284541 | 1124 | 313853 | 1.0% | 1.8% |
-| executeBatch | both | 2 | yes | no | 18 | 1 | 200425 | 100 | 222281 | 0.7% | 1.3% |
-| requestPayouts | both | 2 | yes | no | 18 | 10 | 2461860 | 10628 | 2563052 | 8.5% | 15.2% |
-| executeBatch | both | 2 | yes | no | 18 | 10 | 1425211 | 388 | 1451675 | 4.8% | 8.6% |
-| requestPayouts | both | 2 | yes | no | 18 | 20 | 4882016 | 21188 | 5062984 | 16.8% | 30.1% |
-| executeBatch | both | 2 | yes | no | 18 | 20 | 2786885 | 708 | 2818433 | 9.3% | 16.7% |
-| requestPayouts | both | 2 | yes | no | 18 | 40 | 9724176 | 42308 | 10064324 | 33.5% | 59.9% |
-| executeBatch | both | 2 | yes | no | 18 | 40 | 5512757 | 1348 | 5554533 | 18.5% | 33.1% |
-| requestPayouts | both | 4 | yes | no | 18 | 1 | 405785 | 1828 | 440301 | 1.4% | 2.6% |
-| executeBatch | both | 4 | yes | no | 18 | 1 | 270972 | 100 | 292828 | 0.9% | 1.7% |
-| requestPayouts | both | 4 | yes | no | 18 | 10 | 3674570 | 17668 | 3827502 | 12.7% | 22.8% |
-| executeBatch | both | 4 | yes | no | 18 | 10 | 2131570 | 388 | 2158022 | 7.1% | 12.8% |
-| requestPayouts | both | 4 | yes | no | 18 | 20 | 7308756 | 35268 | 7593180 | 25.3% | 45.2% |
-| executeBatch | both | 4 | yes | no | 18 | 20 | 4201554 | 708 | 4233126 | 14.1% | 25.2% |
-| requestPayouts | both | 4 | yes | no | 18 | 40 | 14583749 | 70468 | 15131493 | 50.4% | 90.1% |
-| executeBatch | both | 4 | yes | no | 18 | 40 | 8349928 | 1348 | 8391668 | 27.9% | 50.0% |
-| requestPayouts | both | 1 | yes | yes | 18 | 1 | 224831 | 772 | 251667 | 0.8% | 1.5% |
-| executeBatch | both | 1 | yes | yes | 18 | 1 | 165154 | 100 | 187010 | 0.6% | 1.1% |
-| requestPayouts | both | 1 | yes | yes | 18 | 10 | 1864686 | 7108 | 1941118 | 6.4% | 11.5% |
-| executeBatch | both | 1 | yes | yes | 18 | 10 | 1072249 | 388 | 1098713 | 3.6% | 6.5% |
-| requestPayouts | both | 1 | yes | yes | 18 | 20 | 3686990 | 14148 | 3818522 | 12.7% | 22.7% |
-| executeBatch | both | 1 | yes | yes | 18 | 20 | 2080411 | 708 | 2111959 | 7.0% | 12.5% |
-| requestPayouts | both | 1 | yes | yes | 18 | 40 | 7332407 | 28228 | 7574055 | 25.2% | 45.1% |
-| executeBatch | both | 1 | yes | yes | 18 | 40 | 4097601 | 1348 | 4139353 | 13.7% | 24.6% |
-| requestPayouts | both | 2 | yes | yes | 18 | 1 | 284131 | 1124 | 313671 | 1.0% | 1.8% |
-| executeBatch | both | 2 | yes | yes | 18 | 1 | 200425 | 100 | 222281 | 0.7% | 1.3% |
-| requestPayouts | both | 2 | yes | yes | 18 | 10 | 2457780 | 10628 | 2561048 | 8.5% | 15.2% |
-| executeBatch | both | 2 | yes | yes | 18 | 10 | 1425211 | 388 | 1451663 | 4.8% | 8.6% |
-| requestPayouts | both | 2 | yes | yes | 18 | 20 | 4873796 | 21188 | 5059060 | 16.8% | 30.1% |
-| executeBatch | both | 2 | yes | yes | 18 | 20 | 2786885 | 708 | 2818433 | 9.3% | 16.7% |
-| requestPayouts | both | 2 | yes | yes | 18 | 40 | 9707736 | 42308 | 10056296 | 33.5% | 59.9% |
-| executeBatch | both | 2 | yes | yes | 18 | 40 | 5512757 | 1348 | 5554509 | 18.5% | 33.1% |
-| requestPayouts | both | 4 | yes | yes | 18 | 1 | 404925 | 1828 | 439837 | 1.4% | 2.6% |
-| executeBatch | both | 4 | yes | yes | 18 | 1 | 270972 | 100 | 292828 | 0.9% | 1.7% |
-| requestPayouts | both | 4 | yes | yes | 18 | 10 | 3666430 | 17668 | 3823730 | 12.7% | 22.7% |
-| executeBatch | both | 4 | yes | yes | 18 | 10 | 2131570 | 388 | 2158022 | 7.1% | 12.8% |
-| requestPayouts | both | 4 | yes | yes | 18 | 20 | 7292396 | 35268 | 7585724 | 25.2% | 45.2% |
-| executeBatch | both | 4 | yes | yes | 18 | 20 | 4201554 | 708 | 4233126 | 14.1% | 25.2% |
-| requestPayouts | both | 4 | yes | yes | 18 | 40 | 14550969 | 70468 | 15116161 | 50.3% | 90.0% |
-| executeBatch | both | 4 | yes | yes | 18 | 40 | 8349928 | 1348 | 8391716 | 27.9% | 50.0% |
-| requestPayouts | allowlist | 1 | yes | no | 6 | 1 | 214211 | 548 | 239059 | 0.7% | 1.4% |
-| executeBatch | allowlist | 1 | yes | no | 6 | 1 | 164882 | 100 | 186726 | 0.6% | 1.1% |
-| requestPayouts | allowlist | 1 | yes | no | 6 | 10 | 1794526 | 4868 | 1851066 | 6.1% | 11.0% |
-| executeBatch | allowlist | 1 | yes | no | 6 | 10 | 1069529 | 388 | 1095969 | 3.6% | 6.5% |
-| requestPayouts | allowlist | 1 | yes | no | 6 | 20 | 3550584 | 9668 | 3642308 | 12.1% | 21.7% |
-| executeBatch | allowlist | 1 | yes | no | 6 | 20 | 2074971 | 708 | 2106507 | 7.0% | 12.5% |
-| requestPayouts | allowlist | 1 | yes | no | 6 | 40 | 7063122 | 19268 | 7225310 | 24.0% | 43.0% |
-| executeBatch | allowlist | 1 | yes | no | 6 | 40 | 4086721 | 1348 | 4128521 | 13.7% | 24.6% |
-| requestPayouts | allowlist | 2 | yes | no | 6 | 1 | 266904 | 676 | 292552 | 0.9% | 1.7% |
-| executeBatch | allowlist | 2 | yes | no | 6 | 1 | 200153 | 100 | 222009 | 0.7% | 1.3% |
-| requestPayouts | allowlist | 2 | yes | no | 6 | 10 | 2321412 | 6148 | 2385772 | 7.9% | 14.2% |
-| executeBatch | allowlist | 2 | yes | no | 6 | 10 | 1422491 | 388 | 1448919 | 4.8% | 8.6% |
-| requestPayouts | allowlist | 2 | yes | no | 6 | 20 | 4604520 | 12228 | 4712064 | 15.7% | 28.0% |
-| executeBatch | allowlist | 2 | yes | no | 6 | 20 | 2781445 | 708 | 2813029 | 9.3% | 16.7% |
-| requestPayouts | allowlist | 2 | yes | no | 6 | 40 | 9171655 | 24388 | 9365267 | 31.2% | 55.8% |
-| executeBatch | allowlist | 2 | yes | no | 6 | 40 | 5501877 | 1348 | 5543605 | 18.4% | 33.0% |
-| requestPayouts | allowlist | 4 | yes | no | 6 | 1 | 374481 | 932 | 401681 | 1.3% | 2.3% |
-| executeBatch | allowlist | 4 | yes | no | 6 | 1 | 270700 | 100 | 292556 | 0.9% | 1.7% |
-| requestPayouts | allowlist | 4 | yes | no | 6 | 10 | 3397147 | 8708 | 3477219 | 11.5% | 20.7% |
-| executeBatch | allowlist | 4 | yes | no | 6 | 10 | 2128850 | 388 | 2155314 | 7.1% | 12.8% |
-| requestPayouts | allowlist | 4 | yes | no | 6 | 20 | 6756512 | 17348 | 6895204 | 22.9% | 41.0% |
-| executeBatch | allowlist | 4 | yes | no | 6 | 20 | 4196114 | 708 | 4227662 | 14.0% | 25.1% |
-| requestPayouts | allowlist | 4 | yes | no | 6 | 40 | 13477720 | 34628 | 13733796 | 45.7% | 81.8% |
-| executeBatch | allowlist | 4 | yes | no | 6 | 40 | 8339048 | 1348 | 8380788 | 27.9% | 49.9% |
-| requestPayouts | attested | 1 | yes | no | 6 | 1 | 222041 | 772 | 248661 | 0.8% | 1.4% |
-| executeBatch | attested | 1 | yes | no | 6 | 1 | 162466 | 100 | 184322 | 0.6% | 1.0% |
-| requestPayouts | attested | 1 | yes | no | 6 | 10 | 1836748 | 7108 | 1910984 | 6.3% | 11.3% |
-| executeBatch | attested | 1 | yes | no | 6 | 10 | 1045329 | 388 | 1071769 | 3.5% | 6.3% |
-| requestPayouts | attested | 1 | yes | no | 6 | 20 | 3630980 | 14148 | 3758192 | 12.5% | 22.4% |
-| executeBatch | attested | 1 | yes | no | 6 | 20 | 2026475 | 708 | 2058023 | 6.8% | 12.2% |
-| requestPayouts | attested | 1 | yes | no | 6 | 40 | 7220116 | 28228 | 7452980 | 24.8% | 44.4% |
-| executeBatch | attested | 1 | yes | no | 6 | 40 | 3989342 | 1348 | 4031070 | 13.4% | 24.0% |
-| requestPayouts | attested | 2 | yes | no | 6 | 1 | 278550 | 1124 | 307730 | 1.0% | 1.8% |
-| executeBatch | attested | 2 | yes | no | 6 | 1 | 195049 | 100 | 216905 | 0.7% | 1.2% |
-| requestPayouts | attested | 2 | yes | no | 6 | 10 | 2401950 | 10628 | 2501690 | 8.3% | 14.9% |
-| executeBatch | attested | 2 | yes | no | 6 | 10 | 1371307 | 388 | 1397735 | 4.6% | 8.3% |
-| requestPayouts | attested | 2 | yes | no | 6 | 20 | 4761522 | 21188 | 4939574 | 16.4% | 29.4% |
-| executeBatch | attested | 2 | yes | no | 6 | 20 | 2678754 | 708 | 2710338 | 9.0% | 16.1% |
-| requestPayouts | attested | 2 | yes | no | 6 | 40 | 9482312 | 42308 | 9816592 | 32.7% | 58.5% |
-| executeBatch | attested | 2 | yes | no | 6 | 40 | 5295200 | 1348 | 5336940 | 17.7% | 31.8% |
-| requestPayouts | attested | 4 | yes | no | 6 | 1 | 393822 | 1828 | 428110 | 1.4% | 2.5% |
-| executeBatch | attested | 4 | yes | no | 6 | 1 | 260217 | 100 | 282073 | 0.9% | 1.6% |
-| requestPayouts | attested | 4 | yes | no | 6 | 10 | 3554313 | 17668 | 3704893 | 12.3% | 22.0% |
-| executeBatch | attested | 4 | yes | no | 6 | 10 | 2023501 | 388 | 2049953 | 6.8% | 12.2% |
-| requestPayouts | attested | 4 | yes | no | 6 | 20 | 7067224 | 35268 | 7347148 | 24.4% | 43.7% |
-| executeBatch | attested | 4 | yes | no | 6 | 20 | 3984252 | 708 | 4015800 | 13.3% | 23.9% |
-| requestPayouts | attested | 4 | yes | no | 6 | 40 | 14096508 | 70468 | 14634976 | 48.7% | 87.2% |
-| executeBatch | attested | 4 | yes | no | 6 | 40 | 7910658 | 1348 | 7952386 | 26.5% | 47.3% |
-| requestPayouts | both | 1 | yes | no | 6 | 1 | 225036 | 772 | 251656 | 0.8% | 1.4% |
-| executeBatch | both | 1 | yes | no | 6 | 1 | 165154 | 100 | 187010 | 0.6% | 1.1% |
-| requestPayouts | both | 1 | yes | no | 6 | 10 | 1866676 | 7108 | 1940960 | 6.4% | 11.5% |
-| executeBatch | both | 1 | yes | no | 6 | 10 | 1072249 | 388 | 1098701 | 3.6% | 6.5% |
-| requestPayouts | both | 1 | yes | no | 6 | 20 | 3691130 | 14148 | 3818306 | 12.7% | 22.7% |
-| executeBatch | both | 1 | yes | no | 6 | 20 | 2080411 | 708 | 2111959 | 7.0% | 12.5% |
-| requestPayouts | both | 1 | yes | no | 6 | 40 | 7340507 | 28228 | 7573323 | 25.2% | 45.1% |
-| executeBatch | both | 1 | yes | no | 6 | 40 | 4097601 | 1348 | 4139341 | 13.7% | 24.6% |
-| requestPayouts | both | 2 | yes | no | 6 | 1 | 284541 | 1124 | 313709 | 1.0% | 1.8% |
-| executeBatch | both | 2 | yes | no | 6 | 1 | 200425 | 100 | 222281 | 0.7% | 1.3% |
-| requestPayouts | both | 2 | yes | no | 6 | 10 | 2461860 | 10628 | 2561612 | 8.5% | 15.2% |
-| executeBatch | both | 2 | yes | no | 6 | 10 | 1425211 | 388 | 1451675 | 4.8% | 8.6% |
-| requestPayouts | both | 2 | yes | no | 6 | 20 | 4882016 | 21188 | 5060104 | 16.8% | 30.1% |
-| executeBatch | both | 2 | yes | no | 6 | 20 | 2786885 | 708 | 2818433 | 9.3% | 16.7% |
-| requestPayouts | both | 2 | yes | no | 6 | 40 | 9724176 | 42308 | 10058564 | 33.5% | 59.9% |
-| executeBatch | both | 2 | yes | no | 6 | 40 | 5512757 | 1348 | 5554533 | 18.5% | 33.1% |
-| requestPayouts | both | 4 | yes | no | 6 | 1 | 405785 | 1828 | 440073 | 1.4% | 2.6% |
-| executeBatch | both | 4 | yes | no | 6 | 1 | 270972 | 100 | 292828 | 0.9% | 1.7% |
-| requestPayouts | both | 4 | yes | no | 6 | 10 | 3674570 | 17668 | 3825222 | 12.7% | 22.8% |
-| executeBatch | both | 4 | yes | no | 6 | 10 | 2131570 | 388 | 2158022 | 7.1% | 12.8% |
-| requestPayouts | both | 4 | yes | no | 6 | 20 | 7308756 | 35268 | 7588620 | 25.2% | 45.2% |
-| executeBatch | both | 4 | yes | no | 6 | 20 | 4201554 | 708 | 4233126 | 14.1% | 25.2% |
-| requestPayouts | both | 4 | yes | no | 6 | 40 | 14583749 | 70468 | 15122373 | 50.4% | 90.1% |
-| executeBatch | both | 4 | yes | no | 6 | 40 | 8349928 | 1348 | 8391668 | 27.9% | 50.0% |
-| requestPayouts | both | 1 | yes | yes | 6 | 1 | 224831 | 772 | 251559 | 0.8% | 1.4% |
-| executeBatch | both | 1 | yes | yes | 6 | 1 | 165154 | 100 | 187010 | 0.6% | 1.1% |
-| requestPayouts | both | 1 | yes | yes | 6 | 10 | 1864686 | 7108 | 1940038 | 6.4% | 11.5% |
-| executeBatch | both | 1 | yes | yes | 6 | 10 | 1072249 | 388 | 1098713 | 3.6% | 6.5% |
-| requestPayouts | both | 1 | yes | yes | 6 | 20 | 3686990 | 14148 | 3816362 | 12.7% | 22.7% |
-| executeBatch | both | 1 | yes | yes | 6 | 20 | 2080411 | 708 | 2111959 | 7.0% | 12.5% |
-| requestPayouts | both | 1 | yes | yes | 6 | 40 | 7332407 | 28228 | 7569735 | 25.2% | 45.1% |
-| executeBatch | both | 1 | yes | yes | 6 | 40 | 4097601 | 1348 | 4139353 | 13.7% | 24.6% |
-| requestPayouts | both | 2 | yes | yes | 6 | 1 | 284131 | 1124 | 313527 | 1.0% | 1.8% |
-| executeBatch | both | 2 | yes | yes | 6 | 1 | 200425 | 100 | 222281 | 0.7% | 1.3% |
-| requestPayouts | both | 2 | yes | yes | 6 | 10 | 2457780 | 10628 | 2559608 | 8.5% | 15.2% |
-| executeBatch | both | 2 | yes | yes | 6 | 10 | 1425211 | 388 | 1451663 | 4.8% | 8.6% |
-| requestPayouts | both | 2 | yes | yes | 6 | 20 | 4873796 | 21188 | 5056180 | 16.8% | 30.1% |
-| executeBatch | both | 2 | yes | yes | 6 | 20 | 2786885 | 708 | 2818433 | 9.3% | 16.7% |
-| requestPayouts | both | 2 | yes | yes | 6 | 40 | 9707736 | 42308 | 10050536 | 33.5% | 59.9% |
-| executeBatch | both | 2 | yes | yes | 6 | 40 | 5512757 | 1348 | 5554509 | 18.5% | 33.1% |
-| requestPayouts | both | 4 | yes | yes | 6 | 1 | 404925 | 1828 | 439609 | 1.4% | 2.6% |
-| executeBatch | both | 4 | yes | yes | 6 | 1 | 270972 | 100 | 292828 | 0.9% | 1.7% |
-| requestPayouts | both | 4 | yes | yes | 6 | 10 | 3666430 | 17668 | 3821450 | 12.7% | 22.7% |
-| executeBatch | both | 4 | yes | yes | 6 | 10 | 2131570 | 388 | 2158022 | 7.1% | 12.8% |
-| requestPayouts | both | 4 | yes | yes | 6 | 20 | 7292396 | 35268 | 7581164 | 25.2% | 45.1% |
-| executeBatch | both | 4 | yes | yes | 6 | 20 | 4201554 | 708 | 4233126 | 14.1% | 25.2% |
-| requestPayouts | both | 4 | yes | yes | 6 | 40 | 14550969 | 70468 | 15107041 | 50.3% | 90.0% |
-| executeBatch | both | 4 | yes | yes | 6 | 40 | 8349928 | 1348 | 8391716 | 27.9% | 50.0% |
-| requestPayouts | allowlist | 1 | no | no | 6 | 1 | 214211 | 548 | 239035 | 0.7% | 1.4% |
-| executeBatch | allowlist | 1 | no | no | 6 | 1 | 137062 | 100 | 158906 | 0.5% | 0.9% |
-| requestPayouts | allowlist | 1 | no | no | 6 | 10 | 1794526 | 4868 | 1850826 | 6.1% | 11.0% |
-| executeBatch | allowlist | 1 | no | no | 6 | 10 | 1006275 | 388 | 1032715 | 3.4% | 6.1% |
-| requestPayouts | allowlist | 1 | no | no | 6 | 20 | 3550584 | 9668 | 3641828 | 12.1% | 21.7% |
-| executeBatch | allowlist | 1 | no | no | 6 | 20 | 1972244 | 708 | 2003780 | 6.6% | 11.9% |
-| requestPayouts | allowlist | 1 | no | no | 6 | 40 | 7063122 | 19268 | 7224350 | 24.0% | 43.0% |
-| executeBatch | allowlist | 1 | no | no | 6 | 40 | 3904756 | 1348 | 3946556 | 13.1% | 23.5% |
-| requestPayouts | both | 40 in all | 10 of 10 | yes | 18 | 10 | 3666350 | 17668 | 3823614 | 12.7% | 22.7% |
-| requestPayouts | both | 40 in all | 10 of 10 | no | 18 | 10 | 3674590 | 17668 | 3827534 | 12.7% | 22.8% |
-| requestPayouts | both | 18 in all | 0 of 10 | yes | 18 | 10 | 2339255 | 9924 | 2436527 | 8.1% | 14.5% |
-| executeBatch | both | 18 in all | 0 of 10 | yes | 18 | 10 | 1291327 | 388 | 1317755 | 4.3% | 7.8% |
-| requestPayouts | both | 9 in all | 9 of 9 | yes | 18 | 9 | 1682436 | 6404 | 1753352 | 5.8% | 10.4% |
-| executeBatch | both | 9 in all | 9 of 9 | yes | 18 | 9 | 971450 | 356 | 997402 | 3.3% | 5.9% |
-| requestPayouts | both | 16 in all | 2 of 4 | yes | 18 | 4 | 1491881 | 7108 | 1567449 | 5.2% | 9.3% |
-| executeBatch | both | 16 in all | 2 of 4 | yes | 18 | 4 | 883046 | 196 | 906438 | 3.0% | 5.4% |
-
-Largest batch with 30 percent headroom, against the 30M block gas limit and against the 2^24 Osaka transaction cap, fee on:
-
-| mode | legs | tags | decimals | requestPayouts | executeBatch |
-| --- | --- | --- | --- | --- | --- |
-| allowlist | 1 | no | 18 | 116 / 65 | 206 / 115 |
-| allowlist | 2 | no | 18 | 89 / 50 | 153 / 85 |
-| allowlist | 4 | no | 18 | 61 / 34 | 100 / 56 |
-| attested | 1 | no | 18 | 113 / 63 | 212 / 118 |
-| attested | 2 | no | 18 | 85 / 47 | 159 / 88 |
-| attested | 4 | no | 18 | 57 / 32 | 106 / 59 |
-| both | 1 | no | 18 | 111 / 62 | 206 / 115 |
-| both | 2 | no | 18 | 83 / 46 | 152 / 85 |
-| both | 4 | no | 18 | 55 / 31 | 100 / 56 |
-| both | 1 | yes | 18 | 111 / 62 | 206 / 115 |
-| both | 2 | yes | 18 | 83 / 46 | 152 / 85 |
-| both | 4 | yes | 18 | 55 / 31 | 100 / 56 |
-| allowlist | 1 | no | 6 | 116 / 65 | 206 / 115 |
-| allowlist | 2 | no | 6 | 90 / 50 | 153 / 85 |
-| allowlist | 4 | no | 6 | 61 / 34 | 100 / 56 |
-| attested | 1 | no | 6 | 113 / 63 | 212 / 118 |
-| attested | 2 | no | 6 | 85 / 47 | 159 / 88 |
-| attested | 4 | no | 6 | 57 / 32 | 106 / 59 |
-| both | 1 | no | 6 | 111 / 62 | 206 / 115 |
-| both | 2 | no | 6 | 83 / 46 | 152 / 85 |
-| both | 4 | no | 6 | 55 / 31 | 100 / 56 |
-| both | 1 | yes | 6 | 111 / 62 | 206 / 115 |
-| both | 2 | yes | 6 | 83 / 46 | 152 / 85 |
-| both | 4 | yes | 6 | 55 / 31 | 100 / 56 |

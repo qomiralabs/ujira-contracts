@@ -141,7 +141,7 @@ fn every_fixture_case_matches() {
         let client = AttestationParityClient::new(&b.env, &b.contract);
 
         // Digest parity: the contract's own digest for each leg equals the
-        // fixture's, which the off-chain signer and the Celo suite also use.
+        // fixture's, which the off-chain signer also uses.
         let atts = case["soroban"]["attestations"].as_array().unwrap();
         for (i, a) in atts.iter().enumerate() {
             if let (Some(d), Some(leg)) = (a["digest"].as_str(), b.legs.get(i as u32)) {
