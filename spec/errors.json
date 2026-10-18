@@ -1,0 +1,197 @@
+[
+  {
+    "name": "UNAUTHORIZED",
+    "code": 10,
+    "summary": "The caller does not hold a role this call allows"
+  },
+  {
+    "name": "ROLE_CONFLICT",
+    "code": 11,
+    "summary": "An address would hold two roles that must stay apart"
+  },
+  {
+    "name": "ROLE_SET_FULL",
+    "code": 12,
+    "summary": "A role set would exceed its bound"
+  },
+  {
+    "name": "MANDATE_REVOKED",
+    "code": 20,
+    "summary": "The mandate is revoked"
+  },
+  {
+    "name": "MANDATE_EXPIRED",
+    "code": 21,
+    "summary": "The mandate is expired"
+  },
+  {
+    "name": "MANDATE_PAUSED",
+    "code": 22,
+    "summary": "The mandate is paused"
+  },
+  {
+    "name": "ALREADY_PAUSED",
+    "code": 23,
+    "summary": "Pause while paused"
+  },
+  {
+    "name": "NOT_PAUSED",
+    "code": 24,
+    "summary": "Resume while not paused"
+  },
+  {
+    "name": "MANDATE_ACTIVE",
+    "code": 25,
+    "summary": "Sweep while the mandate is active"
+  },
+  {
+    "name": "PRINCIPAL_CHANGE_PENDING",
+    "code": 26,
+    "summary": "A third-party sweep while a principal change is proposed"
+  },
+  {
+    "name": "SWEEP_GRACE_PERIOD",
+    "code": 27,
+    "summary": "A third-party sweep within the grace after expiry"
+  },
+  {
+    "name": "AMOUNT_INVALID",
+    "code": 30,
+    "summary": "An amount outside its domain"
+  },
+  {
+    "name": "LEGS_INVALID",
+    "code": 31,
+    "summary": "Leg count, leg amount, zero address, tag form or duplicate destination"
+  },
+  {
+    "name": "LEGS_SUM_MISMATCH",
+    "code": 32,
+    "summary": "Legs do not sum to the total"
+  },
+  {
+    "name": "BATCH_INVALID",
+    "code": 33,
+    "summary": "Batch length or transfer budget out of bounds"
+  },
+  {
+    "name": "CONFIG_INVALID",
+    "code": 34,
+    "summary": "A configuration value or change is not allowed, including an attester key that is not 32 bytes or is 32 zero bytes"
+  },
+  {
+    "name": "REQUEST_DEADLINE_PASSED",
+    "code": 35,
+    "summary": "The request arrived at or after its deadline"
+  },
+  {
+    "name": "BUDGET_EXCEEDED",
+    "code": 40,
+    "summary": "The charge exceeds the remaining budget"
+  },
+  {
+    "name": "PAYMENT_CAP_EXCEEDED",
+    "code": 41,
+    "summary": "The charge exceeds the per-payment cap"
+  },
+  {
+    "name": "DAILY_CAP_EXCEEDED",
+    "code": 42,
+    "summary": "The total exceeds the recipient's daily headroom"
+  },
+  {
+    "name": "INSUFFICIENT_FUNDS",
+    "code": 43,
+    "summary": "The charge exceeds the free balance or the balance"
+  },
+  {
+    "name": "BUDGET_BELOW_RESERVED",
+    "code": 44,
+    "summary": "A new budget below what is already reserved or spent"
+  },
+  {
+    "name": "NOTHING_TO_SWEEP",
+    "code": 45,
+    "summary": "Sweep with a zero balance"
+  },
+  {
+    "name": "FEE_EXCEEDS_CAP",
+    "code": 46,
+    "summary": "The fee exceeds the fee cap for the total"
+  },
+  {
+    "name": "RECIPIENT_NOT_ALLOWED",
+    "code": 50,
+    "summary": "A leg destination is not on the allowlist for the recipient"
+  },
+  {
+    "name": "ATTESTATION_INVALID",
+    "code": 51,
+    "summary": "An attestation where none is allowed, the wrong number of attestations, a window longer than MAX_ATTESTATION_VALIDITY, or a signature that is not 64 bytes. A wrongly signed attestation is a host trap on Stellar, not this code (MANDATE-RECIPIENT-012)"
+  },
+  {
+    "name": "ATTESTATION_EXPIRED",
+    "code": 52,
+    "summary": "An attestation at or after its valid_until"
+  },
+  {
+    "name": "POLICY_CHANGED",
+    "code": 53,
+    "summary": "The mandate's policy epoch differs from the epoch the attestation was issued under: at request (MANDATE-RECIPIENT-019) or at execute (MANDATE-RECIPIENT-015)"
+  },
+  {
+    "name": "WRONG_RECIPIENT_MODE",
+    "code": 54,
+    "summary": "A call that the recipient mode does not use"
+  },
+  {
+    "name": "PAYOUT_ID_EXISTS",
+    "code": 60,
+    "summary": "The payout ID was already used"
+  },
+  {
+    "name": "PAYOUT_NOT_FOUND",
+    "code": 61,
+    "summary": "No payout with that ID"
+  },
+  {
+    "name": "PAYOUT_WRONG_STATUS",
+    "code": 62,
+    "summary": "The payout is not in a status this call accepts"
+  },
+  {
+    "name": "PAYOUT_LAPSED",
+    "code": 63,
+    "summary": "The payout is at or after its own expiry"
+  },
+  {
+    "name": "ALREADY_APPROVED",
+    "code": 64,
+    "summary": "A repeated approval or recovery vote"
+  },
+  {
+    "name": "AGENT_REMOVED",
+    "code": 65,
+    "summary": "The agent that requested the payout is no longer an agent"
+  },
+  {
+    "name": "ASSET_NOT_SUPPORTED",
+    "code": 70,
+    "summary": "The factory does not support the asset"
+  },
+  {
+    "name": "WRONG_ASSET",
+    "code": 71,
+    "summary": "Token recovery of the settlement asset"
+  },
+  {
+    "name": "TRANSFER_FAILED",
+    "code": 72,
+    "summary": "A token transfer out of the mandate failed"
+  },
+  {
+    "name": "INTERNAL_INVARIANT",
+    "code": 90,
+    "summary": "An arithmetic failure the rules make unreachable"
+  }
+]

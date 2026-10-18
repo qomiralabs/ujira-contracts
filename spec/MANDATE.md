@@ -2,7 +2,7 @@
 
 A mandate is a contract that holds a principal's settlement asset and lets agents pay recipients only inside limits the principal sets. This document is the single, language-agnostic definition of those rules. The Soroban contract in `soroban/` implements it, and the shared test vectors are written against it. When a contract and this document disagree, the contract is wrong. If an implementation for another chain is added, it must pass the same vectors, and wherever two implementations would behave differently on the same input, this document is wrong and must be fixed first.
 
-Status: draft for spec version 1. The machine-readable error table (`spec/errors.json`), the constants (`spec/constants.json`), the event encodings and the attestation digest format are added separately and must match this document.
+Status: draft for spec version 1. The machine-readable error table (`spec/errors.json`), the constants (`spec/constants.json`), the event encodings (`spec/EVENTS.md`) and the ID and attestation message byte layouts (`spec/ENCODING.md`) sit beside this document and must match it; `scripts/check-spec-ids.sh` checks that they do.
 
 Scope: spec version 1 is in force on Stellar only. Rules and text marked Celo or EVM are kept for reference and are not in force. An EVM chain added later needs a spec revision that defines its attestation scheme (for example secp256k1 with `ecrecover` over the same SHA-256 digest) and its bad-signature behaviour, and must not run `ATTESTED` or `BOTH` mandates until that revision exists. Under ed25519, `MANDATE-ROLE-018` could never match on an EVM chain, because an EVM address is not an ed25519 key.
 
@@ -36,6 +36,9 @@ The values in force on Stellar. A row marked Stellar only depends on Stellar sto
 | `MAX_EXECUTORS` | 4 | Size bound of `executors` |
 | `MAX_RECOVERY` | 10 | Size bound of `recovery` |
 | `MAX_ATTESTATION_VALIDITY` | 86400 | Longest window an attestation may be valid for |
+| `ATTESTER_KEY_BYTES` | 32 | Length of the attester's ed25519 public key |
+| `ATTESTATION_SIGNATURE_BYTES` | 64 | Length of an attestation's ed25519 signature |
+| `ATTESTATION_MESSAGE_BYTES` | 47 | Length of the signed attestation message: the 15-byte prefix and a 32-byte SHA-256 (`spec/ENCODING.md`) |
 | `MAX_FEE_BPS` | 100 | Ceiling on `max_fee_bps` (1 percent) |
 | `BPS_DENOMINATOR` | 10000 | Basis points per whole |
 | `PAYOUT_TTL_MIN` | 3600 | Shortest payout time to live (1 hour) |
@@ -67,7 +70,7 @@ Codes are append only and never reused. `0` means success and appears only in ba
 | 31 | `LEGS_INVALID` | Leg count, leg amount, zero address, tag form or duplicate destination |
 | 32 | `LEGS_SUM_MISMATCH` | Legs do not sum to the total |
 | 33 | `BATCH_INVALID` | Batch length or transfer budget out of bounds |
-| 34 | `CONFIG_INVALID` | A configuration value or change is not allowed |
+| 34 | `CONFIG_INVALID` | A configuration value or change is not allowed, including an attester key that is not 32 bytes or is 32 zero bytes |
 | 35 | `REQUEST_DEADLINE_PASSED` | The request arrived at or after its deadline |
 | 40 | `BUDGET_EXCEEDED` | The charge exceeds the remaining budget |
 | 41 | `PAYMENT_CAP_EXCEEDED` | The charge exceeds the per-payment cap |
@@ -605,7 +608,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 #### MANDATE-RECIPIENT-012 Signed by the attester
 
-- Precondition: a leg's attestation whose signature is not a valid ed25519 signature by the configured `attester` over the attestation message. The message is the 15 ASCII bytes `UJIRA/ATTEST/V2` followed by the SHA-256 of the attested fields, 47 bytes in all, so it can never equal a 32-byte transaction hash. The fields bind the chain, the mandate, `recipient_ref`, `country_policy_hash`, `policy_epoch`, `valid_until` and the destination pair; their byte format, specified separately, gives every field a fixed length or a length prefix, so no two field sequences encode to the same bytes. They do not include the amount or the fee. Version 1, never deployed, was a secp256k1 signature over a keccak digest with the prefix `UJIRA/ATTEST/V1`; the different prefix keeps the two versions apart. A future scheme, for example an EVM signature scheme on another chain, takes its own prefix such as `UJIRA/ATTEST/V3` and never reuses `UJIRA/ATTEST/V2`.
+- Precondition: a leg's attestation whose signature is not a valid ed25519 signature by the configured `attester` over the attestation message. The message is the 15 ASCII bytes `UJIRA/ATTEST/V2` followed by the SHA-256 of the attested fields, 47 bytes in all, so it can never equal a 32-byte transaction hash. The fields bind the chain, the mandate, `recipient_ref`, `country_policy_hash`, `policy_epoch`, `valid_until` and the destination pair; their byte format, in `spec/ENCODING.md`, gives every field a fixed length or a length prefix, so no two field sequences encode to the same bytes. They do not include the amount or the fee. Version 1, never deployed, was a secp256k1 signature over a keccak digest with the prefix `UJIRA/ATTEST/V1`; the different prefix keeps the two versions apart. A future scheme, for example an EVM signature scheme on another chain, takes its own prefix such as `UJIRA/ATTEST/V3` and never reuses `UJIRA/ATTEST/V2`.
 - Effect: the whole call fails with no state change. On Stellar the host's ed25519 verification traps on any failure and the contract cannot catch it, so the failure is a host trap rather than a code, and it rolls back a whole `request_payouts` batch. This is accepted: honest attestations can still fail, after an attester change or through an encoding mismatch between the request builder and the attester, but a policy change is caught per item first (`MANDATE-RECIPIENT-019`), and the operator simulates every attested request, isolates a trapping item and re-attests after a policy change before anything is submitted (`CHAINOPS-SUBMIT-003`). Reusing a valid attestation within its window grants nothing beyond what the agent may already do.
 - Error: host trap (Stellar)
 
