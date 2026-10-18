@@ -44,8 +44,17 @@
 # after a blank line. Two blank lines in a row are refused, every heading
 # needs a blank line before it.
 #
-# Character set: every file in the spec's directory and its subfolders may
-# hold only printable ASCII (0x20 to 0x7E) and LF. A carriage return, a tab,
+# Files: the check covers what git tracks under the spec's directory (git
+# ls-files --stage), so untracked files such as .DS_Store are ignored and
+# nothing in the working tree can hide a file from it. Every tracked entry must
+# be a regular file (mode 100644 or 100755); a symbolic link (120000), to a
+# file or a directory, or a submodule fails, as does a tracked path that is a
+# link or missing in the working tree. Every tracked path must be printable
+# ASCII. The spec file itself must be tracked. Without git, or outside a
+# repository, the check exits 2.
+#
+# Character set: every tracked file in the spec's directory and its subfolders
+# may hold only printable ASCII (0x20 to 0x7E) and LF. A carriage return, a tab,
 # any other control character, invalid UTF-8 or any other code point fails
 # with the file, line, column and code point, so nothing that renders like
 # ASCII (a look-alike hyphen or letter, a no break space, a bare carriage
@@ -99,12 +108,13 @@ charset_allow="MANDATE.md:2016"
 
 spec_dir=$(dirname "$spec")
 charset_status=0
-python3 -I - "$spec_dir" "$charset_allow" <<'PY' || charset_status=$?
+python3 -I - "$spec_dir" "$charset_allow" "$(basename "$spec")" <<'PY' || charset_status=$?
 import os
+import subprocess
 import sys
 import unicodedata
 
-root, allow_spec = sys.argv[1], sys.argv[2]
+root, allow_spec, spec_name = sys.argv[1], sys.argv[2], sys.argv[3]
 allowed = {}
 for item in allow_spec.split():
     name, _, points = item.partition(":")
@@ -120,44 +130,90 @@ def report(msg):
     problems += 1
 
 
+REGULAR = {b"100644", b"100755"}
+
+
+def show(path):
+    """A tracked path as text, with every byte outside printable ASCII escaped."""
+    return "".join(chr(c) if 0x20 <= c <= 0x7E and c != 0x5C else "\\x%02x" % c for c in path)
+
+
+def tracked_entries():
+    """Returns [(mode, path bytes)] for every entry git tracks under root."""
+    try:
+        out = subprocess.run(["git", "-C", root, "ls-files", "-z", "--stage", "--", "."],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    except OSError:
+        print("check-spec-ids: git is not available; the checks need the tracked file list", file=sys.stderr)
+        sys.exit(2)
+    if out.returncode != 0:
+        print("check-spec-ids: %s is not in a git repository; the checks need the tracked file list" % root, file=sys.stderr)
+        sys.exit(2)
+    seen = {}
+    for record in out.stdout.split(b"\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition(b"\t")
+        seen.setdefault(path, meta.split(b" ")[0])
+    return sorted((mode, path) for path, mode in seen.items())
+
+
+def check_text(rel, text):
+    ok = allowed.get(rel, set())
+    found = 0
+    line, col = 1, 0
+    for i, ch in enumerate(text):
+        col += 1
+        cp = ord(ch)
+        if ch == "\n":
+            line, col = line + 1, 0
+            continue
+        if 0x20 <= cp <= 0x7E or cp in ok:
+            continue
+        found += 1
+        if found > LIMIT:
+            continue
+        where = "%s:%d:%d" % (rel, line, col)
+        if ch == "\r" and text[i + 1:i + 2] == "\n":
+            report("%s:%d ends with a carriage return; line endings must be LF" % (rel, line))
+        elif ch == "\r":
+            report(where + " has a bare carriage return (U+000D); line endings must be LF")
+        elif 0xDC80 <= cp <= 0xDCFF:
+            report(where + " has the byte 0x%02X, which is not valid UTF-8" % (cp - 0xDC00))
+        else:
+            name = unicodedata.name(ch, "")
+            label = name if name else "(a control character)" if unicodedata.category(ch) == "Cc" else "(no name)"
+            report("%s has U+%04X %s; spec files hold printable ASCII and LF only" % (where, cp, label))
+    if found > LIMIT:
+        report("%s has %d more character(s) outside the allowed set" % (rel, found - LIMIT))
+
+
 def scan():
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames.sort()
-        for fname in sorted(filenames):
-            path = os.path.join(dirpath, fname)
-            rel = os.path.relpath(path, root)
-            if os.path.islink(path) or not os.path.isfile(path):
-                report(rel + " is not a regular file")
-                continue
-            with open(path, "rb") as fh:
-                text = fh.read().decode("utf-8", errors="surrogateescape")
-            ok = allowed.get(rel, set())
-            found = 0
-            line, col = 1, 0
-            for i, ch in enumerate(text):
-                col += 1
-                cp = ord(ch)
-                if ch == "\n":
-                    line, col = line + 1, 0
-                    continue
-                if 0x20 <= cp <= 0x7E or cp in ok:
-                    continue
-                found += 1
-                if found > LIMIT:
-                    continue
-                where = "%s:%d:%d" % (rel, line, col)
-                if ch == "\r" and text[i + 1:i + 2] == "\n":
-                    report("%s:%d ends with a carriage return; line endings must be LF" % (rel, line))
-                elif ch == "\r":
-                    report(where + " has a bare carriage return (U+000D); line endings must be LF")
-                elif 0xDC80 <= cp <= 0xDCFF:
-                    report(where + " has the byte 0x%02X, which is not valid UTF-8" % (cp - 0xDC00))
-                else:
-                    name = unicodedata.name(ch, "")
-                    label = name if name else "(a control character)" if unicodedata.category(ch) == "Cc" else "(no name)"
-                    report("%s has U+%04X %s; spec files hold printable ASCII and LF only" % (where, cp, label))
-            if found > LIMIT:
-                report("%s has %d more character(s) outside the allowed set" % (rel, found - LIMIT))
+    entries = tracked_entries()
+    if spec_name.encode() not in {path for _, path in entries}:
+        report(spec_name + " is not tracked by git; add it so these checks cover it")
+    for mode, path in entries:
+        bad = [i for i, c in enumerate(path) if not 0x20 <= c <= 0x7E]
+        if bad:
+            report("path %s has byte 0x%02X at position %d; spec paths hold printable ASCII only"
+                   % (show(path), path[bad[0]], bad[0] + 1))
+            continue
+        rel = path.decode("ascii")
+        if mode == b"120000":
+            report(rel + " is a symbolic link (mode 120000); spec files must be regular files")
+            continue
+        if mode not in REGULAR:
+            report("%s has mode %s; spec files must be regular files (100644 or 100755)" % (rel, mode.decode("ascii", "replace")))
+            continue
+        full = os.path.join(root, rel)
+        if os.path.islink(full):
+            report(rel + " is a symbolic link in the working tree; spec files must be regular files")
+            continue
+        if not os.path.isfile(full):
+            report(rel + " is tracked but missing from the working tree or not a regular file")
+            continue
+        with open(full, "rb") as fh:
+            check_text(rel, fh.read().decode("utf-8", errors="surrogateescape"))
 
 
 try:

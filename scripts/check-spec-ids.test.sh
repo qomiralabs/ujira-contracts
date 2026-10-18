@@ -74,10 +74,21 @@ valid_spec() {
 }
 
 # expect <case name> <exit code> <spec file> <flags> [text the output must contain]...
-# The checker reads every file in the spec's directory, so a spec written
-# straight into $work is copied into a directory of its own first; cases that
-# need sibling files build their own directory.
+# The checker reads every file git tracks in the spec's directory, so each
+# case runs in a git repository of its own: a spec written straight into
+# $work is copied into a new directory first, and a case directory that is
+# not yet a repository is initialised and every file in it added. Cases that
+# need sibling files or untracked files build their own directory.
 case_count=0
+
+# Makes $1 a git repository with every file in it added, unless it already is.
+make_repo() {
+  local dir=$1
+  [ -e "$dir/.git" ] && return
+  git -C "$dir" -c init.defaultBranch=main init -q
+  git -C "$dir" add -A
+}
+
 expect() {
   local name=$1 want=$2 file=$3 flags=$4
   shift 4
@@ -88,6 +99,7 @@ expect() {
     cp "$file" "$work/cases/$case_count/"
     file="$work/cases/$case_count/$(basename "$file")"
   fi
+  if [ -e "$file" ] && [ -z "${no_repo:-}" ]; then make_repo "$(dirname "$file")"; fi
   # shellcheck disable=SC2086 # flags is a deliberate word list
   out=$("$script" $flags "$file" 2>&1) || code=$?
   if [ "$code" -ne "$want" ]; then
@@ -604,7 +616,60 @@ expect "double vertical line outside MANDATE.md fails" 1 "$work/allowed-elsewher
 charset_case control-char "A bell$(printf '\007') here."
 expect "other control character" 1 "$work/control-char/MANDATE.md" "" "has U+0007 (a control character)"
 
-expect "unreadable file" 2 "$work/does-not-exist.md" ""
+# Tracked entries: only regular files, and only ASCII paths.
+charset_case dir-symlink ""
+mkdir -p "$work/dir-symlink-target"
+printf 'caf%s\n' "$(printf '\303\251')" >"$work/dir-symlink-target/hidden.json"
+ln -s ../dir-symlink-target "$work/dir-symlink/vectors"
+expect "directory symlink" 1 "$work/dir-symlink/MANDATE.md" "" "vectors is a symbolic link (mode 120000); spec files must be regular files"
+
+charset_case dot-symlink ""
+ln -s . "$work/dot-symlink/loop"
+expect "symlink to the spec directory itself" 1 "$work/dot-symlink/MANDATE.md" "" "loop is a symbolic link (mode 120000)"
+
+charset_case file-symlink ""
+ln -s MANDATE.md "$work/file-symlink/README.md"
+expect "file symlink" 1 "$work/file-symlink/MANDATE.md" "" "README.md is a symbolic link (mode 120000)"
+
+charset_case greek-name ""
+cp "$work/greek-name/MANDATE.md" "$work/greek-name/$(printf '\316\234')ANDATE.md"
+expect "non-ascii file name" 1 "$work/greek-name/MANDATE.md" "" "path \\xce\\x9cANDATE.md has byte 0xCE at position 1; spec paths hold printable ASCII only"
+
+charset_case control-name ""
+printf 'x\n' >"$work/control-name/a$(printf '\001')b.md"
+expect "control character in a file name" 1 "$work/control-name/MANDATE.md" "" "path a\\x01b.md has byte 0x01 at position 2"
+
+charset_case untracked-ds-store ""
+make_repo "$work/untracked-ds-store"
+printf '\000\001Bud1\377' >"$work/untracked-ds-store/.DS_Store"
+expect "untracked .DS_Store is ignored" 0 "$work/untracked-ds-store/MANDATE.md" "--check-order" "30 rule ID(s) defined"
+
+charset_case untracked-spec ""
+make_repo "$work/untracked-spec"
+git -C "$work/untracked-spec" rm -q --cached MANDATE.md
+expect "spec file not tracked" 1 "$work/untracked-spec/MANDATE.md" "" "MANDATE.md is not tracked by git"
+
+# Fail closed without git or outside a repository.
+charset_case no-repo ""
+no_repo=1 expect "not a git repository" 2 "$work/no-repo/MANDATE.md" "" "is not in a git repository"
+
+charset_case no-git ""
+mkdir -p "$work/bin-without-git"
+for tool in bash env dirname awk; do ln -s "$(command -v "$tool")" "$work/bin-without-git/$tool"; done
+ln -s "$(python3 -c 'import sys; print(sys.executable)')" "$work/bin-without-git/python3"
+make_repo "$work/no-git"
+code=0
+out=$(PATH="$work/bin-without-git" "$script" "$work/no-git/MANDATE.md" 2>&1) || code=$?
+if [ "$code" -eq 2 ] && printf '%s\n' "$out" | grep -qF "git is not available"; then
+  echo "ok: git not available"
+  passed=$((passed + 1))
+else
+  echo "FAIL: git not available: exit $code, want 2"
+  printf '%s\n' "$out" | sed 's/^/    /'
+  failures=$((failures + 1))
+fi
+
+no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
 echo
