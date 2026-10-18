@@ -46,7 +46,15 @@
 #
 # Files: the check covers what git tracks under the spec's directory (git
 # ls-files --stage), so untracked files such as .DS_Store are ignored and
-# nothing in the working tree can hide a file from it. Every tracked entry must
+# nothing in the working tree can hide a file from it. Content is read from
+# the staged blobs in the object store (git cat-file --batch), which is what a
+# commit and GitHub serve; the working tree copy must be byte for byte equal
+# to the blob, so stage an edit (git add) before running the check on it. No
+# attribute that converts content between blob and checkout may apply to a
+# spec path (working-tree-encoding, filter, eol, text, crlf, ident), whatever
+# file sets it, and no .gitattributes may be tracked inside the spec
+# directory. Inherited GIT_* variables are dropped before git is called, so
+# the check always reads the repository that holds the spec. Every tracked entry must
 # be a regular file (mode 100644 or 100755); a symbolic link (120000), to a
 # file or a directory, or a submodule fails, as does a tracked path that is a
 # link or missing in the working tree. Every tracked path must be printable
@@ -138,10 +146,18 @@ def show(path):
     return "".join(chr(c) if 0x20 <= c <= 0x7E and c != 0x5C else "\\x%02x" % c for c in path)
 
 
-def tracked_entries():
-    """Returns [(mode, path bytes)] for every entry git tracks under root."""
+# Every GIT_* variable is dropped so GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE or
+# injected config cannot point git at another repository or change its view.
+GIT_ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+# Attributes that change bytes between the blob and the checkout. An unset
+# value (for example "-text") converts nothing and is allowed.
+CONVERTING = {b"working-tree-encoding", b"filter", b"eol", b"text", b"crlf", b"ident"}
+
+
+def git(args, data=None):
     try:
-        out = subprocess.run(["git", "-C", root, "ls-files", "-z", "--stage", "--", "."],
+        out = subprocess.run(["git", "-C", root] + args, input=data, env=GIT_ENV,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     except OSError:
         print("check-spec-ids: git is not available; the checks need the tracked file list", file=sys.stderr)
@@ -149,13 +165,49 @@ def tracked_entries():
     if out.returncode != 0:
         print("check-spec-ids: %s is not in a git repository; the checks need the tracked file list" % root, file=sys.stderr)
         sys.exit(2)
+    return out.stdout
+
+
+def tracked_entries():
+    """Returns [(mode, object id, path bytes)] for every entry git tracks under root."""
     seen = {}
-    for record in out.stdout.split(b"\0"):
+    for record in git(["ls-files", "-z", "--stage", "--", "."]).split(b"\0"):
         if not record:
             continue
         meta, _, path = record.partition(b"\t")
-        seen.setdefault(path, meta.split(b" ")[0])
-    return sorted((mode, path) for path, mode in seen.items())
+        fields = meta.split(b" ")
+        seen.setdefault(path, (fields[0], fields[1]))
+    return sorted((mode, oid, path) for path, (mode, oid) in seen.items())
+
+
+def read_blobs(oids):
+    """Returns {object id: bytes} read from the object store."""
+    out = git(["cat-file", "--batch"], b"".join(o + b"\n" for o in oids))
+    blobs, pos = {}, 0
+    while pos < len(out):
+        end = out.index(b"\n", pos)
+        header = out[pos:end].split(b" ")
+        if len(header) != 3 or header[1] != b"blob":
+            print("check-spec-ids: cannot read object %s from git" % header[0].decode("ascii", "replace"), file=sys.stderr)
+            sys.exit(2)
+        size = int(header[2])
+        blobs[header[0]] = out[end + 1:end + 1 + size]
+        pos = end + 1 + size + 1
+    return blobs
+
+
+def converting_attributes(paths):
+    """Returns {path: [(attribute, value)]} for attributes that convert content."""
+    if not paths:
+        return {}
+    out = git(["check-attr", "-z", "-a", "--stdin"], b"".join(p + b"\0" for p in paths))
+    parts = out.split(b"\0")
+    found = {}
+    for i in range(0, len(parts) - 2, 3):
+        path, attr, value = parts[i], parts[i + 1], parts[i + 2]
+        if attr in CONVERTING and value != b"unset":
+            found.setdefault(path, []).append((attr.decode("ascii", "replace"), value.decode("ascii", "replace")))
+    return found
 
 
 def check_text(rel, text):
@@ -190,9 +242,10 @@ def check_text(rel, text):
 
 def scan():
     entries = tracked_entries()
-    if spec_name.encode() not in {path for _, path in entries}:
+    if spec_name.encode() not in {path for _, _, path in entries}:
         report(spec_name + " is not tracked by git; add it so these checks cover it")
-    for mode, path in entries:
+    regular = []
+    for mode, oid, path in entries:
         bad = [i for i, c in enumerate(path) if not 0x20 <= c <= 0x7E]
         if bad:
             report("path %s has byte 0x%02X at position %d; spec paths hold printable ASCII only"
@@ -205,6 +258,16 @@ def scan():
         if mode not in REGULAR:
             report("%s has mode %s; spec files must be regular files (100644 or 100755)" % (rel, mode.decode("ascii", "replace")))
             continue
+        if os.path.basename(rel) == ".gitattributes":
+            report(rel + " is a tracked attributes file inside the spec directory; spec files may not carry attributes")
+        regular.append((oid, path, rel))
+    attrs = converting_attributes([path for _, path, _ in regular])
+    blobs = read_blobs([oid for oid, _, _ in regular])
+    for oid, path, rel in regular:
+        for attr, value in attrs.get(path, []):
+            report("%s has attribute %s=%s, which converts content between the blob and the checkout" % (rel, attr, value))
+        blob = blobs[oid]
+        check_text(rel, blob.decode("utf-8", errors="surrogateescape"))
         full = os.path.join(root, rel)
         if os.path.islink(full):
             report(rel + " is a symbolic link in the working tree; spec files must be regular files")
@@ -213,7 +276,8 @@ def scan():
             report(rel + " is tracked but missing from the working tree or not a regular file")
             continue
         with open(full, "rb") as fh:
-            check_text(rel, fh.read().decode("utf-8", errors="surrogateescape"))
+            if fh.read() != blob:
+                report(rel + " in the working tree differs from the staged blob; stage the change (git add) or restore the file")
 
 
 try:

@@ -669,6 +669,77 @@ else
   failures=$((failures + 1))
 fi
 
+# Content comes from the git object store, and nothing may convert it on the
+# way to the working tree.
+charset_case utf7 ""
+git -C "$work/utf7" -c init.defaultBranch=main init -q
+printf 'MANDATE.md working-tree-encoding=UTF-7\n' >"$work/utf7/.git/info/attributes"
+printf 'See +BBw-ANDATE-ROLE-001.\n' >>"$work/utf7/MANDATE.md"
+git -C "$work/utf7" add -A
+expect "utf-7 working tree encoding" 1 "$work/utf7/MANDATE.md" "" "MANDATE.md has attribute working-tree-encoding=UTF-7" "has U+041C CYRILLIC CAPITAL LETTER EM"
+
+charset_case clean-filter ""
+printf 'readme\n' >"$work/clean-filter/README.md"
+git -C "$work/clean-filter" -c init.defaultBranch=main init -q
+git -C "$work/clean-filter" config filter.sneaky.clean cat
+git -C "$work/clean-filter" config filter.sneaky.smudge cat
+printf 'README.md filter=sneaky\n' >"$work/clean-filter/.git/info/attributes"
+git -C "$work/clean-filter" add -A
+expect "clean or smudge filter" 1 "$work/clean-filter/MANDATE.md" "" "README.md has attribute filter=sneaky"
+
+charset_case eol-crlf ""
+git -C "$work/eol-crlf" -c init.defaultBranch=main init -q
+printf '*.md eol=crlf\n' >"$work/eol-crlf/.git/info/attributes"
+git -C "$work/eol-crlf" add -A
+expect "eol=crlf attribute" 1 "$work/eol-crlf/MANDATE.md" "" "MANDATE.md has attribute eol=crlf"
+
+charset_case ident ""
+git -C "$work/ident" -c init.defaultBranch=main init -q
+printf 'MANDATE.md ident\n' >"$work/ident/.git/info/attributes"
+git -C "$work/ident" add -A
+expect "ident attribute" 1 "$work/ident/MANDATE.md" "" "MANDATE.md has attribute ident=set"
+
+charset_case tracked-attributes ""
+printf 'vectors/*.json -text\n' >"$work/tracked-attributes/.gitattributes"
+expect "tracked .gitattributes in the spec directory" 1 "$work/tracked-attributes/MANDATE.md" "" ".gitattributes is a tracked attributes file inside the spec directory"
+
+charset_case worktree-differs ""
+make_repo "$work/worktree-differs"
+printf 'An unstaged line.\n' >>"$work/worktree-differs/MANDATE.md"
+expect "working tree differs from the blob" 1 "$work/worktree-differs/MANDATE.md" "" "MANDATE.md in the working tree differs from the staged blob"
+
+charset_case blob-only ""
+make_repo "$work/blob-only"
+cp "$work/blob-only/MANDATE.md" "$work/blob-only-clean.md"
+printf 'See %sANDATE-ROLE-001.\n' "$(printf '\320\234')" >>"$work/blob-only/MANDATE.md"
+git -C "$work/blob-only" add MANDATE.md
+cp "$work/blob-only-clean.md" "$work/blob-only/MANDATE.md"
+expect "look-alike only in the blob" 1 "$work/blob-only/MANDATE.md" "" "has U+041C CYRILLIC CAPITAL LETTER EM" "differs from the staged blob"
+
+charset_case plain-attributes ""
+git -C "$work/plain-attributes" -c init.defaultBranch=main init -q
+printf '*.md -text\n' >"$work/plain-attributes/.git/info/attributes"
+git -C "$work/plain-attributes" add -A
+expect "attributes that convert nothing pass" 0 "$work/plain-attributes/MANDATE.md" "--check-order" "30 rule ID(s) defined"
+
+# Inherited git variables must not point the check at another repository.
+charset_case inherited-git-dir "See $(printf '\320\234')ANDATE-ROLE-001."
+make_repo "$work/inherited-git-dir"
+charset_case other-repo ""
+make_repo "$work/other-repo"
+git -C "$work/other-repo" mv MANDATE.md OTHER.md
+code=0
+out=$(GIT_DIR="$work/other-repo/.git" GIT_WORK_TREE="$work/other-repo" GIT_INDEX_FILE="$work/other-repo/.git/index" "$script" "$work/inherited-git-dir/MANDATE.md" 2>&1) || code=$?
+if [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF "has U+041C CYRILLIC CAPITAL LETTER EM" \
+  && ! printf '%s\n' "$out" | grep -qF "is not tracked by git"; then
+  echo "ok: inherited GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE are ignored"
+  passed=$((passed + 1))
+else
+  echo "FAIL: inherited git variables: exit $code, want 1"
+  printf '%s\n' "$out" | sed 's/^/    /'
+  failures=$((failures + 1))
+fi
+
 no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
