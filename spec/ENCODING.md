@@ -4,7 +4,7 @@ Byte layouts that the mandate, the off-chain services and the test vectors must 
 
 ## IDs
 
-All IDs are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain.
+`payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain. `leg_key` is 33 bytes, the `payout_id` and one byte of leg index; it is used only off chain, for delivery steps after settlement.
 
 ```
 payout_id     = SHA-256("ujira/payout/v1"    ‖ principal_uuid[16] ‖ project_uuid[16]
