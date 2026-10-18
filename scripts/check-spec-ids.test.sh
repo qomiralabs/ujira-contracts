@@ -893,6 +893,74 @@ for mode in mismatch truncate; do
   fi
 done
 
+# The machine-readable tables beside the spec must agree with it.
+tables_case() {
+  local dir=$1 extra=$2 errors=$3 constants=$4 events=$5
+  mkdir -p "$work/$dir"
+  valid_spec "$work/$dir/MANDATE.md" "$extra"
+  [ -n "$errors" ] && printf '%s\n' "$errors" >"$work/$dir/errors.json"
+  [ -n "$constants" ] && printf '%s\n' "$constants" >"$work/$dir/constants.json"
+  [ -n "$events" ] && printf '%s\n' "$events" >"$work/$dir/EVENTS.md"
+  return 0
+}
+good_errors='[
+  { "name": "UNAUTHORIZED", "code": 10, "summary": "The caller does not hold a role this call allows" },
+  { "name": "FEE_EXCEEDS_CAP", "code": 46, "summary": "The fee exceeds the fee cap" }
+]'
+good_constants='{ "constants": {}, "role_codes": { "AGENT": 1 }, "recovery_action_kinds": { "REVOKE": 1 } }'
+good_events='# Events
+
+| Event | Fields | Topic key |
+| --- | --- | --- |'
+
+tables_case tables-ok "" "$good_errors" "$good_constants" "$good_events"
+expect "tables that agree with the spec pass" 0 "$work/tables-ok/MANDATE.md" "--check-order" "error table, constants and events agree"
+
+tables_case tables-dup-code "" '[
+  { "name": "UNAUTHORIZED", "code": 10, "summary": "x" },
+  { "name": "FEE_EXCEEDS_CAP", "code": 10, "summary": "y" }
+]' "$good_constants" "$good_events"
+expect "duplicate error code" 1 "$work/tables-dup-code/MANDATE.md" "" "errors.json lists code 10 twice"
+
+tables_case tables-dup-constant "## Constants
+
+| Name | Value | Meaning |
+| --- | --- | --- |
+| \`MAX_LEGS\` | 4 | Legs |" "$good_errors" '{ "constants": { "MAX_LEGS": 4, "MAX_LEGS": 5 }, "role_codes": {}, "recovery_action_kinds": {} }' "$good_events"
+expect "duplicate constant" 1 "$work/tables-dup-constant/MANDATE.md" "" "constants.json has the key MAX_LEGS twice"
+
+tables_case tables-missing-error "" '[
+  { "name": "UNAUTHORIZED", "code": 10, "summary": "x" }
+]' "$good_constants" "$good_events"
+expect "rule cites unknown error" 1 "$work/tables-missing-error/MANDATE.md" "" "error FEE_EXCEEDS_CAP (46) is in the MANDATE.md error table but not in errors.json"
+
+tables_case tables-unknown-event "Effects emit \`ghost_event\` once." "$good_errors" "$good_constants" "$good_events"
+expect "rule cites unknown event" 1 "$work/tables-unknown-event/MANDATE.md" "" "event ghost_event is cited at line"
+
+tables_case tables-event-fields "### Event list
+
+| Event | Fields |
+| --- | --- |
+| \`paused\` | by |" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key |
+| --- | --- | --- |
+| \`paused\` | by, at | tenant_ref |"
+expect "event fields differ" 1 "$work/tables-event-fields/MANDATE.md" "" "event paused has fields by in MANDATE.md but by, at in EVENTS.md"
+
+tables_case tables-constant-value "## Constants
+
+| Name | Value | Meaning |
+| --- | --- | --- |
+| \`I128_MAX\` | 170141183460469231731687303715884105727 | Largest amount |" "$good_errors" '{ "constants": { "I128_MAX": "170141183460469231731687303715884105726" }, "role_codes": {}, "recovery_action_kinds": {} }' "$good_events"
+expect "constant value differs" 1 "$work/tables-constant-value/MANDATE.md" "" "constant I128_MAX is 170141183460469231731687303715884105727 in MANDATE.md but 170141183460469231731687303715884105726 in constants.json"
+
+tables_case tables-bad-json "" '[ { "name": "UNAUTHORIZED", "code": 10, ' "$good_constants" "$good_events"
+expect "malformed errors.json" 1 "$work/tables-bad-json/MANDATE.md" "" "errors.json is not valid JSON"
+
+tables_case tables-required "" "" "" ""
+expect "tables required" 1 "$work/tables-required/MANDATE.md" "--require-tables" "errors.json is missing"
+
 no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
