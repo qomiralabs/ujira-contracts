@@ -1,0 +1,22 @@
+# Code owners for this repository. Advisory only: on the current GitHub plan
+# branch protection cannot require code owner review, so these lines request
+# reviews but block nothing until it can (qomiralabs/ujira#229). When several
+# lines match a path, the last one wins.
+
+*  @Divine572
+
+/.github/         @Divine572
+/.gitignore       @Divine572
+/.gitleaks.toml   @Divine572
+/LICENSE          @Divine572
+/README.md        @Divine572
+/audits/          @Divine572
+/exploits/        @Divine572
+/scripts/         @Divine572
+/spikes/          @Divine572
+/tests/           @Divine572
+
+# The contracts and their spec are the security boundary: the contract owner
+# reviews every change to them.
+/soroban/         @Divine572
+/spec/            @Divine572
