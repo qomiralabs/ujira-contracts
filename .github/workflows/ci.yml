@@ -37,7 +37,8 @@ env:
 
 jobs:
   # Scans the whole history, not only the change, so it checks out every
-  # commit. A key that was committed and later deleted still fails.
+  # commit. A key that was committed and later deleted, or added in a merge
+  # resolution, still fails.
   secrets:
     name: secrets
     runs-on: ubuntu-24.04
@@ -64,7 +65,11 @@ jobs:
           [ "$version" = "${GITLEAKS_VERSION}" ] || { echo "gitleaks is $version, not ${GITLEAKS_VERSION}" >&2; exit 1; }
           echo "${RUNNER_TEMP}/gitleaks" >> "$GITHUB_PATH"
 
+      # On pull requests the rules come from the base branch, so a change
+      # cannot loosen the rules its own scan runs with. Empty on pushes.
       - name: Scan the full history for secrets
+        env:
+          SECRET_SCAN_BASE_REF: ${{ github.base_ref }}
         run: scripts/secret-scan.sh
 
       # Plants generated fake keys in throwaway repos and checks the scan
