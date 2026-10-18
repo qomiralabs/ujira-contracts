@@ -102,7 +102,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 | Guardian | Optional, up to `MAX_GUARDIANS`, for example an operator's pause key | Pause only |
 | Executor | Optional, up to `MAX_EXECUTORS`, for example the operator's key that pays gas | Execute approved payouts |
 | Recovery approver | Optional, up to `MAX_RECOVERY`, people the principal trusts to act if its key is lost | Alone: pause. With `recovery_threshold` votes: revoke, or rotate one agent. Nothing else |
-| Attester | A secp256k1 public key the principal chooses; never a caller | Sign recipient eligibility attestations |
+| Attester | An ed25519 public key the principal chooses; never a caller | Sign recipient eligibility attestations |
 | Anyone | Any address | Send tokens to the mandate, cancel lapsed payouts, sweep a closed mandate to the principal within the sweep guards |
 
 #### MANDATE-ROLE-001 Authority comes from role addresses only
@@ -207,10 +207,10 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 - Effect: refused. The zero address can never call, so as a role member it would count toward `len(approvers)` or `len(recovery)` without ever being able to approve or vote, and as a proposed principal it could not be told apart from no proposal. Unreachable on Stellar, which has no zero address; the vectors are Celo only with the unrepresentable-input skip reason.
 - Error: `CONFIG_INVALID`
 
-#### MANDATE-ROLE-018 The attester's address holds no role
+#### MANDATE-ROLE-018 The attester's key holds no role
 
-- Precondition: on Celo, when an attester is configured, the address derived from the `attester` key would equal the principal, `fee_address` or a member of `agents`, `approvers`, `guardians`, `executors` or `recovery`. Checked on every path that can create the overlap: at creation, in `set_attestation_policy`, `add_role`, `propose_principal`, `accept_principal` and `recovery_rotate_agent`.
-- Effect: refused, so an agent can never also be the key that vouches for its own destinations, whichever of the two is set first. On Stellar the attester is a secp256k1 key and every role is an address, so the overlap cannot be detected on chain; there the off-chain attester service and `CHAINOPS-CREATE-003` carry the guarantee, and the vectors for this rule are Celo only.
+- Precondition: when an attester is configured, the `attester` key equals the ed25519 public key of the principal, of `fee_address` or of a member of `agents`, `approvers`, `guardians`, `executors` or `recovery`, where that address is an account (`G`) address; a contract (`C`) address has no such key and never matches. Checked on every path that can create the overlap: at creation, in `set_attestation_policy`, `add_role`, `propose_principal`, `accept_principal` and `recovery_rotate_agent`.
+- Effect: refused, so an agent can never also be the key that vouches for its own destinations, whichever of the two is set first. The off-chain attester service and `CHAINOPS-CREATE-003` keep the same separation for keys the contract cannot compare.
 - Error: `ROLE_CONFLICT`
 
 #### MANDATE-ROLE-019 Every caller argument is authorized first
@@ -266,7 +266,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-RECOVERYSET-006 Rotation respects the role rules
 
 - Precondition: `recovery_rotate_agent(old, new)` where `new` is in `approvers`, `executors` or `recovery`, or is the principal or `fee_address`.
-- Effect: refused; the same separation as `add_role` (`MANDATE-ROLE-009`). On Celo the attester's address is a separate check (`MANDATE-ROLE-018`). A proposed principal that becomes an agent this way cannot then accept (`MANDATE-PRINCIPAL-006`).
+- Effect: refused; the same separation as `add_role` (`MANDATE-ROLE-009`). The attester key overlap is a separate check (`MANDATE-ROLE-018`). A proposed principal that becomes an agent this way cannot then accept (`MANDATE-PRINCIPAL-006`).
 - Error: `ROLE_CONFLICT`
 
 #### MANDATE-RECOVERYSET-007 One vote per member per action and epoch
@@ -323,7 +323,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 #### MANDATE-CONFIG-005 Attester presence and form
 
-- Precondition: a configuration where `recipient_mode` is `ATTESTED` or `BOTH` and `attester` is missing, or `ALLOWLIST` and `attester` is set; or an `attester` that is not 65 bytes starting with `0x04` (an uncompressed secp256k1 public key).
+- Precondition: a configuration where `recipient_mode` is `ATTESTED` or `BOTH` and `attester` is missing, or `ALLOWLIST` and `attester` is set; or an `attester` that is not exactly 32 bytes (an ed25519 public key) or is 32 zero bytes.
 - Effect: refused.
 - Error: `CONFIG_INVALID`
 
@@ -342,7 +342,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-008 set_attestation_policy
 
 - Precondition: `set_attestation_policy(attester, country_policy_hash)` while the mode is `ALLOWLIST`, or with an attester that breaks `MANDATE-CONFIG-005`.
-- Effect: refused. The attester address overlap is a separate check (`MANDATE-ROLE-018`). On success `attester` and `country_policy_hash` are replaced, `policy_epoch` increases by one, and `attestation_policy_set { attester, country_policy_hash, policy_epoch }` is emitted.
+- Effect: refused. The attester key overlap is a separate check (`MANDATE-ROLE-018`). On success `attester` and `country_policy_hash` are replaced, `policy_epoch` increases by one, and `attestation_policy_set { attester, country_policy_hash, policy_epoch }` is emitted.
 - Error: `WRONG_RECIPIENT_MODE`, `CONFIG_INVALID`
 
 #### MANDATE-CONFIG-009 Configuration changes are atomic
@@ -579,39 +579,39 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 #### MANDATE-RECIPIENT-008 Signature length
 
-- Precondition: a leg's attestation signature that is not exactly 65 bytes `r ‖ s ‖ v`. The signature is a variable-length byte string on both chains so this check can run.
+- Precondition: a leg's attestation signature that is not exactly 64 bytes (an ed25519 signature). The signature is a variable-length byte string so this check can run before verification.
 - Effect: refused.
 - Error: `ATTESTATION_INVALID`
 
-#### MANDATE-RECIPIENT-009 Recovery byte
+#### MANDATE-RECIPIENT-009 Retired: recovery byte
 
-- Precondition: a leg's attestation with `v` not 27 or 28.
-- Effect: refused. A lenient mapping (accepting 0 and 1) is not allowed on either chain.
-- Error: `ATTESTATION_INVALID`
+- Precondition: none.
+- Effect: retired in spec version 1 when attestations moved from secp256k1 to ed25519, which has no recovery byte; the ID is never reused.
+- Error: none
 
-#### MANDATE-RECIPIENT-010 r in range
+#### MANDATE-RECIPIENT-010 Retired: r in range
 
-- Precondition: a leg's attestation with `r` outside `[1, n - 1]`, where `n` is the secp256k1 group order.
-- Effect: refused.
-- Error: `ATTESTATION_INVALID`
+- Precondition: none.
+- Effect: retired in spec version 1 with the move to ed25519; ed25519 verification checks the signature encoding itself; the ID is never reused.
+- Error: none
 
-#### MANDATE-RECIPIENT-011 Low s
+#### MANDATE-RECIPIENT-011 Retired: low s
 
-- Precondition: a leg's attestation with `s` outside `[1, floor(n / 2)]`.
-- Effect: refused. Required on Celo because `ecrecover` accepts a high `s`, and on Stellar because the host would otherwise trap instead of returning a code.
-- Error: `ATTESTATION_INVALID`
+- Precondition: none.
+- Effect: retired in spec version 1 with the move to ed25519, whose verification on Stellar is strict and rejects a non-canonical signature; the ID is never reused.
+- Error: none
 
 #### MANDATE-RECIPIENT-012 Signed by the attester
 
-- Precondition: a leg's attestation whose signature over the attestation digest recovers to a key (Stellar) or address (Celo) other than the configured `attester`. The digest binds the chain, the mandate, `recipient_ref`, `country_policy_hash`, `valid_until` and the destination pair; its byte format is specified separately. It does not include the amount or the fee.
-- Effect: refused. Reusing an attestation within its window grants nothing beyond what the agent may already do.
-- Error: `ATTESTATION_INVALID`
+- Precondition: a leg's attestation whose signature is not a valid ed25519 signature by the configured `attester` over the attestation message. The message is the 15 ASCII bytes `UJIRA/ATTEST/V2` followed by the SHA-256 of the attested fields, 47 bytes in all, so it can never equal a 32-byte transaction hash. The fields bind the chain, the mandate, `recipient_ref`, `country_policy_hash`, `valid_until` and the destination pair; their byte format is specified separately. They do not include the amount or the fee.
+- Effect: the whole call fails with no state change. On Stellar the host's ed25519 verification traps on a bad signature and the contract cannot catch it, so the failure is a host trap rather than a code, and it aborts a whole `request_payouts` batch. Only the submitting agent can submit such a signature, and an honest attester never produces one. Reusing a valid attestation within its window grants nothing beyond what the agent may already do.
+- Error: host trap (Stellar)
 
-#### MANDATE-RECIPIENT-013 Unrecoverable signatures abort the call
+#### MANDATE-RECIPIENT-013 Retired: unrecoverable signatures
 
-- Precondition: a leg's attestation passes `MANDATE-RECIPIENT-008` to `MANDATE-RECIPIENT-011` but cannot be recovered (for example `r` is not on the curve, or recovery gives the point at infinity).
-- Effect: the whole call fails with no state change on both chains. On Stellar the host traps and the contract cannot catch it; on Celo, when `ecrecover` returns zero, the contract reverts the whole call, including a `request_payouts` batch, so both chains leave the same state. Only the submitting agent can build such a signature; an honest attester never produces one.
-- Error: `ATTESTATION_INVALID` (Celo revert); host trap (Stellar)
+- Precondition: none.
+- Effect: retired in spec version 1 with the move to ed25519; every invalid signature now aborts the call under the signature rule that replaced it; the ID is never reused.
+- Error: none
 
 #### MANDATE-RECIPIENT-014 Allowlist still holds at execute
 
@@ -844,7 +844,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-BATCH-002 Request batch runs per item
 
 - Precondition: `request_payouts` passed the caller, active and length checks.
-- Effect: each item in order runs the `request_payout` checks from the payout ID check onward against the state left by earlier items. A failing item writes nothing, emits `payout_request_rejected { payout_id, agent, code }`, and the batch continues; a duplicate ID later in the same batch fails with `PAYOUT_ID_EXISTS`. The call returns one `ItemResult { payout_id, code, status }` per item, with code 0 for success. The one exception is `MANDATE-RECIPIENT-013`: an unrecoverable signature aborts the whole call on both chains.
+- Effect: each item in order runs the `request_payout` checks from the payout ID check onward against the state left by earlier items. A failing item writes nothing, emits `payout_request_rejected { payout_id, agent, code }`, and the batch continues; a duplicate ID later in the same batch fails with `PAYOUT_ID_EXISTS`. The call returns one `ItemResult { payout_id, code, status }` per item, with code 0 for success. The one exception is `MANDATE-RECIPIENT-012`: an invalid attestation signature aborts the whole call.
 - Error: per item (items report their own codes)
 
 #### MANDATE-BATCH-003 Cancel batch
@@ -998,7 +998,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PRINCIPAL-001 Propose a new principal
 
 - Precondition: `propose_principal(proposed)` where `proposed` is in `agents`, `executors` or `recovery`, or is `fee_address`.
-- Effect: refused. On Celo the zero address and the attester's address are separate checks (`MANDATE-ROLE-017`, `MANDATE-ROLE-018`). On success `proposed_principal = proposed` and `principal_proposed { current, proposed }` is emitted. A new proposal replaces an earlier one.
+- Effect: refused. The attester key overlap is a separate check (`MANDATE-ROLE-018`), and on Celo so is the zero address (`MANDATE-ROLE-017`). On success `proposed_principal = proposed` and `principal_proposed { current, proposed }` is emitted. A new proposal replaces an earlier one.
 - Error: `ROLE_CONFLICT`
 
 #### MANDATE-PRINCIPAL-002 Accept the transfer
@@ -1155,7 +1155,7 @@ Authorization comes first in every call. Every call that takes a `caller` addres
 10. `agents` and `executors` are disjoint (MANDATE-ROLE-020).
 11. The principal is not a recovery approver (MANDATE-ROLE-021).
 12. The fee address is neither the principal nor in any role set (MANDATE-ROLE-008).
-13. On Celo, the attester's address is neither the principal, the fee address nor in any role set (MANDATE-ROLE-018).
+13. The attester's key matches neither the principal, the fee address nor any role account (MANDATE-ROLE-018).
 14. No role set exceeds its bound (MANDATE-ROLE-007).
 15. `approvals_required` fits the approvers (MANDATE-APPROVAL-002).
 16. `recovery_threshold` fits the recovery set (MANDATE-RECOVERYSET-002).
@@ -1188,19 +1188,16 @@ Checks 3 to 16 run in the factory before it deploys, and again in the constructo
 18. For each leg in order, in `ALLOWLIST` and `BOTH` modes, the destination pair is on the allowlist (MANDATE-RECIPIENT-005).
 19. For the same leg, in `ATTESTED` and `BOTH` modes, the attestation is not expired (MANDATE-RECIPIENT-006).
 20. For the same leg, the attestation window is at most `MAX_ATTESTATION_VALIDITY` (MANDATE-RECIPIENT-007).
-21. For the same leg, the signature is 65 bytes (MANDATE-RECIPIENT-008).
-22. For the same leg, `v` is 27 or 28 (MANDATE-RECIPIENT-009).
-23. For the same leg, `r` is in range (MANDATE-RECIPIENT-010).
-24. For the same leg, `s` is low (MANDATE-RECIPIENT-011).
-25. For the same leg, the signature recovers to the attester (MANDATE-RECIPIENT-012).
-26. The fee is within the fee cap (MANDATE-FEE-003).
-27. The charge is within the per-payment cap (MANDATE-PAYMENT-001).
-28. The charge is within the remaining budget (MANDATE-BUDGET-001).
-29. The total is within the recipient's daily headroom (MANDATE-DAILY-002).
-30. The charge is within the free balance (MANDATE-FUND-002).
+21. For the same leg, the signature is 64 bytes (MANDATE-RECIPIENT-008).
+22. For the same leg, the signature is the attester's ed25519 signature over the attestation message (MANDATE-RECIPIENT-012).
+23. The fee is within the fee cap (MANDATE-FEE-003).
+24. The charge is within the per-payment cap (MANDATE-PAYMENT-001).
+25. The charge is within the remaining budget (MANDATE-BUDGET-001).
+26. The total is within the recipient's daily headroom (MANDATE-DAILY-002).
+27. The charge is within the free balance (MANDATE-FUND-002).
 <!-- /check-order -->
 
-Checks 18 to 25 run for one leg before the next leg starts. Effects: `MANDATE-PAYOUT-007` and `MANDATE-APPROVAL-001`.
+Checks 18 to 22 run for one leg before the next leg starts. Effects: `MANDATE-PAYOUT-007` and `MANDATE-APPROVAL-001`.
 
 ### request_payouts
 
@@ -1407,7 +1404,7 @@ Effects: `MANDATE-RECOVER-003`, then the settlement balance check of `MANDATE-RE
 3. The role code is known and the account is not already in the set (MANDATE-ROLE-016).
 4. On Celo, the account is not the zero address (MANDATE-ROLE-017).
 5. The account would not break role separation (MANDATE-ROLE-009).
-6. On Celo, the account is not the attester's address (MANDATE-ROLE-018).
+6. The account's key is not the attester's key (MANDATE-ROLE-018).
 7. The set would not exceed its bound (MANDATE-ROLE-007).
 <!-- /check-order -->
 
@@ -1484,7 +1481,7 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 1. The caller is the principal (MANDATE-ROLE-015).
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The mode is not `ALLOWLIST` and the key is well formed (MANDATE-CONFIG-008).
-4. On Celo, the key's address holds no role (MANDATE-ROLE-018).
+4. The key matches no role account (MANDATE-ROLE-018).
 <!-- /check-order -->
 
 ### propose_principal
@@ -1495,7 +1492,7 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 1. The caller is the principal (MANDATE-ROLE-015).
 2. On Celo, the proposed address is not the zero address (MANDATE-ROLE-017).
 3. The proposed address holds no conflicting role (MANDATE-PRINCIPAL-001).
-4. On Celo, the proposed address is not the attester's address (MANDATE-ROLE-018).
+4. The proposed address's key is not the attester's key (MANDATE-ROLE-018).
 <!-- /check-order -->
 
 ### accept_principal
@@ -1679,7 +1676,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-ROLE-015` | Principal-only calls |
 | `MANDATE-ROLE-016` | Role change validation |
 | `MANDATE-ROLE-017` | No zero address as principal or role member |
-| `MANDATE-ROLE-018` | The attester's address holds no role |
+| `MANDATE-ROLE-018` | The attester's key holds no role |
 | `MANDATE-ROLE-019` | Every caller argument is authorized first |
 | `MANDATE-ROLE-020` | Agents and executors are disjoint |
 | `MANDATE-ROLE-021` | The principal is not a recovery approver |
@@ -1737,11 +1734,11 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-RECIPIENT-006` | Attestation not expired |
 | `MANDATE-RECIPIENT-007` | Attestation window |
 | `MANDATE-RECIPIENT-008` | Signature length |
-| `MANDATE-RECIPIENT-009` | Recovery byte |
-| `MANDATE-RECIPIENT-010` | r in range |
-| `MANDATE-RECIPIENT-011` | Low s |
+| `MANDATE-RECIPIENT-009` | Retired: recovery byte |
+| `MANDATE-RECIPIENT-010` | Retired: r in range |
+| `MANDATE-RECIPIENT-011` | Retired: low s |
 | `MANDATE-RECIPIENT-012` | Signed by the attester |
-| `MANDATE-RECIPIENT-013` | Unrecoverable signatures abort the call |
+| `MANDATE-RECIPIENT-013` | Retired: unrecoverable signatures |
 | `MANDATE-RECIPIENT-014` | Allowlist still holds at execute |
 | `MANDATE-RECIPIENT-015` | Attestation policy unchanged at execute |
 | `MANDATE-RECIPIENT-016` | Allowlist entry validation |
