@@ -68,6 +68,18 @@ jobs:
       - name: Test the invisible character check
         run: scripts/check-invisible-characters.test.sh
 
+      # Every rule in the mandate spec has a unique, indexed ID, and every
+      # numbered check in an operation's check order cites exactly one rule.
+      # Every file git tracks under spec/ is a regular file with an ASCII
+      # path and holds printable ASCII and LF only, plus a documented
+      # allowlist; that part uses git and the runner's python3 standard
+      # library.
+      - name: Check the mandate spec rule IDs
+        run: scripts/check-spec-ids.sh --check-order
+
+      - name: Test the spec ID check
+        run: scripts/check-spec-ids.test.sh
+
   # The attestation parity fixture is generated, and both chain suites trust
   # it. Rebuilding it from the reference signer must give the committed bytes,
   # so a hand edit or a signer change cannot drift from what the suites run.
