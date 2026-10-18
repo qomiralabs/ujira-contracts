@@ -3144,9 +3144,10 @@ regex = '''(?i)[\w.-]{0,50}?(?:zendesk)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,
 keywords = ["zendesk"]
 
 
-# spikes/attestation-parity/fixture.json holds two test private keys. Each is
+# Earlier versions of spikes/attestation-parity/fixture.json held two test
+# private keys, and the full history scan still reads them. Each is
 # keccak256 of a public label ("UJIRA/TEST-ONLY/S18/attester" and
-# "UJIRA/TEST-ONLY/S18/other-signer"), as the file's own warning says, so
+# "UJIRA/TEST-ONLY/S18/other-signer"), as the file's own warning said, so
 # anyone can derive them and they must never hold funds. Only those two exact
 # values, on a private_key line of that one file, under the generic rule, are
 # allowed. Any other value on that line, any other key or rule in the file,

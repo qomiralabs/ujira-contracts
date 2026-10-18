@@ -4,8 +4,8 @@
 extern crate std;
 
 use super::{
-    scalars_in_range, Attestation, AttestationParity, AttestationParityClient,
-    AttestationPolicySet, Error, Leg, HALF_ORDER, ORDER,
+    Attestation, AttestationParity, AttestationParityClient, AttestationPolicySet, Error, Leg,
+    MESSAGE_BYTES, PREFIX,
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde_json::Value;
@@ -17,7 +17,15 @@ use soroban_sdk::{
 };
 use std::{format, println, string::String, vec::Vec as StdVec};
 
+// The same contract compiled to wasm, so costs include the VM and not only
+// the host functions. scripts/check-wasm-fixtures.sh rebuilds it from this
+// crate and fails if it drifts.
+mod wasm {
+    soroban_sdk::contractimport!(file = "fixtures/attestation_parity.wasm");
+}
+
 const FIXTURE: &str = include_str!("../../../../spikes/attestation-parity/fixture.json");
+const PRIMARY_NETWORK: &str = "Test SDF Network ; September 2015";
 
 fn fixture() -> Value {
     serde_json::from_str(FIXTURE).expect("fixture is valid JSON")
@@ -62,6 +70,12 @@ fn env_at(now: u64, passphrase: &str) -> Env {
     env
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Build {
+    Native,
+    Wasm,
+}
+
 struct Built {
     env: Env,
     contract: Address,
@@ -71,29 +85,32 @@ struct Built {
 }
 
 /// Sets up one fixture case exactly as the fixture describes it and checks
-/// every encoding the digest depends on before anything is verified.
-fn build(case: &Value) -> Built {
-    let c = &case["soroban"];
-    let env = env_at(u64_of(case, "now"), s(c, "network_passphrase"));
+/// every encoding the fields depend on before anything is verified.
+fn build(case: &Value, how: Build) -> Built {
+    let env = env_at(u64_of(case, "now"), s(case, "network_passphrase"));
     assert_eq!(
         env.ledger().network_id().to_array(),
-        arr::<32>(s(c, "chain_tag")),
-        "chain tag"
+        arr::<32>(s(case, "network_id")),
+        "network id"
     );
 
-    let contract = Address::from_str(&env, s(c, "mandate"));
-    let attester = BytesN::from_array(&env, &arr::<65>(s(case, "attester_public_key")));
+    let contract = Address::from_str(&env, s(case, "mandate"));
+    let attester = Bytes::from_slice(&env, &unhex(s(case, "attester_public_key")));
     let policy = BytesN::from_array(&env, &arr::<32>(s(case, "country_policy_hash")));
-    env.register_at(&contract, AttestationParity, (attester, policy));
+    let epoch = u64_of(case, "policy_epoch");
+    match how {
+        Build::Native => env.register_at(&contract, AttestationParity, (attester, policy, epoch)),
+        Build::Wasm => env.register_at(&contract, wasm::WASM, (attester, policy, epoch)),
+    };
     assert_eq!(
         contract.clone().to_xdr(&env),
-        Bytes::from_slice(&env, &unhex(s(c, "mandate_xdr"))),
+        Bytes::from_slice(&env, &unhex(s(case, "mandate_xdr"))),
         "mandate bytes"
     );
 
     let recipient_ref = BytesN::from_array(&env, &arr::<32>(s(case, "recipient_ref")));
     let mut legs = Vec::new(&env);
-    for l in c["legs"].as_array().unwrap() {
+    for l in case["legs"].as_array().unwrap() {
         let destination = MuxedAddress::from_str(&env, s(l, "destination"));
         assert_eq!(
             destination.address().to_xdr(&env),
@@ -113,9 +130,10 @@ fn build(case: &Value) -> Built {
     }
 
     let mut attestations = Vec::new(&env);
-    for a in c["attestations"].as_array().unwrap() {
+    for a in case["attestations"].as_array().unwrap() {
         attestations.push_back(Attestation {
             valid_until: u64_of(a, "valid_until"),
+            policy_epoch: u64_of(a, "policy_epoch"),
             signature: Bytes::from_slice(&env, &unhex(s(a, "signature"))),
         });
     }
@@ -128,69 +146,106 @@ fn build(case: &Value) -> Built {
     }
 }
 
+/// Checks one encoded block from the fixture on its own terms: the hash is
+/// the SHA-256 of the fields, and the message is the prefix and that hash.
+fn check_encoded(name: &str, e: &Value) -> StdVec<u8> {
+    let fields = unhex(s(e, "fields"));
+    let hash: [u8; 32] = Sha256::digest(&fields).into();
+    assert_eq!(
+        hash,
+        arr::<32>(s(e, "fields_sha256")),
+        "{name}: fields hash"
+    );
+    let message = unhex(s(e, "message"));
+    assert_eq!(
+        message.len(),
+        MESSAGE_BYTES as usize,
+        "{name}: message length"
+    );
+    assert_eq!(&message[..15], PREFIX, "{name}: message prefix");
+    assert_eq!(&message[15..], hash, "{name}: message hash");
+    message
+}
+
 #[test]
 fn every_fixture_case_matches() {
     let fx = fixture();
     let cases = fx["cases"].as_array().unwrap();
-    assert!(cases.len() >= 40, "fixture lost cases");
+    assert!(cases.len() >= 45, "fixture lost cases");
     let mut report = String::new();
 
-    for case in cases {
-        let name = s(case, "name");
-        let b = build(case);
-        let client = AttestationParityClient::new(&b.env, &b.contract);
+    for how in [Build::Native, Build::Wasm] {
+        for case in cases {
+            let name = s(case, "name");
+            let b = build(case, how);
+            let client = AttestationParityClient::new(&b.env, &b.contract);
 
-        // Digest parity: the contract's own digest for each leg equals the
-        // fixture's, which the off-chain signer also uses.
-        let atts = case["soroban"]["attestations"].as_array().unwrap();
-        for (i, a) in atts.iter().enumerate() {
-            if let (Some(d), Some(leg)) = (a["digest"].as_str(), b.legs.get(i as u32)) {
-                let got = client.digest(
+            // Encoding parity: the contract's own fields and message for each
+            // leg equal the fixture's, which the off-chain signer also builds.
+            let atts = case["attestations"].as_array().unwrap();
+            for (i, a) in atts.iter().enumerate() {
+                check_encoded(name, &a["signed"]);
+                let (Some(leg), false) = (b.legs.get(i as u32), a["checked"].is_null()) else {
+                    assert!(
+                        a["checked"].is_null(),
+                        "{name}: leg {i} and its checked block disagree"
+                    );
+                    continue;
+                };
+                let message = check_encoded(name, &a["checked"]);
+                let args = (
                     &b.recipient_ref,
                     &leg.destination,
                     &u64_of(a, "valid_until"),
+                    &u64_of(a, "policy_epoch"),
                 );
-                assert_eq!(got.to_array(), arr::<32>(d), "{name}: digest of leg {i}");
+                assert_eq!(
+                    client.fields(args.0, args.1, args.2, args.3),
+                    Bytes::from_slice(&b.env, &unhex(s(&a["checked"], "fields"))),
+                    "{name}: fields of leg {i}"
+                );
+                assert_eq!(
+                    client.message(args.0, args.1, args.2, args.3),
+                    Bytes::from_slice(&b.env, &message),
+                    "{name}: message of leg {i}"
+                );
+            }
+
+            let expect = s(case, "expect");
+            let calls = case["calls"].as_u64().unwrap();
+            for call in 0..calls {
+                let got = client.try_verify(&b.recipient_ref, &b.legs, &b.attestations);
+                let ok = match expect {
+                    "ok" => got == Ok(Ok(())),
+                    "HOST_TRAP" => got == Err(Err(InvokeError::Abort)),
+                    "ATTESTATION_INVALID" => got == Err(Ok(Error::AttestationInvalid)),
+                    "ATTESTATION_EXPIRED" => got == Err(Ok(Error::AttestationExpired)),
+                    "POLICY_CHANGED" => got == Err(Ok(Error::PolicyChanged)),
+                    other => panic!("{name}: unknown expectation {other}"),
+                };
+                assert!(ok, "{name} call {call}: expected {expect}, got {got:?}");
+            }
+            if how == Build::Native {
+                report.push_str(&format!("{name}: {expect}\n"));
             }
         }
-
-        let expect = s(case, "expect");
-        let abort = case["soroban_host_abort"].as_bool().unwrap();
-        let calls = case["calls"].as_u64().unwrap();
-        for call in 0..calls {
-            let got = client.try_verify(&b.recipient_ref, &b.legs, &b.attestations);
-            let ok = match (expect, abort) {
-                ("ok", false) => got == Ok(Ok(())),
-                (_, true) => got == Err(Err(InvokeError::Abort)),
-                ("ATTESTATION_INVALID", false) => got == Err(Ok(Error::AttestationInvalid)),
-                ("ATTESTATION_EXPIRED", false) => got == Err(Ok(Error::AttestationExpired)),
-                (other, _) => panic!("{name}: unknown expectation {other}"),
-            };
-            assert!(
-                ok,
-                "{name} call {call}: expected {expect} (host abort {abort}), got {got:?}"
-            );
-        }
-        report.push_str(&format!(
-            "{name}: {expect}{}\n",
-            if abort { " (host abort)" } else { "" }
-        ));
     }
     println!("{report}");
 }
 
 /// A trap is not a contract error, so the host's own error is checked too:
-/// the abort cases must fail as invalid crypto input and nothing else.
+/// every trap case must fail in ed25519 verification and nowhere else.
 #[test]
-fn host_abort_cases_fail_in_recovery() {
+fn trap_cases_fail_in_ed25519_verification() {
     let fx = fixture();
     let mut seen = 0;
     for case in fx["cases"].as_array().unwrap() {
-        if !case["soroban_host_abort"].as_bool().unwrap() {
+        if s(case, "expect") != "HOST_TRAP" {
             continue;
         }
         seen += 1;
-        let b = build(case);
+        let name = s(case, "name");
+        let b = build(case, Build::Native);
         let args = (
             b.recipient_ref.clone(),
             b.legs.clone(),
@@ -206,184 +261,204 @@ fn host_abort_cases_fail_in_recovery() {
         // generic context error; the diagnostic log keeps the real cause.
         assert!(
             matches!(got, Err(Ok(e)) if !e.is_type(ScErrorType::Contract)),
-            "{}: {got:?}",
-            s(case, "name")
+            "{name}: {got:?}"
         );
         let events = format!("{:?}", b.env.host().get_diagnostic_events().unwrap());
         assert!(
             events.contains("Error(Crypto(InvalidInput))"),
-            "{}: not a crypto error",
-            s(case, "name")
+            "{name}: not a crypto error"
         );
         assert!(
-            events.contains("ECDSA-secp256k1 signature recovery failed"),
-            "{}: wrong trap",
-            s(case, "name")
+            events.contains("failed ED25519 verification"),
+            "{name}: trapped somewhere other than ed25519 verification"
         );
     }
-    assert!(seen >= 2, "fixture lost its host abort cases");
+    assert!(seen >= 15, "fixture lost its trap cases");
 }
 
+/// The keys are public by construction: each one is the SHA-256 of the label
+/// the fixture names, and an independent ed25519 implementation agrees with
+/// every signature the fixture expects to verify.
 #[test]
-fn half_order_boundary() {
-    let one = {
-        let mut b = [0u8; 32];
-        b[31] = 1;
-        b
-    };
-    let mut half_plus_one = HALF_ORDER;
-    half_plus_one[31] += 1;
-    let mut order_minus_one = ORDER;
-    order_minus_one[31] -= 1;
+fn keys_come_from_their_labels() {
+    let fx = fixture();
+    let mut signers = StdVec::new();
+    for name in ["attester", "other_signer"] {
+        let k = &fx["keys"][name];
+        let seed = s(k, "seed");
+        let label = seed
+            .strip_prefix("sha256(\"")
+            .and_then(|r| r.strip_suffix("\")"))
+            .unwrap_or_else(|| panic!("{name}: seed is not sha256 of a label"));
+        assert!(label.starts_with("UJIRA/TEST-ONLY/"), "{name}: label");
+        let sk = SigningKey::from_bytes(&Sha256::digest(label.as_bytes()).into());
+        assert_eq!(
+            sk.verifying_key().to_bytes(),
+            arr::<32>(s(k, "public_key")),
+            "{name}: public key"
+        );
+        signers.push(sk);
+    }
+    assert_ne!(signers[0].verifying_key(), signers[1].verifying_key());
 
-    assert!(scalars_in_range(&one, &HALF_ORDER), "s = n/2 is low");
-    assert!(
-        !scalars_in_range(&one, &half_plus_one),
-        "s = n/2 + 1 is high"
-    );
-    assert!(
-        scalars_in_range(&order_minus_one, &one),
-        "r = n - 1 is in range"
-    );
-    assert!(!scalars_in_range(&ORDER, &one), "r = n is out of range");
-    assert!(!scalars_in_range(&[0; 32], &one), "r = 0");
-    assert!(!scalars_in_range(&one, &[0; 32]), "s = 0");
+    let attester = signers[0].verifying_key();
+    for case in fx["cases"].as_array().unwrap() {
+        if s(case, "expect") != "ok" {
+            continue;
+        }
+        for a in case["attestations"].as_array().unwrap() {
+            let message = check_encoded(s(case, "name"), &a["checked"]);
+            let sig = Signature::from_bytes(&arr::<64>(s(a, "signature")));
+            assert!(
+                attester.verify_strict(&message, &sig).is_ok(),
+                "{}: signature",
+                s(case, "name")
+            );
+            // ed25519 is deterministic, so signing again gives the same bytes.
+            assert_eq!(signers[0].sign(&message).to_bytes(), sig.to_bytes());
+        }
+    }
 }
 
 #[test]
 fn constructor_emits_policy() {
-    let env = env_at(1_767_225_600, "Test SDF Network ; September 2015");
-    let attester = BytesN::from_array(
-        &env,
-        &arr::<65>(s(&fixture()["keys"]["attester"], "public_key")),
-    );
+    let env = env_at(1_767_225_600, PRIMARY_NETWORK);
+    let key = arr::<32>(s(&fixture()["keys"]["attester"], "public_key"));
     let policy = BytesN::from_array(&env, &[7u8; 32]);
-    let id = env.register(AttestationParity, (attester.clone(), policy.clone()));
+    let id = env.register(
+        AttestationParity,
+        (Bytes::from_slice(&env, &key), policy.clone(), 5u64),
+    );
     let event = AttestationPolicySet {
-        attester,
+        attester: BytesN::from_array(&env, &key),
         country_policy_hash: policy,
+        policy_epoch: 5,
     };
     let expected = soroban_sdk::Event::to_xdr(&event, &env, &id);
     assert_eq!(env.events().all(), [expected]);
 }
 
-#[test]
-#[should_panic(expected = "Error(Contract, #34)")]
-fn constructor_rejects_compressed_key() {
-    let env = env_at(1_767_225_600, "Test SDF Network ; September 2015");
-    let mut key = [0u8; 65];
-    key[0] = 0x02;
+fn register_with_key(env: &Env, key: &[u8]) {
     env.register(
         AttestationParity,
         (
-            BytesN::from_array(&env, &key),
-            BytesN::from_array(&env, &[0u8; 32]),
+            Bytes::from_slice(env, key),
+            BytesN::from_array(env, &[0u8; 32]),
+            0u64,
         ),
     );
 }
 
-/// Cost of one verification, from the host budget. Native test execution
-/// meters host functions but not the contract's own wasm, so the wasm figure
-/// comes from testnet simulation; this pins the host-side floor.
 #[test]
-fn cost_per_leg() {
+#[should_panic(expected = "Error(Contract, #34)")]
+fn constructor_rejects_zero_key() {
+    let env = env_at(1_767_225_600, PRIMARY_NETWORK);
+    register_with_key(&env, &[0u8; 32]);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #34)")]
+fn constructor_rejects_short_key() {
+    let env = env_at(1_767_225_600, PRIMARY_NETWORK);
+    register_with_key(&env, &[1u8; 31]);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #34)")]
+fn constructor_rejects_long_key() {
+    let env = env_at(1_767_225_600, PRIMARY_NETWORK);
+    register_with_key(&env, &[1u8; 33]);
+}
+
+/// Keys the contract cannot tell are bad, because it only checks length and
+/// zero. The host's strict verification must still refuse them; the operator
+/// is meant to catch them before they are ever configured.
+#[test]
+fn malformed_attester_keys_trap() {
     let fx = fixture();
-    let cases = fx["cases"].as_array().unwrap();
-    let pick = |name: &str| cases.iter().find(|c| s(c, "name") == name).unwrap();
+    let base = fx["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| s(c, "name") == "valid_untagged")
+        .unwrap();
+    let message = unhex(s(&base["attestations"][0]["checked"], "message"));
 
-    let measure = |case: &Value| {
-        let b = build(case);
-        let client = AttestationParityClient::new(&b.env, &b.contract);
-        b.env.cost_estimate().budget().reset_default();
-        client.verify(&b.recipient_ref, &b.legs, &b.attestations);
-        let budget = b.env.cost_estimate().budget();
-        (budget.cpu_instruction_cost(), budget.memory_bytes_cost())
-    };
-    let (cpu1, mem1) = measure(pick("valid_untagged"));
-    let (cpu2, mem2) = measure(pick("valid_two_legs_same_address_two_tags"));
-    println!("soroban native: 1 leg cpu {cpu1} mem {mem1}; 2 legs cpu {cpu2} mem {mem2}; marginal leg cpu {}", cpu2 - cpu1);
-    assert!(cpu2 > cpu1);
-}
-
-/// The ed25519 alternative, for comparison only. The host uses strict
-/// verification, so the classic edge cases must all trap.
-#[test]
-fn ed25519_edge_cases() {
-    let env = env_at(1_767_225_600, "Test SDF Network ; September 2015");
-    let id = env.register(
-        AttestationParity,
-        (
-            BytesN::from_array(
-                &env,
-                &arr::<65>(s(&fixture()["keys"]["attester"], "public_key")),
-            ),
-            BytesN::from_array(&env, &[0u8; 32]),
-        ),
-    );
-    let client = AttestationParityClient::new(&env, &id);
-
-    let sk = SigningKey::from_bytes(&Sha256::digest(b"UJIRA/TEST-ONLY/S18/ed25519").into());
-    let pk = sk.verifying_key().to_bytes();
-    let msg = arr::<32>(s(
-        &fixture()["cases"][0]["soroban"]["attestations"][0],
-        "digest",
-    ));
-    let sig = sk.sign(&msg).to_bytes();
-
-    let call = |pk: [u8; 32], m: &[u8], sig: [u8; 64]| {
-        client.try_verify_ed25519(
-            &BytesN::from_array(&env, &pk),
-            &Bytes::from_slice(&env, m),
-            &BytesN::from_array(&env, &sig),
-        )
-    };
-
-    env.cost_estimate().budget().reset_default();
-    assert_eq!(call(pk, &msg, sig), Ok(Ok(())), "valid");
-    println!(
-        "soroban native ed25519 verify cpu {}",
-        env.cost_estimate().budget().cpu_instruction_cost()
-    );
-
-    let mut other = msg;
-    other[0] ^= 1;
-    assert!(call(pk, &other, sig).is_err(), "wrong message");
-
-    // S + L: same scalar mod L, non-canonical encoding. Malleable if accepted.
-    let l: [u8; 32] = [
-        0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde,
-        0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10,
-    ];
-    let mut high = sig;
-    let mut carry = 0u16;
-    for i in 0..32 {
-        let v = u16::from(high[32 + i]) + u16::from(l[i]) + carry;
-        high[32 + i] = v as u8;
-        carry = v >> 8;
-    }
-    assert!(call(pk, &msg, high).is_err(), "non-canonical S");
-
-    // Identity public key with R = identity, S = 0 passes a cofactorless,
-    // non-strict check for any message. Strict verification refuses the
-    // small-order key.
+    // The identity key with R = identity and S = 0 passes a lax,
+    // cofactorless check for any message.
     let mut identity = [0u8; 32];
     identity[0] = 1;
     let mut weak_sig = [0u8; 64];
     weak_sig[..32].copy_from_slice(&identity);
     let lax = VerifyingKey::from_bytes(&identity).unwrap();
     assert!(
-        lax.verify(&msg, &Signature::from_bytes(&weak_sig)).is_ok(),
-        "the forgery works without strict checks"
+        lax.verify(&message, &Signature::from_bytes(&weak_sig))
+            .is_ok(),
+        "the lax check accepts it"
     );
-    assert!(call(identity, &msg, weak_sig).is_err(), "small-order key");
 
     // y = p is a non-canonical encoding of y = 0.
     let mut non_canonical = [0xffu8; 32];
     non_canonical[0] = 0xed;
     non_canonical[31] = 0x7f;
-    assert!(call(non_canonical, &msg, sig).is_err(), "non-canonical key");
+    let real_sig = arr::<64>(s(&base["attestations"][0], "signature"));
 
-    let mut flipped = sig;
-    flipped[0] ^= 1;
-    assert!(call(pk, &msg, flipped).is_err(), "damaged R");
+    for (label, key, sig) in [
+        ("small-order key", identity, weak_sig),
+        ("non-canonical key", non_canonical, real_sig),
+    ] {
+        let mut case = base.clone();
+        case["attester_public_key"] = Value::String(format!("0x{}", hexs(&key)));
+        case["attestations"][0]["signature"] = Value::String(format!("0x{}", hexs(&sig)));
+        let b = build(&case, Build::Native);
+        let client = AttestationParityClient::new(&b.env, &b.contract);
+        assert_eq!(
+            client.try_verify(&b.recipient_ref, &b.legs, &b.attestations),
+            Err(Err(InvokeError::Abort)),
+            "{label}"
+        );
+    }
+}
+
+fn hexs(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// Metered cost of every fixture case on the compiled wasm, plus the
+/// marginal cost of a verified leg. The numbers in the spike note come from
+/// this test; run it with --nocapture to see them.
+#[test]
+fn wasm_cost_per_case() {
+    let fx = fixture();
+    let cases = fx["cases"].as_array().unwrap();
+    let mut table = String::new();
+    let mut cost_of = std::collections::BTreeMap::new();
+    for case in cases {
+        let name = s(case, "name");
+        let b = build(case, Build::Wasm);
+        let client = AttestationParityClient::new(&b.env, &b.contract);
+        b.env.cost_estimate().budget().reset_default();
+        let _ = client.try_verify(&b.recipient_ref, &b.legs, &b.attestations);
+        let budget = b.env.cost_estimate().budget();
+        let (cpu, mem) = (budget.cpu_instruction_cost(), budget.memory_bytes_cost());
+        table.push_str(&format!(
+            "| `{name}` | {} | {} | {cpu} | {mem} |\n",
+            case["tamper"].as_str().unwrap_or("none"),
+            s(case, "expect"),
+        ));
+        cost_of.insert(String::from(name), cpu);
+    }
+    println!("{table}");
+
+    let one = cost_of["valid_untagged"];
+    let two = cost_of["valid_two_legs_same_address_two_tags"];
+    let none = cost_of["missing_attestation"];
+    println!(
+        "wasm: 1 leg {one}, 2 legs {two}, count refusal {none}, marginal leg {}",
+        two - one
+    );
+    assert!(two > one && one > none);
+    // A trap happens inside the same verification an honest leg runs, so it
+    // can never cost more than the leg would have.
+    assert!(cost_of["flipped_s_bit"] <= one);
 }

@@ -5,8 +5,8 @@
 //
 // It does three jobs, so the Soroban suite has something independent to agree
 // with:
-//   1. encodes the digest inputs and hashes them,
-//   2. signs with a test-only key (and builds the tampered variants),
+//   1. encodes the attested fields and builds the 47 byte message,
+//   2. signs it with a test-only ed25519 key (and builds the tampered variants),
 //   3. runs its own verifier over every case and refuses to write a fixture
 //      whose declared outcome disagrees with it.
 //
@@ -14,23 +14,24 @@
 //   node generate.mjs <out.json>          write the fixture
 //   node generate.mjs --check <out.json>  exit 1 if the file differs from a fresh build
 //
-// The output is deterministic (RFC 6979 nonces, fixed labels), so --check is a
-// byte comparison.
+// ed25519 signatures are deterministic and every input comes from a fixed
+// label, so --check is a byte comparison.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { keccak_256 } from "@noble/hashes/sha3.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Account, Address, Keypair, MuxedAccount, StrKey } from "@stellar/stellar-base";
 
-const DOMAIN = "UJIRA/ATTEST/V1";
+const PREFIX = "UJIRA/ATTEST/V2";
+const MESSAGE_BYTES = 47;
+const SIGNATURE_BYTES = 64;
 const MAX_ATTESTATION_VALIDITY = 86400n;
-const N = secp256k1.Point.CURVE().n;
-const HALF_N = N / 2n;
+const L = ed25519.Point.CURVE().n;
 const U64_MAX = (1n << 64n) - 1n;
 const I128_MAX = (1n << 127n) - 1n;
 
-const ERR = { ATTESTATION_INVALID: 51, ATTESTATION_EXPIRED: 52 };
+const ERR = { ATTESTATION_INVALID: 51, ATTESTATION_EXPIRED: 52, POLICY_CHANGED: 53 };
+const HOST_TRAP = "HOST_TRAP";
 
 const enc = new TextEncoder();
 const hex = (b) => "0x" + Buffer.from(b).toString("hex");
@@ -52,33 +53,37 @@ const beBytes = (v, len) => {
   }
   return out;
 };
-const toBig = (b) => BigInt(hex(b));
+const leBytes = (v, len) => beBytes(v, len).reverse();
+const fromLe = (b) => BigInt(hex(Uint8Array.from(b).reverse()));
 const u8 = (v) => Uint8Array.of(v);
 
 // Every key and address below comes from a public label, so nothing here can
-// ever be a real key. Anyone can rebuild them from this file.
-const label = (name) => enc.encode(`UJIRA/TEST-ONLY/S18/${name}`);
-const testKey = (name) => {
-  const k = toBig(keccak_256(label(name)));
-  if (k === 0n || k >= N) throw new Error(`label ${name} gives an invalid key`);
-  return beBytes(k, 32);
-};
+// ever be a real key. Anyone can rebuild them from this file. The private keys
+// are left out of the fixture on purpose: a consumer that needs one derives it
+// from the label written next to the public key.
+const LABEL_PREFIX = "UJIRA/TEST-ONLY/S18/";
+const label = (name) => enc.encode(`${LABEL_PREFIX}${name}`);
+const seedOf = (name) => sha256(label(name));
 
-const KEYS = {
-  attester: testKey("attester"),
-  other: testKey("other-signer"),
-};
-const pub = (sk) => secp256k1.getPublicKey(sk, false);
+const KEY_LABELS = { attester: "attester-ed25519", other: "other-signer-ed25519" };
+const SEEDS = { attester: seedOf(KEY_LABELS.attester), other: seedOf(KEY_LABELS.other) };
+const PUB = { attester: ed25519.getPublicKey(SEEDS.attester), other: ed25519.getPublicKey(SEEDS.other) };
 
-// The contract computes the same bytes from its own environment: the network
-// id and its own contract address.
-const SOROBAN_NETWORKS = {
+// Encoding of the identity point: y = 1, x = 0. It has small order, so a
+// strict verifier refuses it as a key and as R.
+const IDENTITY = (() => {
+  const b = new Uint8Array(32);
+  b[0] = 1;
+  return b;
+})();
+
+const NETWORKS = {
   primary: "Test SDF Network ; September 2015",
   other: "Public Global Stellar Network ; September 2015",
 };
 
-const stellarAccount = (name) => Keypair.fromRawEd25519Seed(Buffer.from(sha256(label(name)))).publicKey();
-const stellarContract = (name) => StrKey.encodeContract(Buffer.from(sha256(label(name))));
+const stellarAccount = (name) => Keypair.fromRawEd25519Seed(Buffer.from(seedOf(name))).publicKey();
+const stellarContract = (name) => StrKey.encodeContract(Buffer.from(seedOf(name)));
 const scAddressXdr = (strkey) => Uint8Array.from(Address.fromString(strkey).toScVal().toXDR());
 
 const DEST = {
@@ -93,24 +98,10 @@ const MANDATE = {
 const POLICY = { primary: sha256(label("policy-primary")), other: sha256(label("policy-other")) };
 const REF = { primary: sha256(label("recipient-primary")), other: sha256(label("recipient-other")) };
 
-function chainContext(ctx) {
-  const passphrase = SOROBAN_NETWORKS[ctx.chain];
-  const mandate = MANDATE[ctx.mandate];
-  return {
-    fields: {
-      network_passphrase: passphrase,
-      chain_tag: hex(sha256(enc.encode(passphrase))),
-      mandate,
-      mandate_xdr: hex(scAddressXdr(mandate)),
-    },
-    chainTag: sha256(enc.encode(passphrase)),
-    mandateBytes: scAddressXdr(mandate),
-  };
-}
-
-// A Soroban destination with a tag is an M address over the same G; the digest
-// uses the base address bytes plus the tag, so G and M share one encoding.
-function chainLeg(leg) {
+// A destination with a tag is an M address over the same G. The fields use
+// the base address bytes plus the tag, so G and M share one encoding and only
+// the tag tells them apart.
+function legOf(leg) {
   const hasTag = leg.tag !== null;
   const tag = hasTag ? leg.tag : 0n;
   const base = DEST[leg.dest];
@@ -133,111 +124,107 @@ function chainLeg(leg) {
   };
 }
 
-export function digest({ chainTag, recipientRef, policyHash, validUntil, mandateBytes, destBytes, hasTag, tag }) {
-  if (chainTag.length !== 32 || recipientRef.length !== 32 || policyHash.length !== 32) {
+const lengthPrefixed = (b) => {
+  if (b.length > 255) throw new Error("address longer than 255 bytes");
+  return concat(u8(b.length), b);
+};
+
+// The attested fields, in order. Every field has a fixed width or a one byte
+// length prefix, so two different field sequences never give the same bytes.
+export function fields({ networkId, mandateBytes, recipientRef, policyHash, policyEpoch, validUntil, destBytes, hasTag, tag }) {
+  if (networkId.length !== 32 || recipientRef.length !== 32 || policyHash.length !== 32) {
     throw new Error("fixed width field has the wrong length");
   }
-  if (mandateBytes.length > 255 || destBytes.length > 255) throw new Error("address longer than 255 bytes");
   if (!hasTag && tag !== 0n) throw new Error("tag must be 0 when absent");
-  return keccak_256(
-    concat(
-      enc.encode(DOMAIN),
-      chainTag,
-      recipientRef,
-      policyHash,
-      beBytes(validUntil, 8),
-      u8(mandateBytes.length),
-      mandateBytes,
-      u8(destBytes.length),
-      destBytes,
-      u8(hasTag ? 1 : 0),
-      beBytes(tag, 8),
-    ),
+  return concat(
+    networkId,
+    lengthPrefixed(mandateBytes),
+    recipientRef,
+    policyHash,
+    beBytes(policyEpoch, 8),
+    beBytes(validUntil, 8),
+    lengthPrefixed(destBytes),
+    u8(hasTag ? 1 : 0),
+    beBytes(tag, 8),
   );
 }
 
-// r || s || v with v in {27, 28}, low s, the layout the contract reads.
-function sign(d, sk) {
-  const rec = secp256k1.sign(d, sk, { prehash: false, lowS: true, format: "recovered" });
-  return concat(rec.slice(1, 65), u8(27 + rec[0]));
+export function message(fieldBytes) {
+  const m = concat(enc.encode(PREFIX), sha256(fieldBytes));
+  if (m.length !== MESSAGE_BYTES) throw new Error("message is not 47 bytes");
+  return m;
 }
 
-const firstXWithoutPoint = (() => {
-  const { Fp } = secp256k1.Point;
-  for (let x = 1n; ; x++) {
-    try {
-      Fp.sqrt(Fp.add(Fp.mul(Fp.sqr(x), x), 7n));
-    } catch {
-      return x;
-    }
-  }
-})();
-
 const MUTATIONS = {
-  high_s: (sig) => {
-    const s = toBig(sig.slice(32, 64));
-    return concat(sig.slice(0, 32), beBytes(N - s, 32), u8(sig[64] === 27 ? 28 : 27));
-  },
-  v: (value) => (sig) => concat(sig.slice(0, 64), u8(value)),
-  truncate: (sig) => sig.slice(0, 64),
+  truncate: (sig) => sig.slice(0, 63),
   extend: (sig) => concat(sig, u8(0)),
   empty: () => new Uint8Array(0),
-  r_zero: (sig) => concat(new Uint8Array(32), sig.slice(32)),
-  s_zero: (sig) => concat(sig.slice(0, 32), new Uint8Array(32), sig.slice(64)),
-  r_order: (sig) => concat(beBytes(N, 32), sig.slice(32)),
-  s_half_order: (sig) => concat(sig.slice(0, 32), beBytes(HALF_N, 32), sig.slice(64)),
-  s_half_order_plus_one: (sig) => concat(sig.slice(0, 32), beBytes(HALF_N + 1n, 32), sig.slice(64)),
-  r_not_on_curve: (sig) => concat(beBytes(firstXWithoutPoint, 32), sig.slice(32)),
-  // With s = 1 and R = e * G, recovery gives r^-1 * (s * R - e * G), the point
-  // at infinity. Only the submitter can build this; no honest signer does.
-  recovers_to_infinity: (_sig, presentedDigest) => {
-    const e = toBig(presentedDigest) % N;
-    const R = secp256k1.Point.BASE.multiply(e);
-    const { x, y } = R.toAffine();
-    if (x >= N) throw new Error("R.x not below n, pick another case");
-    return concat(beBytes(x, 32), beBytes(1n, 32), u8(27 + Number(y & 1n)));
+  flip_r: (sig) => {
+    const out = Uint8Array.from(sig);
+    out[0] ^= 1;
+    return out;
   },
+  flip_s: (sig) => {
+    const out = Uint8Array.from(sig);
+    out[32] ^= 1;
+    return out;
+  },
+  // S + L is the same scalar mod L in a non-canonical encoding. A verifier
+  // that accepted it would make every signature malleable.
+  s_plus_l: (sig) => concat(sig.slice(0, 32), leBytes(fromLe(sig.slice(32)) + L, 32)),
+  zero: () => new Uint8Array(64),
+  // R = identity, S = 0. With a small-order key this passes a lax,
+  // cofactorless check for any message; with a real key it never verifies.
+  identity_r_zero_s: () => concat(IDENTITY, new Uint8Array(32)),
 };
 
-// The rules the contract implements, in its order. Returns
-// { code, hostAbort } where hostAbort means Soroban's recover host function
-// traps instead of letting the contract return the code.
-function referenceVerify(now, attesterPub, pairs, legCount, attCount) {
-  if (legCount !== attCount) return { code: "ATTESTATION_INVALID", hostAbort: false };
-  for (const p of pairs) {
-    if (now >= p.validUntil) return { code: "ATTESTATION_EXPIRED", hostAbort: false };
-    if (p.validUntil - now > MAX_ATTESTATION_VALIDITY) return { code: "ATTESTATION_INVALID", hostAbort: false };
-    const sig = p.signature;
-    if (sig.length !== 65) return { code: "ATTESTATION_INVALID", hostAbort: false };
-    const v = sig[64];
-    if (v !== 27 && v !== 28) return { code: "ATTESTATION_INVALID", hostAbort: false };
-    const r = toBig(sig.slice(0, 32));
-    const s = toBig(sig.slice(32, 64));
-    if (r === 0n || r >= N || s === 0n || s > HALF_N) return { code: "ATTESTATION_INVALID", hostAbort: false };
-    let recovered;
-    try {
-      recovered = secp256k1.Signature.fromBytes(sig.slice(0, 64), "compact")
-        .addRecoveryBit(v - 27)
-        .recoverPublicKey(p.digest)
-        .toBytes(false);
-    } catch {
-      return { code: "ATTESTATION_INVALID", hostAbort: true };
-    }
-    if (hex(recovered) !== hex(attesterPub)) return { code: "ATTESTATION_INVALID", hostAbort: false };
+// Strict ed25519 as the host does it: canonical S, and neither the key nor R
+// may have small order. noble's non-ZIP-215 mode covers the encodings; the
+// small-order checks are written out so they do not depend on it.
+function strictVerify(sig, msg, pub) {
+  if (sig.length !== SIGNATURE_BYTES || pub.length !== 32) return false;
+  if (fromLe(sig.slice(32)) >= L) return false;
+  let A;
+  let R;
+  try {
+    A = ed25519.Point.fromBytes(pub);
+    R = ed25519.Point.fromBytes(sig.slice(0, 32));
+  } catch {
+    return false;
   }
-  return { code: "ok", hostAbort: false };
+  if (A.isSmallOrder() || R.isSmallOrder()) return false;
+  try {
+    return ed25519.verify(sig, msg, pub, { zip215: false });
+  } catch {
+    return false;
+  }
+}
+
+// The request-time rules, in the contract's order. A bad signature is not a
+// code: the host traps, so the reference reports HOST_TRAP.
+function referenceVerify(now, attesterPub, currentEpoch, pairs, legCount, attCount) {
+  if (legCount !== attCount) return "ATTESTATION_INVALID";
+  for (const p of pairs) {
+    if (now >= p.validUntil) return "ATTESTATION_EXPIRED";
+    if (p.validUntil - now > MAX_ATTESTATION_VALIDITY) return "ATTESTATION_INVALID";
+    if (p.signature.length !== SIGNATURE_BYTES) return "ATTESTATION_INVALID";
+    if (p.policyEpoch !== currentEpoch) return "POLICY_CHANGED";
+    if (!strictVerify(p.signature, p.message, attesterPub)) return HOST_TRAP;
+  }
+  return "ok";
 }
 
 const NOW = 1767225600n; // 2026-01-01T00:00:00Z
 const VU = NOW + 3600n;
-const CTX = { chain: "primary", mandate: "primary", policy: "primary" };
+const CTX = { network: "primary", mandate: "primary", policy: "primary", epoch: 0n, attester: "attester" };
 const leg = (over = {}) => ({ dest: "primary", tag: null, amount: 500n, ...over });
-const att = (over = {}) => ({ validUntil: VU, signer: "attester", signOver: {}, mutate: null, ...over });
+const att = (over = {}) => ({ validUntil: VU, epoch: null, signer: "attester", signOver: {}, mutate: null, ...over });
 
 // Each case: what the verifier sees (ctx, ref, legs, attestations) and, per
 // attestation, what the signer actually signed (signOver) and any byte damage
-// done afterwards (mutate). Expectations are written by hand and checked
-// against referenceVerify, so a mistake in either shows up.
+// done afterwards (mutate). An attestation's policy_epoch defaults to the
+// mandate's. Expectations are written by hand and checked against
+// referenceVerify, so a mistake in either shows up.
 const CASES = [
   { name: "valid_untagged", tamper: null, expect: "ok" },
   { name: "valid_tagged", tamper: null, expect: "ok", legs: [leg({ tag: 7n })] },
@@ -258,101 +245,117 @@ const CASES = [
     attestations: [att({ validUntil: NOW + MAX_ATTESTATION_VALIDITY })],
   },
   { name: "valid_last_second", tamper: null, expect: "ok", now: VU - 1n },
+  { name: "valid_later_policy_epoch", tamper: null, expect: "ok", ctx: { epoch: 3n } },
+  { name: "valid_policy_epoch_u64_max", tamper: null, expect: "ok", ctx: { epoch: U64_MAX } },
   { name: "amount_not_bound_one", tamper: "wrong_amount", expect: "ok", legs: [leg({ amount: 1n })] },
   { name: "amount_not_bound_i128_max", tamper: "wrong_amount", expect: "ok", legs: [leg({ amount: I128_MAX })] },
   { name: "replay_same_attestation", tamper: "replayed", expect: "ok", calls: 2 },
-  { name: "wrong_signer", tamper: "wrong_signer", expect: "ATTESTATION_INVALID", attestations: [att({ signer: "other" })] },
-  { name: "high_s", tamper: "high_s", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "high_s" })] },
-  ...[0, 1, 26, 29, 30, 255].map((v) => ({
-    name: `bad_v_${v}`,
-    tamper: "bad_v",
-    expect: "ATTESTATION_INVALID",
-    attestations: [att({ mutate: ["v", v] })],
-  })),
+  { name: "wrong_signer", tamper: "wrong_signer", expect: HOST_TRAP, attestations: [att({ signer: "other" })] },
   {
     name: "wrong_chain",
     tamper: "wrong_chain",
-    expect: "ATTESTATION_INVALID",
-    attestations: [att({ signOver: { chain: "other" } })],
+    expect: HOST_TRAP,
+    attestations: [att({ signOver: { network: "other" } })],
   },
   {
     name: "wrong_mandate",
     tamper: "wrong_mandate",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     attestations: [att({ signOver: { mandate: "other" } })],
   },
   {
     name: "wrong_destination",
     tamper: "wrong_destination",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     attestations: [att({ signOver: { dest: "other" } })],
   },
   {
     name: "wrong_tag_other_value",
     tamper: "wrong_tag",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     legs: [leg({ tag: 8n })],
     attestations: [att({ signOver: { tag: 7n } })],
   },
   {
     name: "wrong_tag_dropped",
     tamper: "wrong_tag",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     legs: [leg({ tag: null })],
     attestations: [att({ signOver: { tag: 7n } })],
   },
   {
     name: "wrong_tag_zero_versus_none",
     tamper: "wrong_tag",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     legs: [leg({ tag: 0n })],
     attestations: [att({ signOver: { tag: null } })],
   },
   {
     name: "wrong_policy",
     tamper: "wrong_policy",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     attestations: [att({ signOver: { policy: "other" } })],
   },
-  { name: "wrong_ref", tamper: "wrong_ref", expect: "ATTESTATION_INVALID", attestations: [att({ signOver: { ref: "other" } })] },
+  { name: "wrong_ref", tamper: "wrong_ref", expect: HOST_TRAP, attestations: [att({ signOver: { ref: "other" } })] },
   {
     name: "wrong_valid_until",
     tamper: "wrong_valid_until",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     attestations: [att({ validUntil: VU + 60n, signOver: { validUntil: VU } })],
   },
-  { name: "truncated_64_bytes", tamper: "truncated", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "truncate" })] },
-  { name: "extended_66_bytes", tamper: "malformed", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "extend" })] },
+  {
+    name: "wrong_policy_epoch_signed",
+    tamper: "wrong_epoch",
+    expect: HOST_TRAP,
+    ctx: { epoch: 1n },
+    attestations: [att({ signOver: { epoch: 0n } })],
+  },
+  { name: "stale_policy_epoch", tamper: "stale_epoch", expect: "POLICY_CHANGED", ctx: { epoch: 1n }, attestations: [att({ epoch: 0n })] },
+  { name: "future_policy_epoch", tamper: "stale_epoch", expect: "POLICY_CHANGED", ctx: { epoch: 1n }, attestations: [att({ epoch: 2n })] },
+  {
+    name: "stale_policy_epoch_wins_over_bad_signature",
+    tamper: "stale_epoch",
+    expect: "POLICY_CHANGED",
+    ctx: { epoch: 1n },
+    attestations: [att({ epoch: 0n, signer: "other" })],
+  },
+  { name: "signature_63_bytes", tamper: "truncated", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "truncate" })] },
+  { name: "signature_65_bytes", tamper: "malformed", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "extend" })] },
   { name: "empty_signature", tamper: "malformed", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "empty" })] },
-  { name: "r_zero", tamper: "malformed", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "r_zero" })] },
-  { name: "s_zero", tamper: "malformed", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "s_zero" })] },
-  { name: "r_equals_order", tamper: "malformed", expect: "ATTESTATION_INVALID", attestations: [att({ mutate: "r_order" })] },
   {
-    name: "s_half_order_is_low",
-    tamper: "malformed",
+    name: "short_signature_wins_over_stale_epoch",
+    tamper: "truncated",
     expect: "ATTESTATION_INVALID",
-    attestations: [att({ mutate: "s_half_order" })],
+    ctx: { epoch: 1n },
+    attestations: [att({ epoch: 0n, mutate: "truncate" })],
+  },
+  { name: "flipped_r_bit", tamper: "bad_signature", expect: HOST_TRAP, attestations: [att({ mutate: "flip_r" })] },
+  { name: "flipped_s_bit", tamper: "bad_signature", expect: HOST_TRAP, attestations: [att({ mutate: "flip_s" })] },
+  { name: "non_canonical_s", tamper: "bad_signature", expect: HOST_TRAP, attestations: [att({ mutate: "s_plus_l" })] },
+  { name: "zero_signature", tamper: "bad_signature", expect: HOST_TRAP, attestations: [att({ mutate: "zero" })] },
+  {
+    name: "identity_r_zero_s",
+    tamper: "bad_signature",
+    expect: HOST_TRAP,
+    attestations: [att({ mutate: "identity_r_zero_s" })],
   },
   {
-    name: "s_half_order_plus_one_is_high",
-    tamper: "high_s",
-    expect: "ATTESTATION_INVALID",
-    attestations: [att({ mutate: "s_half_order_plus_one" })],
-  },
-  {
-    name: "r_not_on_curve",
-    tamper: "malformed",
-    expect: "ATTESTATION_INVALID",
-    attestations: [att({ mutate: "r_not_on_curve" })],
-  },
-  {
-    name: "recovers_to_infinity",
-    tamper: "malformed",
-    expect: "ATTESTATION_INVALID",
-    attestations: [att({ mutate: "recovers_to_infinity" })],
+    name: "small_order_attester_key",
+    tamper: "bad_signature",
+    expect: HOST_TRAP,
+    ctx: { attester: "identity" },
+    attestations: [att({ mutate: "identity_r_zero_s" })],
   },
   { name: "expired_at_valid_until", tamper: "expired", expect: "ATTESTATION_EXPIRED", now: VU },
   { name: "expired_after_valid_until", tamper: "expired", expect: "ATTESTATION_EXPIRED", now: VU + 86400n },
+  {
+    name: "expired_wins_over_stale_epoch",
+    tamper: "expired",
+    expect: "ATTESTATION_EXPIRED",
+    now: VU,
+    ctx: { epoch: 1n },
+    attestations: [att({ epoch: 0n })],
+  },
   {
     name: "window_too_long",
     tamper: "window",
@@ -364,16 +367,24 @@ const CASES = [
   {
     name: "attestations_swapped_between_legs",
     tamper: "wrong_tag",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     legs: [leg({ tag: 1n, amount: 300n }), leg({ tag: 2n, amount: 200n })],
     attestations: [att({ signOver: { tag: 2n } }), att({ signOver: { tag: 1n } })],
   },
   {
     name: "second_leg_wrong_destination",
     tamper: "wrong_destination",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     legs: [leg({ amount: 300n }), leg({ dest: "other", amount: 200n })],
     attestations: [att(), att({ signOver: { dest: "primary" } })],
+  },
+  {
+    name: "second_leg_stale_policy_epoch",
+    tamper: "stale_epoch",
+    expect: "POLICY_CHANGED",
+    ctx: { epoch: 1n },
+    legs: [leg({ amount: 300n }), leg({ dest: "other", amount: 200n })],
+    attestations: [att(), att({ epoch: 0n })],
   },
   {
     name: "first_leg_expired_wins_over_second_bad_signature",
@@ -386,18 +397,43 @@ const CASES = [
   {
     name: "first_leg_bad_signature_wins_over_second_expired",
     tamper: "wrong_signer",
-    expect: "ATTESTATION_INVALID",
+    expect: HOST_TRAP,
     now: VU,
     legs: [leg({ amount: 300n }), leg({ dest: "other", amount: 200n })],
     attestations: [att({ validUntil: VU + 60n, signer: "other" }), att()],
   },
 ];
 
-function mutate(sig, spec, presentedDigest) {
-  if (spec === null) return sig;
-  if (Array.isArray(spec)) return MUTATIONS[spec[0]](spec[1])(sig, presentedDigest);
-  return MUTATIONS[spec](sig, presentedDigest);
+const attesterKey = (name) => (name === "identity" ? IDENTITY : PUB[name]);
+
+function contextOf(ctx) {
+  const passphrase = NETWORKS[ctx.network];
+  return {
+    passphrase,
+    networkId: sha256(enc.encode(passphrase)),
+    mandate: MANDATE[ctx.mandate],
+    mandateBytes: scAddressXdr(MANDATE[ctx.mandate]),
+  };
 }
+
+function fieldsFor(context, { ref, policy, epoch, validUntil, l }) {
+  return fields({
+    networkId: context.networkId,
+    mandateBytes: context.mandateBytes,
+    recipientRef: REF[ref],
+    policyHash: POLICY[policy],
+    policyEpoch: epoch,
+    validUntil,
+    destBytes: l.destBytes,
+    hasTag: l.hasTag,
+    tag: l.tag,
+  });
+}
+
+const encoded = (f) => {
+  const m = message(f);
+  return { fields: hex(f), fields_sha256: hex(sha256(f)), message: hex(m) };
+};
 
 function buildCase(c) {
   const now = c.now ?? NOW;
@@ -405,100 +441,97 @@ function buildCase(c) {
   const ref = c.ref ?? "primary";
   const legs = c.legs ?? [leg()];
   const atts = c.attestations ?? legs.map(() => att());
-  const attesterPub = pub(KEYS.attester);
+  const attesterPub = attesterKey(ctx.attester);
+  const presented = contextOf(ctx);
+  const caseLegs = legs.map(legOf);
 
-  const presented = chainContext(ctx);
-  const chainLegs = legs.map((l) => chainLeg(l));
   const pairs = [];
   const outAtts = atts.map((a, i) => {
+    const epoch = a.epoch ?? ctx.epoch;
     const legSpec = legs[Math.min(i, legs.length - 1)];
     const so = a.signOver;
-    const signedCtx = chainContext({
-      chain: so.chain ?? ctx.chain,
-      mandate: so.mandate ?? ctx.mandate,
+    const signedFields = fieldsFor(contextOf({ ...ctx, network: so.network ?? ctx.network, mandate: so.mandate ?? ctx.mandate }), {
+      ref: so.ref ?? ref,
       policy: so.policy ?? ctx.policy,
-    });
-    const signedLeg = chainLeg({
-      ...legSpec,
-      dest: so.dest ?? legSpec.dest,
-      tag: "tag" in so ? so.tag : legSpec.tag,
-    });
-    const signedDigest = digest({
-      chainTag: signedCtx.chainTag,
-      recipientRef: REF[so.ref ?? ref],
-      policyHash: POLICY[so.policy ?? ctx.policy],
+      epoch: so.epoch ?? epoch,
       validUntil: so.validUntil ?? a.validUntil,
-      mandateBytes: signedCtx.mandateBytes,
-      destBytes: signedLeg.destBytes,
-      hasTag: signedLeg.hasTag,
-      tag: signedLeg.tag,
+      l: legOf({ ...legSpec, dest: so.dest ?? legSpec.dest, tag: "tag" in so ? so.tag : legSpec.tag }),
     });
-    // What the contract will hash: its own context, the presented leg at the
-    // same index, the presented valid_until. Null when there is no leg.
-    const l = chainLegs[i];
-    const presentedDigest = l
-      ? digest({
-          chainTag: presented.chainTag,
-          recipientRef: REF[ref],
-          policyHash: POLICY[ctx.policy],
-          validUntil: a.validUntil,
-          mandateBytes: presented.mandateBytes,
-          destBytes: l.destBytes,
-          hasTag: l.hasTag,
-          tag: l.tag,
-        })
-      : null;
-    const signature = mutate(sign(signedDigest, KEYS[a.signer]), a.mutate, presentedDigest ?? signedDigest);
-    if (presentedDigest) pairs.push({ validUntil: a.validUntil, signature, digest: presentedDigest });
+    const signed = encoded(signedFields);
+    const signedMessage = message(signedFields);
+    const sig = ed25519.sign(signedMessage, SEEDS[a.signer]);
+    const signature = a.mutate === null ? sig : MUTATIONS[a.mutate](sig);
+    // What the contract will build: its own network and address, the
+    // presented leg at the same index, the presented valid_until and epoch.
+    // Null when there is no leg for this attestation.
+    const l = caseLegs[i];
+    let checked = null;
+    if (l) {
+      const f = fieldsFor(presented, { ref, policy: ctx.policy, epoch, validUntil: a.validUntil, l });
+      checked = encoded(f);
+      pairs.push({ validUntil: a.validUntil, policyEpoch: epoch, signature, message: message(f) });
+    }
     return {
       valid_until: a.validUntil.toString(),
+      policy_epoch: epoch.toString(),
       signature: hex(signature),
-      signed_digest: hex(signedDigest),
-      digest: presentedDigest ? hex(presentedDigest) : null,
+      signed,
+      checked,
     };
   });
-  const decision = referenceVerify(now, attesterPub, pairs, legs.length, atts.length);
 
-  if (decision.code !== c.expect) throw new Error(`${c.name}: expected ${c.expect}, reference says ${decision.code}`);
+  const outcome = referenceVerify(now, attesterPub, ctx.epoch, pairs, legs.length, atts.length);
+  if (outcome !== c.expect) throw new Error(`${c.name}: expected ${c.expect}, reference says ${outcome}`);
   return {
     name: c.name,
     tamper: c.tamper,
     expect: c.expect,
-    expect_code: c.expect === "ok" ? 0 : ERR[c.expect],
-    soroban_host_abort: decision.hostAbort,
+    expect_code: c.expect === "ok" ? 0 : (ERR[c.expect] ?? null),
     calls: c.calls ?? 1,
     now: now.toString(),
+    network_passphrase: presented.passphrase,
+    network_id: hex(presented.networkId),
+    mandate: presented.mandate,
+    mandate_xdr: hex(presented.mandateBytes),
+    attester_public_key: hex(attesterPub),
     recipient_ref: hex(REF[ref]),
     country_policy_hash: hex(POLICY[ctx.policy]),
-    attester_public_key: hex(attesterPub),
-    soroban: {
-      ...presented.fields,
-      legs: chainLegs.map((l) => l.out),
-      attestations: outAtts,
-    },
+    policy_epoch: ctx.epoch.toString(),
+    legs: caseLegs.map((x) => x.out),
+    attestations: outAtts,
   };
 }
 
 function build() {
-  const attesterPub = pub(KEYS.attester);
-  const otherPub = pub(KEYS.other);
   return {
     warning:
       "TEST ONLY. Every key in this file is derived from a public label and must never hold funds, sign anything real or be configured as an attester outside tests.",
-    format_version: 1,
-    domain: DOMAIN,
+    format_version: 2,
+    message_prefix: PREFIX,
+    message_bytes: MESSAGE_BYTES,
+    signature_bytes: SIGNATURE_BYTES,
     max_attestation_validity: MAX_ATTESTATION_VALIDITY.toString(),
     error_codes: ERR,
+    fields_layout: [
+      "network_id: 32 bytes, SHA-256 of the network passphrase",
+      "mandate: u8 length, then Address::to_xdr of the mandate contract",
+      "recipient_ref: 32 bytes",
+      "country_policy_hash: 32 bytes",
+      "policy_epoch: u64 big-endian",
+      "valid_until: u64 big-endian",
+      "destination: u8 length, then Address::to_xdr of the base G or C address",
+      "has_tag: u8, 0 or 1",
+      "tag: u64 big-endian, 0 when absent",
+    ],
+    message_layout: "message_prefix (15 ASCII bytes) || SHA-256(fields) (32 bytes)",
     keys: {
       attester: {
-        derivation: 'keccak256("UJIRA/TEST-ONLY/S18/attester")',
-        private_key: hex(KEYS.attester),
-        public_key: hex(attesterPub),
+        seed: `sha256("${LABEL_PREFIX}${KEY_LABELS.attester}")`,
+        public_key: hex(PUB.attester),
       },
       other_signer: {
-        derivation: 'keccak256("UJIRA/TEST-ONLY/S18/other-signer")',
-        private_key: hex(KEYS.other),
-        public_key: hex(otherPub),
+        seed: `sha256("${LABEL_PREFIX}${KEY_LABELS.other}")`,
+        public_key: hex(PUB.other),
       },
     },
     cases: CASES.map(buildCase),
