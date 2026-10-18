@@ -914,8 +914,8 @@ good_errors='[
 good_constants='{ "constants": {}, "role_codes": { "AGENT": 1 }, "recovery_action_kinds": { "REVOKE": 1 } }'
 good_events='# Events
 
-| Event | Fields | Topic key |
-| --- | --- | --- |'
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |'
 
 tables_case tables-ok "" "$good_errors" "$good_constants" "$good_events"
 expect "tables that agree with the spec pass" 0 "$work/tables-ok/MANDATE.md" "--check-order" "error table, constants and events agree"
@@ -947,10 +947,36 @@ tables_case tables-event-fields "### Event list
 | --- | --- |
 | \`paused\` | by |" "$good_errors" "$good_constants" "# Events
 
-| Event | Fields | Topic key |
-| --- | --- | --- |
-| \`paused\` | by, at | tenant_ref |"
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`paused\` | by, at | tenant_ref | by, at |"
 expect "event fields differ" 1 "$work/tables-event-fields/MANDATE.md" "" "event paused has fields by in MANDATE.md but by, at in EVENTS.md"
+
+event_list_row="### Event list
+
+| Event | Fields |
+| --- | --- |
+| \`payout_approved\` | payout_id, by |"
+tables_case tables-data-ok "$event_list_row" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`payout_approved\` | payout_id, by | payout_id | by |"
+expect "event data without its topic key passes" 0 "$work/tables-data-ok/MANDATE.md" "" "error table, constants and events agree"
+
+tables_case tables-topic-in-data "$event_list_row" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`payout_approved\` | payout_id, by | payout_id | payout_id, by |"
+expect "topic key repeated in the data" 1 "$work/tables-topic-in-data/MANDATE.md" "" "event payout_approved repeats its topic key payout_id in the data"
+
+tables_case tables-data-mismatch "$event_list_row" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`payout_approved\` | payout_id, by | payout_id | approver |"
+expect "event data not the fields without the topic key" 1 "$work/tables-data-mismatch/MANDATE.md" "" "event payout_approved has data approver, but its fields without the topic key are by"
 
 tables_case tables-constant-value "## Constants
 

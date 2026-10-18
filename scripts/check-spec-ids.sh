@@ -461,7 +461,7 @@ def event_rows(lines):
 
 def check_events(spec_text, spec_sections):
     listed = event_rows(spec_sections.get("Event list", []))
-    documented = event_rows(sections(texts["EVENTS.md"]).get("Events", []) + texts["EVENTS.md"].split("\n"))
+    documented = event_rows(texts["EVENTS.md"].split("\n"))
     for name, fields in sorted(listed.items()):
         if name not in documented:
             report("event %s is in the MANDATE.md event list but not in EVENTS.md" % name)
@@ -470,6 +470,19 @@ def check_events(spec_text, spec_sections):
     for name in sorted(documented):
         if name not in listed:
             report("event %s is in EVENTS.md but not in the MANDATE.md event list" % name)
+    # The topic key travels only in the topics: the data column lists the
+    # event's fields without it.
+    for row in table_rows(texts["EVENTS.md"].split("\n")):
+        if len(row) < 4 or not row[0].startswith("`"):
+            continue
+        fields = [f.strip() for f in row[1].split(",") if f.strip()]
+        key = row[2].strip("`").strip()
+        data = [f.strip() for f in row[3].split(",") if f.strip() and f.strip() != "none"]
+        for name in re.findall(r"`([a-z][a-z0-9_]*)`", row[0]):
+            if key in data:
+                report("event %s repeats its topic key %s in the data; the key is carried only in the topics" % (name, key))
+            elif data != [f for f in fields if f != key]:
+                report("event %s has data %s, but its fields without the topic key are %s" % (name, ", ".join(data) or "none", ", ".join(f for f in fields if f != key) or "none"))
     fence = False
     for n, line in enumerate(spec_text.split("\n"), 1):
         if line.startswith("```"):
