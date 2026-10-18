@@ -74,10 +74,20 @@ valid_spec() {
 }
 
 # expect <case name> <exit code> <spec file> <flags> [text the output must contain]...
+# The checker reads every file in the spec's directory, so a spec written
+# straight into $work is copied into a directory of its own first; cases that
+# need sibling files build their own directory.
+case_count=0
 expect() {
   local name=$1 want=$2 file=$3 flags=$4
   shift 4
   local out code=0 needle
+  if [ "$(dirname "$file")" = "$work" ] && [ -e "$file" ]; then
+    case_count=$((case_count + 1))
+    mkdir -p "$work/cases/$case_count"
+    cp "$file" "$work/cases/$case_count/"
+    file="$work/cases/$case_count/$(basename "$file")"
+  fi
   # shellcheck disable=SC2086 # flags is a deliberate word list
   out=$("$script" $flags "$file" 2>&1) || code=$?
   if [ "$code" -ne "$want" ]; then
@@ -417,7 +427,7 @@ valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
 1. Domains (MANDATE-CONFIG-002).
 2. Fee within the cap (MANDATE-FEE-001).
 <!-- /check-order -->" "| \`MANDATE-CONFIG-002\` | Domains |"
-expect "tab inside a rule body" 1 "$f" "--check-order" "MANDATE-CONFIG-002 has a tab character at line" "whose precondition includes MANDATE-FEE-001"
+expect "tab inside a rule body" 1 "$f" "--check-order" "order-overlap-tab.md:" ":1 has U+0009 (a control character)" "whose precondition includes MANDATE-FEE-001"
 
 f="$work/order-overlap-lazy.md"
 valid_spec "$f" "#### MANDATE-CONFIG-002 Domains
@@ -524,12 +534,12 @@ expect "blank line then a paragraph in a rule" 1 "$f" "" "MANDATE-ROLE-005 has c
 
 f="$work/nb-hyphen.md"
 valid_spec "$f" "See MANDATE$(printf '\342\200\221')SWEEP$(printf '\342\200\221')001 for details."
-expect "non-ascii hyphen" 1 "$f" "" "non-ASCII hyphen at line"
+expect "non-ascii hyphen" 1 "$f" "" "nb-hyphen.md:" "has U+2011 NON-BREAKING HYPHEN"
 
 f="$work/crlf.md"
 valid_spec "$f"
 sed 's/$/'"$(printf '\r')"'/' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
-expect "crlf line endings" 1 "$f" "" "line endings must be LF"
+expect "crlf line endings" 1 "$f" "" "crlf.md:1 ends with a carriage return; line endings must be LF"
 
 f="$work/double-blank.md"
 valid_spec "$f" "Some text.
@@ -547,7 +557,52 @@ mkdir -p "$work/sibling"
 f="$work/sibling/MANDATE.md"
 valid_spec "$f"
 printf 'A README with a non breaking hyphen: a%sb\n' "$(printf '\342\200\221')" >"$work/sibling/README.md"
-expect "non-ascii hyphen in a sibling spec file" 1 "$f" "" "README.md:1 has a non-ASCII hyphen"
+expect "non-ascii hyphen in a sibling spec file" 1 "$f" "" "README.md:1:39 has U+2011 NON-BREAKING HYPHEN"
+
+# Character set: spec files hold printable ASCII and LF only, plus U+2016 in
+# MANDATE.md. Each case builds its own spec directory.
+charset_case() {
+  local dir=$1 extra=$2
+  mkdir -p "$work/$dir"
+  valid_spec "$work/$dir/MANDATE.md" "$extra"
+}
+
+charset_case bare-cr "### approve
+
+<!-- check-order: approve -->
+1. Caller is an approver (MANDATE-ROLE-001).$(printf '\r')2. Hidden step (MANDATE-FEE-001).
+<!-- /check-order -->"
+expect "bare carriage return hides a step" 1 "$work/bare-cr/MANDATE.md" "--check-order" "has a bare carriage return (U+000D); line endings must be LF"
+
+charset_case cyrillic-m "See $(printf '\320\234')ANDATE-ROLE-001 for details."
+expect "cyrillic letter in an id" 1 "$work/cyrillic-m/MANDATE.md" "" "MANDATE.md:" ":5 has U+041C CYRILLIC CAPITAL LETTER EM"
+
+charset_case hyphen-bullet "See MANDATE$(printf '\342\201\203')ROLE$(printf '\342\201\203')001."
+expect "hyphen bullet" 1 "$work/hyphen-bullet/MANDATE.md" "" "has U+2043 HYPHEN BULLET"
+
+charset_case vertical-dash "See MANDATE$(printf '\357\270\262')ROLE-001."
+expect "vertical en dash form" 1 "$work/vertical-dash/MANDATE.md" "" "has U+FE32 PRESENTATION FORM FOR VERTICAL EN DASH"
+
+charset_case prolonged-mark "See MANDATE$(printf '\343\203\274')ROLE-001."
+expect "prolonged sound mark" 1 "$work/prolonged-mark/MANDATE.md" "" "has U+30FC KATAKANA-HIRAGANA PROLONGED SOUND MARK"
+
+charset_case nbsp "A no break$(printf '\302\240')space."
+expect "no break space" 1 "$work/nbsp/MANDATE.md" "" "has U+00A0 NO-BREAK SPACE"
+
+charset_case subfolder ""
+mkdir -p "$work/subfolder/vectors/fee"
+printf '{ "name": "caf%s" }\n' "$(printf '\303\251')" >"$work/subfolder/vectors/fee/cap.json"
+expect "non-ascii character in a subfolder file" 1 "$work/subfolder/MANDATE.md" "" "vectors/fee/cap.json:1:15 has U+00E9 LATIN SMALL LETTER E WITH ACUTE"
+
+charset_case allowed "Concatenation is written a $(printf '\342\200\226') b."
+expect "allowlisted double vertical line in MANDATE.md passes" 0 "$work/allowed/MANDATE.md" "--check-order" "30 rule ID(s) defined"
+
+charset_case allowed-elsewhere ""
+printf 'a %s b\n' "$(printf '\342\200\226')" >"$work/allowed-elsewhere/README.md"
+expect "double vertical line outside MANDATE.md fails" 1 "$work/allowed-elsewhere/MANDATE.md" "" "README.md:1:3 has U+2016 DOUBLE VERTICAL LINE"
+
+charset_case control-char "A bell$(printf '\007') here."
+expect "other control character" 1 "$work/control-char/MANDATE.md" "" "has U+0007 (a control character)"
 
 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"

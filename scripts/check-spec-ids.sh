@@ -36,15 +36,21 @@
 # same order checks, since the first error would then depend on how an
 # implementation read it. A precondition runs from "- Precondition:" to the
 # next field line, blank line or heading, whatever the indentation. Rules that
-# only mention another rule do so in their Effect. Tab characters are refused
-# inside rule bodies, and rule headings must run in numeric order per area.
+# only mention another rule do so in their Effect. Rule headings must run in
+# numeric order per area.
 #
 # Formatting: once the fields of a rule start, a blank line may only be
 # followed by a heading, so every field is contiguous and nothing can hide
 # after a blank line. Two blank lines in a row are refused, every heading
-# needs a blank line before it, line endings must be LF, and hyphen
-# look-alikes (U+2010 to U+2015, U+2212, U+FE58, U+FE63, U+FF0D, U+00AD) are
-# refused here and in README.md and the JSON files beside the spec.
+# needs a blank line before it.
+#
+# Character set: every file in the spec's directory and its subfolders may
+# hold only printable ASCII (0x20 to 0x7E) and LF. A carriage return, a tab,
+# any other control character, invalid UTF-8 or any other code point fails
+# with the file, line, column and code point, so nothing that renders like
+# ASCII (a look-alike hyphen or letter, a no break space, a bare carriage
+# return hiding a step) can pass. The allowlist below names the only
+# exceptions; add one only with a reason in review.
 #
 # Everything inside fenced code blocks is ignored. An ID whose number does not
 # have exactly three digits, or that runs on into letters (MANDATE-SWEEP-004a),
@@ -86,31 +92,91 @@ fi
 mandate_areas="CONFIG ROLE AMOUNT FUND ASSET DUST PAYOUT BATCH BUDGET PAYMENT DAILY RECIPIENT SPLIT APPROVAL EXPIRY PAUSE REVOKE WITHDRAW SWEEP RECOVER RECOVERYSET PRINCIPAL EVENT FEE"
 chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE"
 
-# Hyphen look-alikes that read as "-" but are not: U+2010 to U+2015, U+2212,
-# U+FE58, U+FE63, U+FF0D and the soft hyphen U+00AD, as UTF-8 bytes.
-hyphens=$(printf '\342\200\220 \342\200\221 \342\200\222 \342\200\223 \342\200\224 \342\200\225 \342\210\222 \357\271\230 \357\271\243 \357\274\215 \302\255')
+# Characters allowed beyond printable ASCII and LF, per file relative to the
+# spec directory. U+2016 (DOUBLE VERTICAL LINE) is the byte concatenation
+# operator in MANDATE.md (the deploy salt and the r, s, v signature layout).
+charset_allow="MANDATE.md:2016"
 
-# The other text files of the spec directory (README.md and the JSON tables)
-# must not hold hyphen look-alikes either.
-sibling_status=0
 spec_dir=$(dirname "$spec")
-for other in "$spec_dir"/README.md "$spec_dir"/*.json; do
-  [ -f "$other" ] || continue
-  for h in $hyphens; do
-    if hit=$(LC_ALL=C grep -n -F -- "$h" "$other" | head -n 1); then
-      echo "check-spec-ids: $(basename "$other"):${hit%%:*} has a non-ASCII hyphen; write the ASCII hyphen-minus" >&2
-      sibling_status=1
-      break
-    fi
-  done
-done
+charset_status=0
+python3 -I - "$spec_dir" "$charset_allow" <<'PY' || charset_status=$?
+import os
+import sys
+import unicodedata
+
+root, allow_spec = sys.argv[1], sys.argv[2]
+allowed = {}
+for item in allow_spec.split():
+    name, _, points = item.partition(":")
+    allowed[name] = {int(p, 16) for p in points.split(",")}
+
+LIMIT = 20  # findings reported per file before the rest are only counted
+problems = 0
+
+
+def report(msg):
+    global problems
+    print("check-spec-ids: " + msg, file=sys.stderr)
+    problems += 1
+
+
+def scan():
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for fname in sorted(filenames):
+            path = os.path.join(dirpath, fname)
+            rel = os.path.relpath(path, root)
+            if os.path.islink(path) or not os.path.isfile(path):
+                report(rel + " is not a regular file")
+                continue
+            with open(path, "rb") as fh:
+                text = fh.read().decode("utf-8", errors="surrogateescape")
+            ok = allowed.get(rel, set())
+            found = 0
+            line, col = 1, 0
+            for i, ch in enumerate(text):
+                col += 1
+                cp = ord(ch)
+                if ch == "\n":
+                    line, col = line + 1, 0
+                    continue
+                if 0x20 <= cp <= 0x7E or cp in ok:
+                    continue
+                found += 1
+                if found > LIMIT:
+                    continue
+                where = "%s:%d:%d" % (rel, line, col)
+                if ch == "\r" and text[i + 1:i + 2] == "\n":
+                    report("%s:%d ends with a carriage return; line endings must be LF" % (rel, line))
+                elif ch == "\r":
+                    report(where + " has a bare carriage return (U+000D); line endings must be LF")
+                elif 0xDC80 <= cp <= 0xDCFF:
+                    report(where + " has the byte 0x%02X, which is not valid UTF-8" % (cp - 0xDC00))
+                else:
+                    name = unicodedata.name(ch, "")
+                    label = name if name else "(a control character)" if unicodedata.category(ch) == "Cc" else "(no name)"
+                    report("%s has U+%04X %s; spec files hold printable ASCII and LF only" % (where, cp, label))
+            if found > LIMIT:
+                report("%s has %d more character(s) outside the allowed set" % (rel, found - LIMIT))
+
+
+try:
+    scan()
+except OSError as err:
+    print("check-spec-ids: cannot read the spec directory: %s" % err, file=sys.stderr)
+    sys.exit(2)
+sys.exit(1 if problems else 0)
+PY
+if [ "$charset_status" -gt 1 ]; then
+  echo "check-spec-ids: the character set check could not run" >&2
+  exit 2
+fi
 
 set +e
 LC_ALL=C awk \
   -v check_order="$check_order" \
   -v mandate_areas="$mandate_areas" \
-  -v chainops_areas="$chainops_areas" \
-  -v hyphens="$hyphens" '
+  -v chainops_areas="$chainops_areas" '
 function problem(msg) {
   print "check-spec-ids: " msg > "/dev/stderr"
   problems++
@@ -154,23 +220,16 @@ BEGIN {
   in_order = 0
   in_fence = 0
   op = ""
-  nh = split(hyphens, hy, " ")
   prev_blank = 0
 }
 
 {
   line = $0
+  # Carriage returns are reported by the character set check; strip a
+  # trailing one so the rest of the line still parses.
   if (line ~ /\r$/) {
-    if (!cr_seen) problem("line " NR " ends with a carriage return; line endings must be LF")
-    cr_seen = 1
     sub(/\r$/, "", line)
     $0 = line
-  }
-  for (h = 1; h <= nh; h++) {
-    if (index(line, hy[h]) > 0) {
-      problem("non-ASCII hyphen at line " NR "; write the ASCII hyphen-minus")
-      break
-    }
   }
   is_blank = (line ~ /^[ \t]*$/)
   if (!in_fence) {
@@ -246,7 +305,6 @@ in_fence { next }
 
 /^#+ / { close_rule() }
 
-current != "" && /\t/ { problem(current " has a tab character at line " NR "; indent with spaces") }
 current != "" && /^- (Precondition|Effect|Error|Off chain):/ { field = ""; fields_started = 1 }
 current != "" && /^[ \t]*$/ { field = "" }
 current != "" && /^- Precondition:/ { has_pre = 1; field = "pre" }
@@ -478,4 +536,4 @@ END {
 awk_status=$?
 set -e
 if [ "$awk_status" -ne 0 ]; then exit "$awk_status"; fi
-exit "$sibling_status"
+exit "$charset_status"
