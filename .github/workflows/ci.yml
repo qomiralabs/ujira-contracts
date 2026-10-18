@@ -30,8 +30,54 @@ env:
   FORGE_SHA256: 73640b01bd9ed29fdb4965085099371f8cf0dbbec3e2086cf54564efc4dcfe88
   SLITHER_VERSION: 0.11.6
   NODE_VERSION: 24.21.0
+  # gitleaks is MIT licensed. Bump the version and its hash together, and
+  # only to a release at least 14 days old.
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 
 jobs:
+  # Scans the whole history, not only the change, so it checks out every
+  # commit. A key that was committed and later deleted, or added in a merge
+  # resolution, still fails.
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          mkdir -p "${RUNNER_TEMP}/gitleaks"
+          tarball="${RUNNER_TEMP}/gitleaks.tar.gz"
+          curl -fsSLo "$tarball" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $tarball" | sha256sum --check --strict
+          tar -xzf "$tarball" -C "${RUNNER_TEMP}/gitleaks" gitleaks
+          rm "$tarball"
+          version=$("${RUNNER_TEMP}/gitleaks/gitleaks" version)
+          [ "$version" = "${GITLEAKS_VERSION}" ] || { echo "gitleaks is $version, not ${GITLEAKS_VERSION}" >&2; exit 1; }
+          echo "${RUNNER_TEMP}/gitleaks" >> "$GITHUB_PATH"
+
+      # On pull requests the rules come from the base branch, so a change
+      # cannot loosen the rules its own scan runs with. Empty on pushes.
+      - name: Scan the full history for secrets
+        env:
+          SECRET_SCAN_BASE_REF: ${{ github.base_ref }}
+        run: scripts/secret-scan.sh
+
+      # Plants generated fake keys in throwaway repos and checks the scan
+      # fails on each, so a config change cannot quietly stop detection.
+      - name: Test the secret scan
+        if: ${{ !cancelled() }}
+        run: scripts/secret-scan.test.sh
+
   headers:
     name: headers
     runs-on: ubuntu-24.04
