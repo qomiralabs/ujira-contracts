@@ -96,7 +96,11 @@ The Soroban contracts were last built with Rust 1.98.1, soroban-sdk 29.0.1 and s
 
 ## Dashes
 
-No file may contain an em dash or an en dash. `scripts/check-dashes.sh` searches the content git holds for every tracked file, skipping binary files, prints each hit as `path:line:text` and exits 1 on any. `scripts/test-check-dashes.sh` is its self test. The `dashes` CI job runs the self test, then the check. Both scripts are shared, byte for byte, with ujira, ujira-contracts, ujira-docs and ujira-mcp, so a change is made in all four.
+No file may contain an em dash or an en dash. `scripts/check-dashes.sh` searches the content git holds for every tracked file, skipping binary files, prints each hit as `path:line:text` and exits 1 on any. Staged content counts; an edit left only in the working tree does not, and the pre-commit hook covers that. `scripts/test-check-dashes.sh` is its self test. The `dashes` CI job runs the self test, then the check. Both scripts are shared with ujira, ujira-docs and ujira-mcp, identical apart from the licence header, so a change is made in all four.
+
+## Pull requests
+
+Every pull request starts from `.github/pull_request_template.md`: the linked issue, what and why, the tests run with their output, docs, a checklist, the reviews the change type needs, and the merge rules (squash only, and any commit after an approval needs review again). `scripts/check-pr-template.sh` fails if the template loses any of these or stops being plain ASCII, and `scripts/check-pr-template.test.sh` proves it; CI runs both. `.github/CODEOWNERS` names the owner of each top level path. It is advisory: on the current GitHub plan branch protection cannot require code owner review (qomiralabs/ujira#229).
 
 ## Continuous integration
 
@@ -104,7 +108,7 @@ No file may contain an em dash or an en dash. `scripts/check-dashes.sh` searches
 
 | Job | What it checks |
 | --- | --- |
-| `headers` | actionlint on the workflows, the license header check, the invisible character check, the mandate spec rule ID check and their self tests. |
+| `headers` | actionlint on the workflows, the license header check, the invisible character check, the mandate spec rule ID check, the pull request template check and their self tests. |
 | `fixtures` | Rebuilds the attestation parity fixture from its generator under `spikes/attestation-parity/generator/` and fails unless it matches the committed file byte for byte. |
 | `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), a clean tree afterwards, the wasm fixture check's self test, and the spike wasm fixtures rebuilt from source byte for byte. |
 | `secrets` | gitleaks over the full history with `.gitleaks.toml`, and the scan's self test. See Secret scanning below. |
