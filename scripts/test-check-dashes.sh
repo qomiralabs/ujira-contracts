@@ -86,6 +86,34 @@ else
   failures=$((failures + 1))
 fi
 
+# The check reads the content git holds, so staged content counts even before
+# it is committed.
+repo staged
+printf 'clean\n' >"$work/staged/page.md"
+commit "$work/staged"
+printf 'bad %s here\n' "$em" >"$work/staged/page.md"
+git -C "$work/staged" add page.md
+expect "staged content is checked" 1 "$work/staged" "page.md:1:"
+
+# An edit left in the working tree is not what git holds, so it is not
+# checked here. The pre-commit hook checks staged content, and this check runs
+# again in CI on the pushed commit.
+repo unstaged
+printf 'clean\n' >"$work/unstaged/page.md"
+commit "$work/unstaged"
+printf 'bad %s here\n' "$em" >"$work/unstaged/page.md"
+expect "an unstaged edit is not checked" 0 "$work/unstaged"
+
+# Staged beats the working tree: a dash staged and then removed on disk still
+# fails, because git still holds it.
+repo staged-then-reverted
+printf 'clean\n' >"$work/staged-then-reverted/page.md"
+commit "$work/staged-then-reverted"
+printf 'bad %s here\n' "$em" >"$work/staged-then-reverted/page.md"
+git -C "$work/staged-then-reverted" add page.md
+printf 'clean again\n' >"$work/staged-then-reverted/page.md"
+expect "a staged dash still fails after the file is cleaned on disk" 1 "$work/staged-then-reverted" "page.md:1:"
+
 repo untracked
 printf 'clean\n' >"$work/untracked/page.md"
 commit "$work/untracked"
