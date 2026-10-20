@@ -105,6 +105,14 @@ code=0
 out=$("$script" --check-doc "$copy" 2>&1) || code=$?
 if [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'not covered'; then ok "a length given in bits is caught"; else fail "bits figure: exit $code, want 1 with 'not covered'"; printf '%s\n' "$out" | sed 's/^/    /'; fi
 
+# The bytes guard takes a space or a hyphen, so the bits guard must too: a
+# hyphenated bit width is the form a byte layout document would use.
+copy="$work/hyphen-bits.md"
+{ cat "$encoding"; echo; echo "- The tag is a 64-bit unsigned integer."; } >"$copy"
+code=0
+out=$("$script" --check-doc "$copy" 2>&1) || code=$?
+if [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'not covered'; then ok "a hyphenated bit width is caught"; else fail "hyphenated bits: exit $code, want 1 with 'not covered'"; printf '%s\n' "$out" | sed 's/^/    /'; fi
+
 # A figure no check covers must fail too, so a new one cannot be added without
 # a derivation behind it.
 copy="$work/extra.md"

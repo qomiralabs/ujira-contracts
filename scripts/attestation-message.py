@@ -181,7 +181,7 @@ def derivations():
         ("u64be", len(u64be(0, "u64be")), "a u64be, as the layout builds one"),
         ("uuid", len(uuid.UUID(int=0).bytes), "a UUID in RFC 9562 order"),
         ("sha256", len(hashlib.sha256(b"").digest()), "a SHA-256 digest, so every ID too"),
-        ("leg_key", len(leg_key), "payout_id and one byte of leg index"),
+        ("leg_key", len(leg_key), "payout_id and 1 byte of leg index"),
         ("account_xdr", len(account_xdr_bytes), "Address::to_xdr of the example G destination"),
         ("contract_xdr", len(contract_xdr_bytes), "Address::to_xdr of the example C mandate"),
         ("ed25519_key", len(account_payload), "the key inside a G strkey"),
@@ -240,7 +240,7 @@ BRACKET_WIDTHS = {
 GUARDS = [
     r"(\d+)[- ]bytes?\b",
     r"(\d+) ASCII bytes",
-    r"(\d+) bits?\b",
+    r"(\d+)[- ]bits?\b",
     r"(\d+) zero bytes",
     r"(\d+) for an account",
     r"(\d+) for a contract",
