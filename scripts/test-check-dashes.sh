@@ -170,6 +170,56 @@ else
   failures=$((failures + 1))
 fi
 
+# A dash in a path is as public as one in a line of text: it shows in links,
+# imports and release archives. Names come from the index, like the content.
+repo name-em
+printf 'clean\n' >"$work/name-em/page$em.md"
+commit "$work/name-em"
+expect "an em dash in a file name fails" 1 "$work/name-em" "in the file name"
+
+repo name-en
+printf 'clean\n' >"$work/name-en/page$en.md"
+commit "$work/name-en"
+expect "an en dash in a file name fails" 1 "$work/name-en" "in the file name"
+
+repo name-dir
+mkdir -p "$work/name-dir/notes$em"
+printf 'clean\n' >"$work/name-dir/notes$em/page.md"
+commit "$work/name-dir"
+expect "an em dash in a directory name fails" 1 "$work/name-dir" "in the file name"
+
+# A plain hyphen and a minus sign are not the characters this check is about.
+repo name-hyphen
+printf 'clean\n' >"$work/name-hyphen/a-page.md"
+printf 'clean\n' >"$work/name-hyphen/minus-$(printf '\342\210\222').md"
+commit "$work/name-hyphen"
+expect "a hyphen or a minus sign in a name passes" 0 "$work/name-hyphen"
+
+# Both kinds in one file are reported as both, so fixing one does not hide
+# the other.
+repo name-and-content
+printf 'bad %s here\n' "$em" >"$work/name-and-content/page$em.md"
+commit "$work/name-and-content"
+got=0
+out=$(cd "$work/name-and-content" && "$script" 2>&1) || got=$?
+if [ "$got" -eq 1 ] \
+  && grep -q -F -e "in the file name" <<<"$out" \
+  && grep -q -E ':[0-9]+:' <<<"$out"; then
+  echo "PASS  a dash in both the name and the content reports both"
+  passed=$((passed + 1))
+else
+  echo "FAIL  a dash in both the name and the content reports both (got $got)"
+  printf '%s\n' "$out" | sed 's/^/      /'
+  failures=$((failures + 1))
+fi
+
+# An untracked file is not checked, by name either.
+repo name-untracked
+printf 'clean\n' >"$work/name-untracked/page.md"
+commit "$work/name-untracked"
+printf 'clean\n' >"$work/name-untracked/scratch$em.md"
+expect "an untracked file name is not checked" 0 "$work/name-untracked"
+
 mkdir -p "$work/not-a-repo"
 expect "outside a git repository it fails closed" 2 "$work/not-a-repo"
 

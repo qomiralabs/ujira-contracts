@@ -6,10 +6,11 @@
 # ujira-mcp (qomiralabs/ujira#303). Change all four together.
 #
 # Fails if any tracked file contains an em dash (U+2014) or an en dash
-# (U+2013). It searches the content git holds for each tracked file (the
-# index, which is the committed content plus anything staged), not the working
-# tree, so untracked files are not checked. Each hit is printed as
-# path:line:text.
+# (U+2013), or has one in its path. It reads the index, which is the committed
+# content plus anything staged, not the working tree, so untracked files are
+# not checked. A content hit is printed as path:line:text, and a path hit as
+# path followed by a note. Both are reported in one run, so fixing one does
+# not hide the other.
 #
 # Every file is read as text, so a NUL byte cannot make a file look binary and
 # skip the check. A file is skipped only when its extension is one of the
@@ -91,6 +92,25 @@ if [ "$code" -gt 1 ]; then
 fi
 
 found=0
+
+# Paths first, since a dash in a path is cheap to find and affects every file
+# under it. core.quotePath=false so a non-ASCII path is compared as its own
+# bytes rather than as git's backslash escapes, which would never match.
+names=$(mktemp)
+trap 'rm -f "$hits" "$names"' EXIT
+if ! LC_ALL=C git -C "$top" -c core.quotePath=false ls-files -z >"$names"; then
+  echo "check-dashes: git could not list the tracked files" >&2
+  exit 2
+fi
+while IFS= read -r -d '' path; do
+  case $path in
+    *"$em"* | *"$en"*)
+      printf '%s: em or en dash in the file name\n' "$path"
+      found=1
+      ;;
+  esac
+done <"$names"
+
 while IFS= read -r -d '' file && IFS= read -r -d '' line && IFS= read -r text; do
   if is_real_binary "$file"; then continue; fi
   printf '%s:%s:%s\n' "$file" "$line" "$text"
@@ -98,7 +118,7 @@ while IFS= read -r -d '' file && IFS= read -r -d '' line && IFS= read -r text; d
 done <"$hits"
 
 if [ "$found" -ne 0 ]; then
-  echo "Replace em and en dashes with a comma, a colon, parentheses or the word \"to\"." >&2
+  echo "Replace em and en dashes with a comma, a colon, parentheses or the word \"to\"; rename any path that holds one." >&2
   exit 1
 fi
 echo "No em or en dashes found."

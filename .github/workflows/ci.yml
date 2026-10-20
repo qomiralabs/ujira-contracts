@@ -301,8 +301,10 @@ jobs:
       - name: Check wasm fixtures match their source
         run: ../scripts/check-wasm-fixtures.sh
 
-  # Fails on any em dash or en dash in a tracked file. The same scripts run
-  # in every UJIRA repository.
+  # Fails on any em dash or en dash in a tracked file's content or its path.
+  # The same scripts run in every UJIRA repository. The self test runs first,
+  # so the check's result is only trusted once the check is known to fail when
+  # it should, and the second step reports even when the first fails.
   dashes:
     name: dashes
     runs-on: ubuntu-24.04
@@ -320,4 +322,6 @@ jobs:
         run: scripts/test-check-dashes.sh
 
       - name: Check for dashes
+        if: ${{ !cancelled() }}
         run: scripts/check-dashes.sh
+
