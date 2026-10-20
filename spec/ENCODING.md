@@ -2,9 +2,15 @@
 
 Byte layouts that the mandate, the off-chain services and the test vectors must produce identically. `‖` is byte concatenation, `u8`, `u16be`, `u32be` and `u64be` are unsigned big-endian integers of 1, 2, 4 and 8 bytes, and `[n]` is a fixed width of `n` bytes. Every variable-length field carries a length prefix unless it is the last field, so no two field sequences encode to the same bytes.
 
+Every byte count and length below is derived from the layout, never copied. `scripts/attestation-message.py --derive` computes each one from bytes it builds, and `scripts/attestation-message.py --check-doc spec/ENCODING.md` fails if a figure here disagrees with it, if a figure is reworded out of reach of its check, or if a new figure is added with no derivation behind it. `--check-constants spec/constants.json` does the same for the attestation lengths there.
+
+So that the check covers this file as it will be written and not only as it reads today, every length here is digits followed by `byte` or `bytes`. A fixed width inside a layout block is written `name[n]`. In a table a length carries its unit, except in the Length column of the address table, where it is bare and checked as a byte length; a bare number in the last column of any three-column table is read the same way, so a count that is not a length carries its unit there too. A length given in bits fails the check as an uncovered figure, written with either a space or a hyphen, and so does a length whose unit is capitalised. The check cannot see a length spelled in words, because catching it would need a list of number words and such a list falls behind the prose, so that form rests on this rule rather than on the check and a length is never spelled in words here.
+
+The check reads figures, not claims. It compares every number here with the layout, and nothing in it tests a sentence about this file against the file. A statement that some form does not appear, or appears in only one place, holds because someone searched for it and not because the check holds it, so run the search before writing such a sentence.
+
 ## IDs
 
-`payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain. `leg_key` is 33 bytes, the `payout_id` and one byte of leg index; it is used only off chain, for delivery steps after settlement.
+`payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain. `leg_key` is 33 bytes, the `payout_id` and 1 byte of leg index; it is used only off chain, for delivery steps after settlement.
 
 ```
 payout_id     = SHA-256("ujira/payout/v1"    ‖ principal_uuid[16] ‖ project_uuid[16]
@@ -48,7 +54,7 @@ message = "UJIRA/ATTEST/V2" ‖ SHA-256(fields)
 ```
 
 - `network_id` is the Stellar network ID, the SHA-256 of the network passphrase; the contract reads it from its environment.
-- `mandate` is the mandate's own address and `destination` the leg's base address, both as `Address::to_xdr` bytes (40 bytes for a contract, 44 for an account), each after a one-byte length.
+- `mandate` is the mandate's own address and `destination` the leg's base address, both as `Address::to_xdr` bytes (40 bytes for a contract, 44 for an account), each after a 1 byte length prefix.
 - `policy_epoch` is the mandate's policy epoch the attestation is issued under (`MANDATE-RECIPIENT-019`), encoded as `u64be`, 8 bytes, right after `country_policy_hash`. The mandate stores it as a `u64` too (`MANDATE-RECIPIENT-017`), so the encoded value is exactly the stored one.
 - `has_tag` is 0 or 1. With no tag, `has_tag = 0` and `tag = 0`, so an attestation for an address never covers a sub-account of it, and a tag of 0 is distinct from no tag.
 - `message` is exactly `ATTESTATION_MESSAGE_BYTES` = 47 bytes: the 15 ASCII bytes of the prefix and the 32-byte SHA-256. It can never equal a 32-byte transaction hash, and the prefix sets it apart from any other UJIRA signature.

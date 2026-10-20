@@ -991,6 +991,16 @@ expect "malformed errors.json" 1 "$work/tables-bad-json/MANDATE.md" "" "errors.j
 tables_case tables-required "" "" "" ""
 expect "tables required" 1 "$work/tables-required/MANDATE.md" "--require-tables" "errors.json is missing"
 
+# A retired rule's Error field is none, so it must never be reported as
+# missing from errors.json, even with the tables beside the spec.
+mkdir -p "$work/tables-retired"
+valid_spec "$work/tables-retired/MANDATE.md" "$retired_rule" "$retired_row"
+printf '# Retired rule IDs, never reused\nMANDATE-ROLE-002\n' >"$work/tables-retired/retired-ids.txt"
+printf '%s\n' "$good_errors" >"$work/tables-retired/errors.json"
+printf '%s\n' "$good_constants" >"$work/tables-retired/constants.json"
+printf '%s\n' "$good_events" >"$work/tables-retired/EVENTS.md"
+expect "retired rule with Error none is not missing from errors.json" 0 "$work/tables-retired/MANDATE.md" "--check-order" "error table, constants and events agree"
+
 no_repo=1 expect "unreadable file" 2 "$work/does-not-exist.md" ""
 expect "unknown option" 2 "$work/valid.md" "--frobnicate"
 
