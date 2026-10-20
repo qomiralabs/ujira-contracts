@@ -31,3 +31,7 @@ target/
 
 # Node tooling for spike generators
 node_modules/
+
+# Python bytecode from the spec scripts
+__pycache__/
+*.pyc

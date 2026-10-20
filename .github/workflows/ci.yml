@@ -133,6 +133,16 @@ jobs:
       - name: Test the attestation message example
         run: scripts/attestation-message.test.sh
 
+      # Every byte count and length in spec/ENCODING.md is derived from the
+      # layout here, not read from the file, and the file is checked against
+      # the derivation. The output is kept in the log so the figures can be
+      # read against their source without running anything.
+      - name: Derive the encoding byte counts
+        run: |
+          scripts/attestation-message.py --derive
+          scripts/attestation-message.py --check-doc spec/ENCODING.md
+          scripts/attestation-message.py --check-constants spec/constants.json
+
   # The attestation parity fixture is generated, and the Soroban suite trusts
   # it. Rebuilding it from the reference signer must give the committed bytes,
   # so a hand edit or a signer change cannot drift from what the suite runs.

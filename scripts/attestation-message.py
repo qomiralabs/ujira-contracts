@@ -16,11 +16,23 @@
 #   scripts/attestation-message.py --xdr <strkey>
 #       print the Address::to_xdr bytes of a G, C or M address (an M address
 #       gives its base G address and its id)
-# Exit codes: 0 done, 1 an input is invalid, 2 bad usage.
+#   scripts/attestation-message.py --derive
+#       print every byte count and length in spec/ENCODING.md, each computed
+#       from the layout rather than quoted, with how it was computed
+#   scripts/attestation-message.py --check-doc spec/ENCODING.md
+#       check every figure in the file against --derive. A figure that no
+#       derivation covers fails too, so a new one cannot be added without a
+#       derivation behind it
+#   scripts/attestation-message.py --check-constants spec/constants.json
+#       check the attestation lengths in the constants file against --derive
+# Exit codes: 0 done, 1 an input is invalid or a figure disagrees, 2 bad usage.
 
 import base64
 import hashlib
+import json
+import re
 import sys
+import uuid
 
 PREFIX = b"UJIRA/ATTEST/V2"
 U64_MAX = (1 << 64) - 1
@@ -44,6 +56,13 @@ EXAMPLE = {
     "policy_epoch": 0,
     "valid_until": 1767229200,
     "destination": "GDTYAUMMX45E2SU2Q7JRJHCXDIYTEUAXVBHZ7DVCVXZGMAKMWFL7SOY4",
+    # The attester key and signature of the same case. Both are public by
+    # construction: the key's ed25519 seed is the SHA-256 of the ASCII label
+    # "UJIRA/TEST-ONLY/S18/attester-ed25519". Their lengths are measured from
+    # these bytes rather than written down.
+    "attester_public_key": "421adb50c10fe73fb1fc0d4211a16911a188bb001eaf0391b479316026141d48",
+    "signature": "043dcca5e9a6dfd41320f9ecf7b4778bf00ff706ac26d865f4c1ff6366a49e04"
+                 "97e63ef43e2a0e6404218231d10d11aa030f954d9eb799ff92f0328e1cae2208",
 }
 
 
@@ -137,6 +156,183 @@ def message(field_bytes):
     return PREFIX + hashlib.sha256(field_bytes).digest()
 
 
+def derivations():
+    """Every length in spec/ENCODING.md, measured from the layout itself.
+
+    Each entry is (name, bytes, how it was measured). Nothing here is a
+    literal taken from the file being checked: every number is the length of
+    bytes this script builds.
+    """
+    account_xdr_bytes, _ = address_xdr(EXAMPLE["destination"])
+    contract_xdr_bytes, _ = address_xdr(EXAMPLE["mandate"])
+    _, account_payload = decode_strkey(EXAMPLE["destination"])
+    _, contract_payload = decode_strkey(EXAMPLE["mandate"])
+    example_fields = fields(EXAMPLE)
+    # The same case with a contract destination, which is shorter than an account.
+    contract_dest_fields = fields(dict(EXAMPLE, destination=EXAMPLE["mandate"]))
+    payout_id = hashlib.sha256(b"ujira/payout/v1").digest()
+    leg_key = payout_id + bytes([0])
+    key = bytes.fromhex(EXAMPLE["attester_public_key"])
+    signature = bytes.fromhex(EXAMPLE["signature"])
+    return [
+        ("u8", len((0).to_bytes(1, "big")), "a u8"),
+        ("u16be", len((0).to_bytes(2, "big")), "a u16be"),
+        ("u32be", len((0).to_bytes(4, "big")), "a u32be"),
+        ("u64be", len(u64be(0, "u64be")), "a u64be, as the layout builds one"),
+        ("uuid", len(uuid.UUID(int=0).bytes), "a UUID in RFC 9562 order"),
+        ("sha256", len(hashlib.sha256(b"").digest()), "a SHA-256 digest, so every ID too"),
+        ("leg_key", len(leg_key), "payout_id and one byte of leg index"),
+        ("account_xdr", len(account_xdr_bytes), "Address::to_xdr of the example G destination"),
+        ("contract_xdr", len(contract_xdr_bytes), "Address::to_xdr of the example C mandate"),
+        ("ed25519_key", len(account_payload), "the key inside a G strkey"),
+        ("contract_id", len(contract_payload), "the id inside a C strkey"),
+        ("prefix", len(PREFIX), "the ASCII message prefix"),
+        ("message", len(message(example_fields)), "prefix and SHA-256 of the fields"),
+        ("example_fields", len(example_fields), "the worked example's fields, account destination"),
+        ("contract_dest_fields", len(contract_dest_fields), "the same fields with a contract destination"),
+        ("attester_key", len(key), "the worked example's attester public key"),
+        ("signature", len(signature), "the worked example's signature"),
+    ]
+
+
+# Each figure in spec/ENCODING.md, as a pattern whose groups capture the
+# documented numbers and the derivation each one must equal. A figure the file
+# states and this table does not cover is reported, so the table cannot fall
+# behind the file.
+DOC_CHECKS = [
+    ("the integer widths", r"integers of (\d+), (\d+), (\d+) and (\d+) bytes",
+     ("u8", "u16be", "u32be", "u64be")),
+    ("the ID length", r"`tenant_ref` are (\d+) bytes", ("sha256",)),
+    ("the leg_key length", r"`leg_key` is (\d+) bytes", ("leg_key",)),
+    ("the UUID length", r"A UUID is its (\d+) bytes", ("uuid",)),
+    ("the account address length in the table", r"^\| Account `G` \|.*\| (\d+) \|$", ("account_xdr",)),
+    ("the contract address length in the table", r"^\| Contract `C` \|.*\| (\d+) \|$", ("contract_xdr",)),
+    ("the contract and account address lengths",
+     r"\((\d+) bytes for a contract, (\d+) for an account\)", ("contract_xdr", "account_xdr")),
+    ("the policy_epoch width", r"encoded as `u64be`, (\d+) bytes", ("u64be",)),
+    ("the message, prefix and SHA-256 lengths",
+     r"= (\d+) bytes: the (\d+) ASCII bytes of the prefix and the (\d+)-byte SHA-256",
+     ("message", "prefix", "sha256")),
+    ("the transaction hash length it cannot equal", r"a (\d+)-byte transaction hash", ("sha256",)),
+    ("the attester key length", r"attester key is a (\d+)-byte ed25519 public key", ("attester_key",)),
+    ("the attester key length, as a refused zero key", r"(\d+) zero bytes are refused", ("attester_key",)),
+    ("the signature length", r"signature is exactly (\d+) bytes", ("signature",)),
+    ("the worked example's fields length", r"\| `fields` \((\d+) bytes\) \|", ("example_fields",)),
+    ("the worked example's message length", r"\| `message` \((\d+) bytes\) \|", ("message",)),
+]
+
+# Fixed widths written as name[n] in the layout blocks.
+BRACKET_WIDTHS = {
+    "principal_uuid": "uuid",
+    "project_uuid": "uuid",
+    "recipient_uuid": "uuid",
+    "payout_id": "sha256",
+    "network_id": "sha256",
+    "recipient_ref": "sha256",
+    "country_policy_hash": "sha256",
+    "ed25519_key": "ed25519_key",
+    "contract_id": "contract_id",
+}
+
+# Every number the file states as a length must be covered by a check above.
+GUARDS = [
+    r"(\d+)[- ]bytes?\b",
+    r"(\d+) ASCII bytes",
+    r"(\d+) zero bytes",
+    r"(\d+) for an account",
+    r"(\d+) for a contract",
+    r"\w+\[(\d+)\]",
+    r"^\|[^|]*\|[^|]*\| (\d+) \|$",
+]
+
+
+def line_of(text, offset):
+    return text.count("\n", 0, offset) + 1
+
+
+def check_doc(path):
+    """Compares every figure in the file with the derivations. Returns an exit code."""
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError as err:
+        raise InputError("cannot read %s: %s" % (path, err))
+    derived = {name: value for name, value, _ in derivations()}
+    name = path.split("/")[-1]
+    checked = set()
+    problems = []
+    found = 0
+
+    def compare(label, offset, documented, key):
+        nonlocal found
+        found += 1
+        if documented != derived[key]:
+            problems.append("%s:%d: %s says %d, the layout derives %d (%s)"
+                            % (name, line_of(text, offset), label, documented, derived[key], key))
+
+    for label, pattern, keys in DOC_CHECKS:
+        matches = list(re.finditer(pattern, text, re.M))
+        if not matches:
+            problems.append("%s: no figure matched %s; it is missing or reworded, so it is no longer checked"
+                            % (name, label))
+            continue
+        for match in matches:
+            for index, key in enumerate(keys, start=1):
+                checked.add(match.span(index))
+                compare(label, match.start(index), int(match.group(index)), key)
+
+    for match in re.finditer(r"(\w+)\[(\d+)\]", text):
+        field, width = match.group(1), int(match.group(2))
+        key = BRACKET_WIDTHS.get(field)
+        if key is None:
+            problems.append("%s:%d: the width of %s[%d] is not covered by any derivation; add it to BRACKET_WIDTHS"
+                            % (name, line_of(text, match.start(2)), field, width))
+            continue
+        checked.add(match.span(2))
+        compare("the %s width" % field, match.start(2), width, key)
+
+    for guard in GUARDS:
+        for match in re.finditer(guard, text, re.M):
+            if match.span(1) not in checked:
+                problems.append('%s:%d: the figure "%s" is not covered by any derivation; add a check for it'
+                                % (name, line_of(text, match.start(1)), match.group(0).strip()))
+
+    if problems:
+        for problem in sorted(set(problems)):
+            print("attestation-message: " + problem, file=sys.stderr)
+        return 1
+    print("%s: %d figure(s) checked, every one equals the layout" % (name, found))
+    return 0
+
+
+def check_constants(path):
+    """Checks the attestation lengths in the constants file against the derivations."""
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        raise InputError("cannot read %s: %s" % (path, err))
+    constants = data.get("constants", data)
+    derived = {name: value for name, value, _ in derivations()}
+    wanted = {
+        "ATTESTATION_MESSAGE_BYTES": "message",
+        "ATTESTER_KEY_BYTES": "attester_key",
+        "ATTESTATION_SIGNATURE_BYTES": "signature",
+    }
+    name = path.split("/")[-1]
+    problems = []
+    for constant, key in wanted.items():
+        if constant not in constants:
+            problems.append("%s: %s is missing" % (name, constant))
+        elif constants[constant] != derived[key]:
+            problems.append("%s: %s is %s, the layout derives %d"
+                            % (name, constant, constants[constant], derived[key]))
+    if problems:
+        for problem in problems:
+            print("attestation-message: " + problem, file=sys.stderr)
+        return 1
+    print("%s: %d attestation length(s) checked, every one equals the layout" % (name, len(wanted)))
+    return 0
+
+
 def main(argv):
     if argv == ["--example"]:
         f = fields(EXAMPLE)
@@ -150,7 +346,18 @@ def main(argv):
         xdr, tag = address_xdr(argv[1])
         print(xdr.hex() + ("" if tag is None else " tag %d" % tag))
         return 0
-    print("usage: attestation-message.py --example | --xdr <strkey>", file=sys.stderr)
+    if argv == ["--derive"]:
+        rows = derivations()
+        width = max(len(name) for name, _, _ in rows)
+        for name, value, how in rows:
+            print("%-*s %3d %-5s %s" % (width, name, value, "byte" if value == 1 else "bytes", how))
+        return 0
+    if len(argv) == 2 and argv[0] == "--check-doc":
+        return check_doc(argv[1])
+    if len(argv) == 2 and argv[0] == "--check-constants":
+        return check_constants(argv[1])
+    print("usage: attestation-message.py --example | --xdr <strkey> | --derive"
+          " | --check-doc <file> | --check-constants <file>", file=sys.stderr)
     return 2
 
 

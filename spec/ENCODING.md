@@ -2,6 +2,8 @@
 
 Byte layouts that the mandate, the off-chain services and the test vectors must produce identically. `‖` is byte concatenation, `u8`, `u16be`, `u32be` and `u64be` are unsigned big-endian integers of 1, 2, 4 and 8 bytes, and `[n]` is a fixed width of `n` bytes. Every variable-length field carries a length prefix unless it is the last field, so no two field sequences encode to the same bytes.
 
+Every byte count and length below is derived from the layout, never copied. `scripts/attestation-message.py --derive` computes each one from bytes it builds, and `scripts/attestation-message.py --check-doc spec/ENCODING.md` fails if a figure here disagrees with it, if a figure is reworded out of reach of its check, or if a new figure is added with no derivation behind it. `--check-constants spec/constants.json` does the same for the attestation lengths there.
+
 ## IDs
 
 `payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain. `leg_key` is 33 bytes, the `payout_id` and one byte of leg index; it is used only off chain, for delivery steps after settlement.
