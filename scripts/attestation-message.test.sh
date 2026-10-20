@@ -113,6 +113,14 @@ code=0
 out=$("$script" --check-doc "$copy" 2>&1) || code=$?
 if [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'not covered'; then ok "a hyphenated bit width is caught"; else fail "hyphenated bits: exit $code, want 1 with 'not covered'"; printf '%s\n' "$out" | sed 's/^/    /'; fi
 
+# Capitalised Bytes is live vocabulary here: the address table header uses it.
+# A length written that way must be seen, not waved through on case alone.
+copy="$work/capital-bytes.md"
+{ cat "$encoding"; echo; echo "- The address is 99 Bytes."; } >"$copy"
+code=0
+out=$("$script" --check-doc "$copy" 2>&1) || code=$?
+if [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'not covered'; then ok "a capitalised unit is caught"; else fail "capital Bytes: exit $code, want 1 with 'not covered'"; printf '%s\n' "$out" | sed 's/^/    /'; fi
+
 # A figure no check covers must fail too, so a new one cannot be added without
 # a derivation behind it.
 copy="$work/extra.md"

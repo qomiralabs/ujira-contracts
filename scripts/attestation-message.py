@@ -293,8 +293,11 @@ def check_doc(path):
         checked.add(match.span(2))
         compare("the %s width" % field, match.start(2), width, key)
 
+    # Case insensitive on purpose: the address table's header column is Bytes,
+    # so a capitalised unit is the natural way for someone to write a length
+    # here, and the guards have to see it.
     for guard in GUARDS:
-        for match in re.finditer(guard, text, re.M):
+        for match in re.finditer(guard, text, re.M | re.I):
             if match.span(1) not in checked:
                 problems.append('%s:%d: the figure "%s" is not covered by any derivation; add a check for it'
                                 % (name, line_of(text, match.start(1)), match.group(0).strip()))
