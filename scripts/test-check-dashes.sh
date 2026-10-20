@@ -61,10 +61,17 @@ printf 'pages 1%s5\n' "$en" >"$work/en/page.md"
 commit "$work/en"
 expect "an en dash fails with its path and line" 1 "$work/en" "page.md:1:"
 
+# Only the listed formats are skipped, and only with their signature, so a
+# file with an extension the list does not name is checked whatever its bytes.
 repo binary
 printf '\000\001%s\002' "$em" >"$work/binary/image.bin"
 commit "$work/binary"
-expect "a binary file is skipped" 0 "$work/binary"
+expect "an unlisted extension is checked, even full of binary bytes" 1 "$work/binary" "image.bin"
+
+repo real-wasm
+printf '\000asm\001\000\000\000%s' "$em" >"$work/real-wasm/module.wasm"
+commit "$work/real-wasm"
+expect "a wasm file with its signature is skipped" 0 "$work/real-wasm"
 
 repo space
 mkdir -p "$work/space/my docs"
@@ -119,6 +126,49 @@ printf 'clean\n' >"$work/untracked/page.md"
 commit "$work/untracked"
 printf 'bad %s here\n' "$em" >"$work/untracked/scratch.md"
 expect "an untracked file is not checked" 0 "$work/untracked"
+
+# A NUL byte makes git treat a file as binary, so a text file with one at the
+# front would skip the check. Only a file that is really one of the listed
+# binary formats is skipped.
+repo nul-disguise
+printf '\000\nbad %s here\n' "$em" >"$work/nul-disguise/notes.md"
+commit "$work/nul-disguise"
+expect "a text file with a NUL byte is still checked" 1 "$work/nul-disguise" "notes.md"
+
+# A real binary file is skipped even when its bytes happen to spell a dash.
+repo real-binary
+printf '\211PNG\r\n\032\n%s\000\001' "$em" >"$work/real-binary/image.png"
+commit "$work/real-binary"
+expect "a png whose bytes contain a dash is skipped" 0 "$work/real-binary"
+
+# A dash hidden in a file named like a binary format, but without that
+# format's signature, is still found.
+repo fake-png
+printf 'not a png at all\nbad %s here\n' "$em" >"$work/fake-png/image.png"
+commit "$work/fake-png"
+expect "a file named .png without the png signature is checked" 1 "$work/fake-png" "image.png"
+
+# Every GIT_ variable is dropped, so none can point the check at another
+# repository, index or config.
+repo env-clean
+printf 'bad %s here\n' "$em" >"$work/env-clean/page.md"
+commit "$work/env-clean"
+repo env-other
+printf 'clean\n' >"$work/env-other/page.md"
+commit "$work/env-other"
+got=0
+(cd "$work/env-clean" \
+  && GIT_DIR="$work/env-other/.git" GIT_WORK_TREE="$work/env-other" \
+     GIT_INDEX_FILE="$work/env-other/.git/index" GIT_CONFIG_GLOBAL=/dev/null \
+     GIT_COMMON_DIR="$work/env-other/.git" GIT_OBJECT_DIRECTORY="$work/env-other/.git/objects" \
+     "$script" >/dev/null 2>&1) || got=$?
+if [ "$got" -eq 1 ]; then
+  echo "PASS  GIT_ variables cannot point the check at another repository"
+  passed=$((passed + 1))
+else
+  echo "FAIL  GIT_ variables cannot point the check at another repository (got $got)"
+  failures=$((failures + 1))
+fi
 
 mkdir -p "$work/not-a-repo"
 expect "outside a git repository it fails closed" 2 "$work/not-a-repo"
