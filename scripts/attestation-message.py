@@ -204,6 +204,8 @@ DOC_CHECKS = [
      ("u8", "u16be", "u32be", "u64be")),
     ("the ID length", r"`tenant_ref` are (\d+) bytes", ("sha256",)),
     ("the leg_key length", r"`leg_key` is (\d+) bytes", ("leg_key",)),
+    ("the leg index width", r"the `payout_id` and (\d+) bytes? of leg index", ("u8",)),
+    ("the address length prefix width", r"each after a (\d+)[- ]bytes? length prefix", ("u8",)),
     ("the UUID length", r"A UUID is its (\d+) bytes", ("uuid",)),
     ("the account address length in the table", r"^\| Account `G` \|.*\| (\d+) \|$", ("account_xdr",)),
     ("the contract address length in the table", r"^\| Contract `C` \|.*\| (\d+) \|$", ("contract_xdr",)),
@@ -238,6 +240,7 @@ BRACKET_WIDTHS = {
 GUARDS = [
     r"(\d+)[- ]bytes?\b",
     r"(\d+) ASCII bytes",
+    r"(\d+) bits?\b",
     r"(\d+) zero bytes",
     r"(\d+) for an account",
     r"(\d+) for a contract",

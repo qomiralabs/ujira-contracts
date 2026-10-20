@@ -93,7 +93,17 @@ tamper "a wrong bracket width is caught"       's/network_id\[32\]/network_id[31
 tamper "an unknown bracket field is named"     's/network_id\[32\]/widget_id[32]/'                             'add it to BRACKET_WIDTHS'
 tamper "a wrong leg_key length is caught"      's/is 33 bytes/is 34 bytes/'                          'leg_key'
 tamper "a wrong ID length is caught"           's/are 32 bytes/are 31 bytes/'                'ID'
+tamper "a wrong leg index width is caught"     's/and 1 byte of leg index/and 2 bytes of leg index/'          'u8'
+tamper "a wrong length prefix width is caught" 's/a 1 byte length prefix/a 2 byte length prefix/'             'u8'
 tamper "a figure that is removed is caught"    '/The signature is exactly/d'                                   'no figure matched'
+
+# A length given in bits is an uncovered figure, so the convention's bits
+# half is enforced rather than only stated.
+copy="$work/bits.md"
+{ cat "$encoding"; echo; echo "- The nonce is 96 bits long."; } >"$copy"
+code=0
+out=$("$script" --check-doc "$copy" 2>&1) || code=$?
+if [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'not covered'; then ok "a length given in bits is caught"; else fail "bits figure: exit $code, want 1 with 'not covered'"; printf '%s\n' "$out" | sed 's/^/    /'; fi
 
 # A figure no check covers must fail too, so a new one cannot be added without
 # a derivation behind it.
