@@ -6,6 +6,8 @@ Every byte count and length below is derived from the layout, never copied. `scr
 
 So that the check covers this file as it will be written and not only as it reads today, every length here is digits followed by `byte` or `bytes`. A fixed width inside a layout block is written `name[n]`, and in a three-column table a bare number in the last column is read as a byte length, so any other count carries its unit. A length given in bits fails the check as an uncovered figure. A length spelled in words is the one form the check cannot see, because catching it would need a list of number words and such a list falls behind the prose; that edge rests on this rule alone, so a length is never spelled in words here.
 
+The check reads figures, not claims. It compares every number here with the layout, and nothing in it tests a sentence about this file against the file. A statement that some form does not appear, or appears in only one place, holds because someone searched for it and not because the check holds it, so run the search before writing such a sentence.
+
 ## IDs
 
 `payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain. `leg_key` is 33 bytes, the `payout_id` and 1 byte of leg index; it is used only off chain, for delivery steps after settlement.
