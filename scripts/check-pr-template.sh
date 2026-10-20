@@ -43,7 +43,9 @@ fi
 visible=$(python3 -I -c '
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-text = re.sub(r"<!--.*?-->", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
+# An unterminated comment hides everything after it when the template is
+# rendered, so it counts as running to the end of the file.
+text = re.sub(r"<!--.*?(?:-->|\Z)", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
 out, fenced = [], False
 for line in text.split("\n"):
     if re.match(r"\s*(?:```|~~~)", line):

@@ -161,6 +161,48 @@ sys.stdout.write(text.replace("## Docs\n", "Write about ## Docs here.\n"))
 ' "$template" >"$work/not-a-heading.md"
 expect "a heading mentioned in prose does not count" 1 "$work/not-a-heading.md"
 
+# An unterminated comment hides everything after it when GitHub renders the
+# template, so the check must treat it as running to the end of the file.
+# shellcheck disable=SC2016
+python3 -I -c '
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+heading = "## Required reviews"
+assert heading in text
+sys.stdout.write(text.replace(heading, "<!-- everything from here is hidden\n" + heading))
+' "$template" >"$work/unterminated.md"
+expect "an unterminated comment hides the rest of the template" 1 "$work/unterminated.md"
+
+# The comment markers on their own lines leave the required line intact, so
+# this case passes only while the stripping is in place. Remove the stripping
+# and it fails, which is what makes it a guard for it.
+# shellcheck disable=SC2016
+python3 -I -c '
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+line = "- Auth, identity, payouts, idempotency, router, secrets, dependencies, CI and infrastructure: add a security review."
+assert line in text
+sys.stdout.write(text.replace(line, "<!--\n" + line + "\n-->"))
+' "$template" >"$work/commented-block.md"
+expect "a review line inside a comment block does not count" 1 "$work/commented-block.md"
+
+# The same for a fenced block around a required line, not just a heading.
+# shellcheck disable=SC2016
+python3 -I -c '
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+line = "- Merges are squash only."
+assert line in text
+sys.stdout.write(text.replace(line, "```\n" + line + "\n```"))
+' "$template" >"$work/fenced-line.md"
+expect "a merge rule inside a code fence does not count" 1 "$work/fenced-line.md"
+
+# A checklist item must be the whole line, so trailing text that waters it
+# down fails. A substring match would let this through.
+sed 's/^- \[ \] No em or en dashes anywhere in the change, the commits or this description$/- [ ] No em or en dashes anywhere in the change, the commits or this description, except where a quotation needs one/' \
+  "$template" >"$work/padded-item.md"
+expect "a checklist item with extra text appended fails" 1 "$work/padded-item.md"
+
 # The template must be plain ASCII.
 { cat "$template"; printf 'Caf\303\251\n'; } >"$work/nonascii.md"
 expect "a non ASCII character fails" 1 "$work/nonascii.md"
