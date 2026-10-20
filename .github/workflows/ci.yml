@@ -300,3 +300,24 @@ jobs:
       # write spike wasm under target/.
       - name: Check wasm fixtures match their source
         run: ../scripts/check-wasm-fixtures.sh
+
+  # Fails on any em dash or en dash in a tracked file. The same scripts run
+  # in every UJIRA repository.
+  dashes:
+    name: dashes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the dash check
+        run: scripts/test-check-dashes.sh
+
+      - name: Check for dashes
+        run: scripts/check-dashes.sh
