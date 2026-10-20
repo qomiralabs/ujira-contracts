@@ -40,7 +40,7 @@ fi
 # cannot satisfy a requirement. Lines are kept, blanked rather than deleted,
 # so a heading inside a comment cannot pull the lines under it into the
 # previous section.
-visible=$(python3 -c '
+visible=$(python3 -I -c '
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 text = re.sub(r"<!--.*?-->", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)

@@ -87,7 +87,7 @@ expect "a checklist item without a checkbox fails" 1 "$work/plain.md"
 # A required part that is commented out or inside a code fence is not asking
 # for anything, so it must not count.
 hide_comment() {
-  python3 -c '
+  python3 -I -c '
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
 line = sys.argv[2]
@@ -103,7 +103,7 @@ expect "required section inside an HTML comment" 1 "$work/commented.md"
 
 # The single quotes keep the Python source literal; nothing expands.
 # shellcheck disable=SC2016
-python3 -c '
+python3 -I -c '
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
 heading = "## Required reviews"
@@ -113,7 +113,7 @@ sys.stdout.write(text.replace(heading, "```\n" + heading + "\n```"))
 expect "required section inside a code fence" 1 "$work/fenced.md"
 
 # A review rule only means something under the reviews heading.
-python3 -c '
+python3 -I -c '
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
 line = "- Auth, identity, payouts, idempotency, router, secrets, dependencies, CI and infrastructure: add a security review."
@@ -130,7 +130,7 @@ expect "checklist item shortened to no em" 1 "$work/short-item.md"
 
 # The linked issue placeholder must be under its own heading, not merely
 # somewhere in the file.
-python3 -c '
+python3 -I -c '
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
 assert "Closes #" in text
@@ -141,7 +141,7 @@ sys.stdout.write(text)
 expect "Closes # only inside the reviews section" 1 "$work/misplaced-closes.md"
 
 # The merge rules only mean something under the before merge heading.
-python3 -c '
+python3 -I -c '
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
 line = "- Merges are squash only."
@@ -153,7 +153,7 @@ sys.stdout.write(text)
 expect "squash only reminder outside the before merge section" 1 "$work/misplaced-merge.md"
 
 # A heading must be a real heading, not a line that only mentions one.
-python3 -c '
+python3 -I -c '
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
 assert "## Docs\n" in text
