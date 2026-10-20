@@ -109,6 +109,13 @@ jobs:
       - name: Test the invisible character check
         run: scripts/check-invisible-characters.test.sh
 
+      # The template every pull request starts from must keep asking for the
+      # linked issue, tests, docs, the checklist and the required reviews.
+      - name: Check the pull request template
+        run: |
+          scripts/check-pr-template.sh
+          scripts/check-pr-template.test.sh
+
       # Every rule in the mandate spec has a unique, indexed ID, and every
       # numbered check in an operation's check order cites exactly one rule.
       # Every file git tracks under spec/ is a regular file with an ASCII
