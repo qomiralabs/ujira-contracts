@@ -96,7 +96,7 @@ git -C "$work/staged" add page.md
 expect "staged content is checked" 1 "$work/staged" "page.md:1:"
 
 # An edit left in the working tree is not what git holds, so it is not
-# checked here. The pre-commit hook checks staged content, and this check runs
+# checked here. A commit time check covers staged content, and this check runs
 # again in CI on the pushed commit.
 repo unstaged
 printf 'clean\n' >"$work/unstaged/page.md"
