@@ -128,6 +128,11 @@ jobs:
       - name: Test the spec ID check
         run: scripts/check-spec-ids.test.sh
 
+      # The worked attestation example in spec/ENCODING.md is recomputed from its
+      # inputs, and the address bytes match the ones the Stellar SDK produced.
+      - name: Test the attestation message example
+        run: scripts/attestation-message.test.sh
+
   # The attestation parity fixture is generated, and the Soroban suite trusts
   # it. Rebuilding it from the reference signer must give the committed bytes,
   # so a hand edit or a signer change cannot drift from what the suite runs.

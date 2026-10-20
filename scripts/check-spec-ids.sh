@@ -88,16 +88,29 @@
 # or no longer titled "Retired:", or if a retired rule is not listed, so a
 # retired ID can be neither deleted nor brought back.
 #
-# Usage: scripts/check-spec-ids.sh [--check-order] [path to MANDATE.md]
+# Tables: errors.json, constants.json and EVENTS.md beside the spec must
+# agree with MANDATE.md. errors.json is a list of { name, code, summary } with
+# unique names and codes, and its (code, name) pairs equal the error table.
+# constants.json holds "constants" (equal to the constants table, I128_MAX as
+# a decimal string equal to 2^127 - 1), "role_codes" and
+# "recovery_action_kinds". EVENTS.md lists every event of the event list with
+# the same fields, and every event MANDATE.md cites (`name {`, "emit `name`")
+# is in that list. Duplicate JSON keys are refused. The three files are
+# required when the checker runs on the repository's own spec (no path given)
+# or with --require-tables, and checked whenever they are present.
+#
+# Usage: scripts/check-spec-ids.sh [--check-order] [--require-tables] [path to MANDATE.md]
 # Exit codes: 0 all checks pass, 1 one or more problems named on stderr,
 # 2 bad usage or an unreadable file.
 set -euo pipefail
 
 check_order=0
+require_tables=0
 spec=""
 for arg in "$@"; do
   case "$arg" in
     --check-order) check_order=1 ;;
+    --require-tables) require_tables=1 ;;
     -*)
       echo "check-spec-ids: unknown option $arg" >&2
       exit 2
@@ -111,6 +124,7 @@ for arg in "$@"; do
       ;;
   esac
 done
+if [ -z "$spec" ]; then require_tables=1; fi
 spec=${spec:-"$(cd "$(dirname "$0")/.." && pwd)/spec/MANDATE.md"}
 
 if [ ! -r "$spec" ]; then
@@ -124,18 +138,20 @@ chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE"
 
 # Characters allowed beyond printable ASCII and LF, per file relative to the
 # spec directory. U+2016 (DOUBLE VERTICAL LINE) is the byte concatenation
-# operator in MANDATE.md (the deploy salt and the r, s, v signature layout).
-charset_allow="MANDATE.md:2016"
+# operator in MANDATE.md (the deploy salt) and in ENCODING.md (the ID and
+# attestation message layouts).
+charset_allow="MANDATE.md:2016 ENCODING.md:2016"
 
 spec_dir=$(dirname "$spec")
 charset_status=0
-python3 -I - "$spec_dir" "$charset_allow" "$(basename "$spec")" <<'PY' || charset_status=$?
+python3 -I - "$spec_dir" "$charset_allow" "$(basename "$spec")" "$require_tables" <<'PY' || charset_status=$?
 import os
 import subprocess
 import sys
 import unicodedata
 
-root, allow_spec, spec_name = sys.argv[1], sys.argv[2], sys.argv[3]
+root, allow_spec, spec_name, require_tables = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+texts = {}
 allowed = {}
 for item in allow_spec.split():
     name, _, points = item.partition(":")
@@ -299,7 +315,8 @@ def scan():
         for attr, value in attrs.get(path, []):
             report("%s has attribute %s=%s, which converts content between the blob and the checkout" % (rel, attr, value))
         blob = blobs[oid]
-        check_text(rel, blob.decode("utf-8", errors="surrogateescape"))
+        texts[rel] = blob.decode("utf-8", errors="surrogateescape")
+        check_text(rel, texts[rel])
         full = os.path.join(root, rel)
         if os.path.islink(full):
             report(rel + " is a symbolic link in the working tree; spec files must be regular files")
@@ -312,8 +329,196 @@ def scan():
                 report(rel + " in the working tree differs from the staged blob; stage the change (git add) or restore the file")
 
 
+import json
+import re
+
+TABLE_FILES = ("errors.json", "constants.json", "EVENTS.md")
+
+
+def reject_duplicates(name):
+    def hook(pairs):
+        seen = {}
+        for key, value in pairs:
+            if key in seen:
+                report("%s has the key %s twice" % (name, key))
+            seen[key] = value
+        return seen
+    return hook
+
+
+def load_json(name):
+    try:
+        return json.loads(texts[name], object_pairs_hook=reject_duplicates(name))
+    except ValueError as err:
+        report("%s is not valid JSON: %s" % (name, err))
+        return None
+
+
+def sections(text):
+    """Returns {heading text: [lines]} for every ## and ### heading."""
+    out, current = {}, None
+    for line in text.split("\n"):
+        m = re.match(r"^#{2,3} (.+)$", line)
+        if m:
+            current = m.group(1).strip()
+            out.setdefault(current, [])
+        elif current is not None:
+            out[current].append(line)
+    return out
+
+
+def table_rows(lines):
+    rows = []
+    for line in lines:
+        if line.startswith("|") and not re.match(r"^\| *-", line):
+            rows.append([c.strip() for c in line.strip().strip("|").split("|")])
+    return rows[1:] if rows else []
+
+
+def check_errors(spec_sections):
+    data = load_json("errors.json")
+    if data is None:
+        return
+    if not isinstance(data, list):
+        report("errors.json must be a list of { name, code, summary }")
+        return
+    names, codes = {}, {}
+    for i, entry in enumerate(data):
+        if not isinstance(entry, dict) or set(entry) != {"name", "code", "summary"}:
+            report("errors.json entry %d must have exactly name, code and summary" % (i + 1))
+            continue
+        name, code, summary = entry["name"], entry["code"], entry["summary"]
+        if not isinstance(name, str) or not re.match(r"^[A-Z][A-Z0-9_]*$", name):
+            report("errors.json entry %d has a name that is not upper snake case" % (i + 1))
+            continue
+        if not isinstance(code, int) or isinstance(code, bool) or code < 1:
+            report("errors.json %s has a code that is not a positive integer" % name)
+            continue
+        if not isinstance(summary, str) or not summary.strip():
+            report("errors.json %s has an empty summary" % name)
+        if name in names:
+            report("errors.json lists %s twice" % name)
+        if code in codes:
+            report("errors.json lists code %d twice" % code)
+        names[name], codes[code] = code, name
+    table = {}
+    for row in table_rows(spec_sections.get("Errors", [])):
+        if len(row) >= 2 and row[0].isdigit():
+            table[row[1].strip("`")] = int(row[0])
+    for name, code in sorted(table.items(), key=lambda kv: kv[1]):
+        if names.get(name) != code:
+            report("error %s (%d) is in the MANDATE.md error table but not in errors.json" % (name, code))
+    for name, code in sorted(names.items(), key=lambda kv: kv[1]):
+        if table.get(name) != code:
+            report("error %s (%d) is in errors.json but not in the MANDATE.md error table" % (name, code))
+
+
+def check_constants(spec_sections):
+    data = load_json("constants.json")
+    if data is None:
+        return
+    if not isinstance(data, dict) or set(data) != {"constants", "role_codes", "recovery_action_kinds"}:
+        report("constants.json must have exactly constants, role_codes and recovery_action_kinds")
+        return
+    consts = data["constants"]
+    for key in ("role_codes", "recovery_action_kinds"):
+        group = data[key]
+        if not isinstance(group, dict) or any(not isinstance(v, int) or isinstance(v, bool) for v in group.values()):
+            report("constants.json %s must map names to integers" % key)
+        elif len(set(group.values())) != len(group):
+            report("constants.json %s gives two names the same code" % key)
+    if not isinstance(consts, dict):
+        report("constants.json constants must be an object")
+        return
+    table = {}
+    for row in table_rows(spec_sections.get("Constants", [])):
+        if len(row) >= 2 and row[0].startswith("`"):
+            table[row[0].strip("`")] = row[1]
+    for name, value in consts.items():
+        if isinstance(value, bool) or not isinstance(value, (int, str)) or (isinstance(value, str) and not value.isdigit()):
+            report("constant %s in constants.json is not an integer or a decimal string" % name)
+    for name, value in table.items():
+        if name not in consts:
+            report("constant %s is in the MANDATE.md constants table but not in constants.json" % name)
+        elif str(consts[name]) != value:
+            report("constant %s is %s in MANDATE.md but %s in constants.json" % (name, value, consts[name]))
+    for name in consts:
+        if name not in table:
+            report("constant %s is in constants.json but not in the MANDATE.md constants table" % name)
+    if "I128_MAX" in consts and str(consts["I128_MAX"]) != str(2 ** 127 - 1):
+        report("constant I128_MAX in constants.json is not 2^127 - 1")
+
+
+def event_rows(lines):
+    events = {}
+    for row in table_rows(lines):
+        if len(row) >= 2 and row[0].startswith("`"):
+            fields = [f.strip() for f in row[1].split(",") if f.strip()]
+            for name in re.findall(r"`([a-z][a-z0-9_]*)`", row[0]):
+                events[name] = fields
+    return events
+
+
+def check_events(spec_text, spec_sections):
+    listed = event_rows(spec_sections.get("Event list", []))
+    documented = event_rows(texts["EVENTS.md"].split("\n"))
+    for name, fields in sorted(listed.items()):
+        if name not in documented:
+            report("event %s is in the MANDATE.md event list but not in EVENTS.md" % name)
+        elif documented[name] != fields:
+            report("event %s has fields %s in MANDATE.md but %s in EVENTS.md" % (name, ", ".join(fields), ", ".join(documented[name])))
+    for name in sorted(documented):
+        if name not in listed:
+            report("event %s is in EVENTS.md but not in the MANDATE.md event list" % name)
+    # The topic key travels only in the topics: the data column lists the
+    # event's fields without it.
+    for row in table_rows(texts["EVENTS.md"].split("\n")):
+        if len(row) < 4 or not row[0].startswith("`"):
+            continue
+        fields = [f.strip() for f in row[1].split(",") if f.strip()]
+        key = row[2].strip("`").strip()
+        data = [f.strip() for f in row[3].split(",") if f.strip() and f.strip() != "none"]
+        for name in re.findall(r"`([a-z][a-z0-9_]*)`", row[0]):
+            if key in data:
+                report("event %s repeats its topic key %s in the data; the key is carried only in the topics" % (name, key))
+            elif data != [f for f in fields if f != key]:
+                report("event %s has data %s, but its fields without the topic key are %s" % (name, ", ".join(data) or "none", ", ".join(f for f in fields if f != key) or "none"))
+    fence = False
+    for n, line in enumerate(spec_text.split("\n"), 1):
+        if line.startswith("```"):
+            fence = not fence
+        if fence or line.startswith("|"):
+            continue
+        cited = re.findall(r"`([a-z][a-z0-9_]*) \{", line) + re.findall(r"[Ee]mits? `([a-z][a-z0-9_]*)`", line)
+        for name in cited:
+            if name not in listed:
+                report("event %s is cited at line %d of %s but is not in the event list" % (name, n, spec_name))
+
+
+def check_tables():
+    present = [name for name in TABLE_FILES if name in texts]
+    if require_tables:
+        for name in TABLE_FILES:
+            if name not in texts:
+                report(name + " is missing; it must sit beside the spec and be tracked")
+    if not present or spec_name not in texts:
+        return
+    spec_text = texts[spec_name]
+    spec_sections = sections(spec_text)
+    before = problems
+    if "errors.json" in texts:
+        check_errors(spec_sections)
+    if "constants.json" in texts:
+        check_constants(spec_sections)
+    if "EVENTS.md" in texts:
+        check_events(spec_text, spec_sections)
+    if problems == before and len(present) == len(TABLE_FILES):
+        print("error table, constants and events agree with %s" % spec_name)
+
+
 try:
     scan()
+    check_tables()
 except OSError as err:
     print("check-spec-ids: cannot read the spec directory: %s" % err, file=sys.stderr)
     sys.exit(2)
