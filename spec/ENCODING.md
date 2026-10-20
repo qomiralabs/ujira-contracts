@@ -4,6 +4,8 @@ Byte layouts that the mandate, the off-chain services and the test vectors must 
 
 Every byte count and length below is derived from the layout, never copied. `scripts/attestation-message.py --derive` computes each one from bytes it builds, and `scripts/attestation-message.py --check-doc spec/ENCODING.md` fails if a figure here disagrees with it, if a figure is reworded out of reach of its check, or if a new figure is added with no derivation behind it. `--check-constants spec/constants.json` does the same for the attestation lengths there.
 
+So that the check covers this file as it will be written and not only as it reads today, every length here is digits followed by `byte` or `bytes`: never spelled in words, never given in bits. A fixed width inside a layout block is written `name[n]`, and in a three-column table a bare number in the last column is read as a byte length, so any other count carries its unit.
+
 ## IDs
 
 `payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain. `leg_key` is 33 bytes, the `payout_id` and one byte of leg index; it is used only off chain, for delivery steps after settlement.

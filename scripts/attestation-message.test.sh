@@ -90,6 +90,7 @@ tamper "a wrong hash length is caught"         's/the 32-byte SHA-256/the 31-byt
 tamper "a wrong integer width is caught"       's/of 1, 2, 4 and 8 bytes/of 1, 2, 4 and 9 bytes/'              'u64be'
 tamper "a wrong UUID length is caught"         's/its 16 bytes/its 17 bytes/'                                  'UUID'
 tamper "a wrong bracket width is caught"       's/network_id\[32\]/network_id[31]/'                            'network_id'
+tamper "an unknown bracket field is named"     's/network_id\[32\]/widget_id[32]/'                             'add it to BRACKET_WIDTHS'
 tamper "a wrong leg_key length is caught"      's/is 33 bytes/is 34 bytes/'                          'leg_key'
 tamper "a wrong ID length is caught"           's/are 32 bytes/are 31 bytes/'                'ID'
 tamper "a figure that is removed is caught"    '/The signature is exactly/d'                                   'no figure matched'
