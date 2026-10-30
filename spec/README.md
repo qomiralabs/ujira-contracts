@@ -21,5 +21,6 @@ Scope: spec version 1 is in force on Stellar only. Rules and text marked Celo or
 - `EVENTS.md`: the canonical events with their fields and their encoding on Stellar.
 - `ENCODING.md`: the byte layouts of the IDs and of the version 2 attestation message, with a worked example that `scripts/attestation-message.py --example` recomputes.
 - `retired-ids.txt`: the rule IDs that are retired. A retired rule stays in `MANDATE.md` with a title starting `Retired:`, and its ID is never deleted or reused.
+- `vectors/`: the shared test vectors, their JSON Schema (`vectors/schema.json`) and a complete example. `vectors/README.md` explains the format, and `scripts/check-vectors.sh` checks every vector file against the schema and this spec.
 
 `scripts/check-spec-ids.sh --check-order` checks that every rule ID is unique, defined and indexed, that every rule area is covered, that every error a rule cites is in the error table, and that every numbered check cites exactly one rule. `scripts/check-spec-ids.test.sh` is its self test. CI runs both.

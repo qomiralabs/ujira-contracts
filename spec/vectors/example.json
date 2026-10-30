@@ -1,0 +1,134 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "description": "The example vector from spec/vectors/README.md, kept as a file so the checker and the runner see exactly what the README shows.",
+  "vectors": [
+    {
+      "id": "pause_blocks_requests_until_resume",
+      "rules": ["MANDATE-PAUSE-001", "MANDATE-PAUSE-002", "MANDATE-PAUSE-003"],
+      "description": "A guardian pauses, a request and a second pause are refused, and once the principal resumes the same request is approved.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          { "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }
+        ],
+        "mints": [{ "token": "asset", "to": "principal", "amount": "1000" }],
+        "transfers": [{ "token": "asset", "from": "principal", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "paused", "fields": { "by": "guardian" } }],
+            "state": { "mandate": { "paused": true } }
+          }
+        },
+        { "step": "advance_time", "seconds": "60" },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": { "error": "MANDATE_PAUSED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": { "error": "ALREADY_PAUSED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "resume",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "resumed", "fields": { "by": "principal" } }],
+            "state": { "mandate": { "paused": false } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312060"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "0", "pending": "0", "committed": "100", "balance": "1000", "free": "900" },
+              "payouts": {
+                "#p1": { "status": "APPROVED", "total": "100", "fee": "0", "created_at": "1767225660", "expires_at": "1767312060" }
+              },
+              "balances": { "asset": { "mandate": "1000", "principal": "0" } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

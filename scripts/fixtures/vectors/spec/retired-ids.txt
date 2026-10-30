@@ -1,0 +1,2 @@
+# Retired rule IDs of the fixture spec.
+MANDATE-RECIPIENT-011

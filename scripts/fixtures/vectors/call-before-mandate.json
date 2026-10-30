@@ -1,0 +1,33 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "vectors": [
+    {
+      "id": "fixture_no_mandate",
+      "rules": [
+        "MANDATE-PAUSE-002"
+      ],
+      "description": "A mandate call with no mandate.",
+      "setup": {
+        "now": "1767225600"
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "paused",
+                "fields": {
+                  "by": "guardian"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

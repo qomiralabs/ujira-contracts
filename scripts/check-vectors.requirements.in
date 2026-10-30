@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Qomira Labs
+#
+# The one tool scripts/check-vectors.sh needs beyond the standard library.
+# check-vectors.requirements.txt is compiled from this file and pins every
+# dependency with the SHA256 of every distribution; the command that built it
+# is at its top. Bump the version and the --exclude-newer date together, and
+# only to a release at least 14 days old: the date keeps every dependency at
+# least that old too. check-jsonschema is Apache 2.0 licensed.
+check-jsonschema==0.38.2

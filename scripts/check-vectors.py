@@ -1,0 +1,665 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Qomira Labs
+#
+# The checks on the shared test vectors that a JSON Schema cannot express.
+# scripts/check-vectors.sh runs this after check-jsonschema has validated the
+# same files against spec/vectors/schema.json. It runs even when that
+# validation fails, so one run names every problem, which is why every value
+# is type checked here before it is used.
+#
+# Against the spec directory:
+#   - every cited rule ID is a rule in MANDATE.md and is not retired (a title
+#     starting "Retired:" or an entry in retired-ids.txt);
+#   - every expected error name is in errors.json, every event name is in
+#     EVENTS.md, and each event lists exactly the fields EVENTS.md gives it.
+#
+# Inside the files:
+#   - JSON numbers are integers only (no fraction, exponent, NaN or Infinity),
+#     no object repeats a key, and vector IDs are unique across all files;
+#   - an input only one chain's types can express restricts the vector to that
+#     chain: a negative amount (Stellar), an amount above I128_MAX, the zero
+#     address, the non-canonical tag or a reentrant test token (Celo);
+#   - a tagged destination is an account actor, and the mandate, the tokens and
+#     the zero address never make a call;
+#   - every attestation a request names was made by an earlier attest step,
+#     the retired secp256k1 tamper kinds are refused by name, and a
+#     wrong_signer tamper never signs with the key it already uses;
+#   - a Stellar host_abort is expected only from a request carrying an
+#     attestation whose tamper leaves a 64-byte signature that fails
+#     verification, and only with ATTESTATION_INVALID on the other chain, so a
+#     request_payouts batch can never also expect per-item rejections;
+#   - a Stellar host_auth_failure is expected only from a call with no caller
+#     argument, or from a call signed by someone other than its caller in a
+#     vector that cites the caller authorization rule;
+#   - a token that moves the settlement balance is recovered only in a vector
+#     restricted to Celo, or restricted to Stellar and expecting
+#     TRANSFER_FAILED;
+#   - mandate calls and attest steps come after the mandate exists, and time
+#     never moves back.
+#
+# Coverage (--require-all, or --areas for some areas): every MANDATE rule that
+# is not retired has at least one passing and one failing vector. A vector is
+# failing when any call in it is refused on any chain: an error, a per-chain
+# override, a payout_request_rejected event or a batch item with a non-zero
+# code. Every other vector is passing. CHAINOPS rules bind the off-chain
+# services and never count as uncovered.
+#
+# Standard library only.
+#
+# Usage: check-vectors.py --spec DIR [--require-all | --areas A,B,...] FILE...
+# Exit codes: 0 every check passes, 1 problems named on stderr, 2 bad usage or
+# a spec file that cannot be read.
+
+import json
+import os
+import re
+import sys
+
+FORMAT = "ujira-mandate-vectors/1"
+CHAINS = ("stellar", "celo")
+I128_MAX = 2**127 - 1
+I128_MIN = -(2**127)
+U64_MAX = 2**64 - 1
+
+# A 64-byte signature that fails ed25519 verification, which the Stellar host
+# turns into a trap the contract cannot catch.
+INVALID_SIGNATURE = {
+    "wrong_signer",
+    "wrong_chain",
+    "wrong_mandate",
+    "wrong_destination",
+    "wrong_tag",
+    "wrong_policy",
+    "wrong_ref",
+    "wrong_valid_until",
+    "flipped_bit",
+    "non_canonical_s",
+}
+# A signature that is not 64 bytes, refused with a code before verification.
+WRONG_LENGTH = {"empty", "truncated", "short_signature", "long_signature", "extended"}
+# The tamper kinds of the secp256k1 attestations, which were never deployed.
+RETIRED_TAMPER = {"high_s", "bad_v", "r_zero", "s_zero", "r_order", "r_not_on_curve", "recovers_to_infinity"}
+# The test key a wrong_signer attestation is signed with.
+WRONG_SIGNER = "#wrong_signer"
+
+# Functions that take a caller argument, which the call authorizes first.
+CALLER_ARG = {
+    "request_payout",
+    "request_payouts",
+    "approve",
+    "reject",
+    "cancel",
+    "cancel_batch",
+    "execute",
+    "execute_batch",
+    "pause",
+    "sweep",
+    "recovery_revoke",
+    "recovery_rotate_agent",
+}
+VIEWS = {"version", "config", "state", "payout", "daily_used", "is_allowed"}
+REQUESTS = {"request_payout", "request_payouts"}
+CALLER_AUTH_RULE = "MANDATE-ROLE-019"
+
+# Reserved actors that are not accounts and can never make a call.
+NOT_ACCOUNTS = {"mandate", "asset", "other_token", "zero"}
+# Keys whose values are amounts wherever they appear in a vector.
+AMOUNT_KEYS = {
+    "total",
+    "fee",
+    "amount",
+    "total_budget",
+    "per_payment_cap",
+    "per_recipient_daily_cap",
+    "approval_threshold",
+    "spent",
+    "pending",
+    "committed",
+    "balance",
+    "free",
+    "frozen",
+    "used",
+}
+# Keys whose values are prose or names, never actors.
+TEXT_KEYS = {"description", "id", "rules"}
+
+problems = 0
+
+
+def report(where, msg):
+    global problems
+    print("check-vectors: %s: %s" % (where, msg), file=sys.stderr)
+    problems += 1
+
+
+def fail_usage(msg):
+    print("check-vectors: " + msg, file=sys.stderr)
+    sys.exit(2)
+
+
+def read_text(path):
+    try:
+        with open(path, "rb") as fh:
+            return fh.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as err:
+        fail_usage("cannot read %s: %s" % (path, err))
+    return ""
+
+
+def load_spec(spec_dir):
+    """Returns (rules {id: title}, retired ids, error names, events {name: [fields]})."""
+    rules = {}
+    fence = False
+    for line in read_text(os.path.join(spec_dir, "MANDATE.md")).split("\n"):
+        if line.startswith("```"):
+            fence = not fence
+            continue
+        m = None if fence else re.match(r"^#### ((?:MANDATE|CHAINOPS)-[A-Z]+-[0-9]{3}) (.*)$", line)
+        if m:
+            rules[m.group(1)] = m.group(2)
+    if not rules:
+        fail_usage("no rules found in %s" % os.path.join(spec_dir, "MANDATE.md"))
+    retired = {rid for rid, title in rules.items() if title.startswith("Retired:")}
+    retired_path = os.path.join(spec_dir, "retired-ids.txt")
+    if os.path.exists(retired_path):
+        for line in read_text(retired_path).split("\n"):
+            entry = line.split("#", 1)[0].strip()
+            if entry:
+                retired.add(entry)
+
+    errors = set()
+    try:
+        for entry in json.loads(read_text(os.path.join(spec_dir, "errors.json"))):
+            errors.add(entry["name"])
+    except (ValueError, TypeError, KeyError) as err:
+        fail_usage("cannot read the error names from errors.json: %s" % err)
+
+    events = {}
+    for line in read_text(os.path.join(spec_dir, "EVENTS.md")).split("\n"):
+        if not line.startswith("| `"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        fields = [f.strip() for f in cells[1].split(",") if f.strip()]
+        for name in re.findall(r"`([a-z][a-z0-9_]*)`", cells[0]):
+            events[name] = fields
+    if not events:
+        fail_usage("no events found in %s" % os.path.join(spec_dir, "EVENTS.md"))
+    return rules, retired, errors, events
+
+
+def load_vectors(path):
+    """Parses one file, reporting repeated keys and numbers that are not integers."""
+    found = []
+
+    def pairs(items):
+        obj = {}
+        for key, value in items:
+            if key in obj:
+                found.append("the key %s appears twice in one object" % json.dumps(key))
+            obj[key] = value
+        return obj
+
+    def no_float(text):
+        found.append("%s is not an integer; amounts are decimal strings and counts are JSON integers, never fractions" % text)
+        return 0
+
+    def no_constant(text):
+        found.append("%s is not valid JSON" % text)
+        return 0
+
+    try:
+        with open(path, "rb") as fh:
+            raw = fh.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as err:
+        report(path, "cannot read the file: %s" % err)
+        return None
+    try:
+        data = json.loads(raw, object_pairs_hook=pairs, parse_float=no_float, parse_constant=no_constant)
+    except ValueError as err:
+        report(path, "is not valid JSON: %s" % err)
+        return None
+    for msg in found:
+        report(path, msg)
+    return data
+
+
+def walk(node, path="", parents=()):
+    """Yields (path, key, value, parent keys) for every member of every object
+    and array. Array members have the key None."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            sub = "%s.%s" % (path, key) if path else key
+            yield sub, key, value, parents
+            yield from walk(value, sub, parents + (key,))
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            sub = "%s[%d]" % (path, i)
+            yield sub, None, value, parents
+            yield from walk(value, sub, parents + (None,))
+
+
+def decimal(value):
+    if isinstance(value, str) and re.fullmatch(r"0|-?[1-9][0-9]*", value):
+        return int(value)
+    return None
+
+
+def refuses(expect):
+    """True when a call is refused on some chain, wholly or for a batch item."""
+    if "error" in expect:
+        return True
+    per_chain = expect.get("per_chain")
+    if isinstance(per_chain, dict) and per_chain:
+        return True
+    if "payout_request_rejected" in event_names(expect):
+        return True
+    result = expect.get("return")
+    if isinstance(result, list):
+        return any(isinstance(item, dict) and item.get("code") not in (0, None) for item in result)
+    return False
+
+
+def event_names(expect):
+    events = expect.get("events")
+    if not isinstance(events, list):
+        return []
+    return [e.get("name") for e in events if isinstance(e, dict)]
+
+
+class Vector:
+    def __init__(self, path, index, data, spec, seen_ids):
+        self.data = data
+        self.rules, self.retired, self.errors, self.events = spec
+        vid = data.get("id")
+        self.id = vid if isinstance(vid, str) else "#%d" % (index + 1)
+        self.where = "%s: vector %s" % (path, self.id)
+        if isinstance(vid, str):
+            if vid in seen_ids:
+                self.problem("the ID %s is also used in %s; vector IDs are unique across every file" % (vid, seen_ids[vid]))
+            else:
+                seen_ids[vid] = path
+        applies = data.get("applies_to")
+        chains = {c for c in applies if c in CHAINS} if isinstance(applies, list) else set()
+        self.runs_on = chains or set(CHAINS)
+        setup = data.get("setup")
+        self.setup = setup if isinstance(setup, dict) else {}
+        self.cited = set()
+        self.refused = False
+        self.movers = set()
+
+    def problem(self, msg, step=None):
+        report(self.where if step is None else "%s step %d" % (self.where, step), msg)
+
+    def only_on(self, chain, what, why):
+        """An input only one chain can express needs the vector restricted to it."""
+        if self.runs_on != {chain}:
+            self.problem(
+                "%s, which only %s can express (%s); restrict the vector with applies_to [\"%s\"] and "
+                "skip_reason unrepresentable_input" % (what, chain.capitalize(), why, chain)
+            )
+
+    def check(self):
+        self.check_rules()
+        self.check_values()
+        self.check_setup()
+        steps = self.data.get("steps")
+        if isinstance(steps, list):
+            self.check_steps(steps)
+
+    def check_rules(self):
+        rules = self.data.get("rules")
+        for rid in rules if isinstance(rules, list) else []:
+            if not isinstance(rid, str):
+                continue
+            if rid not in self.rules:
+                self.problem("cites %s, which is not a rule in MANDATE.md" % rid)
+            elif rid in self.retired:
+                self.problem("cites %s, which is retired; cite the rule that replaced it" % rid)
+            else:
+                self.cited.add(rid)
+
+    def check_values(self):
+        for path, key, value, parents in walk(self.data):
+            if key in TEXT_KEYS:
+                continue
+            # Balances are keyed by token, then by actor.
+            balance = len(parents) >= 2 and parents[-2] == "balances"
+            if value == "zero" or (balance and key == "zero"):
+                self.only_on("celo", "%s is the zero address" % path, "Stellar has no zero address")
+            if key in AMOUNT_KEYS or balance:
+                self.check_amount(path, value)
+            if isinstance(value, dict) and "has_tag" in value:
+                self.only_on("celo", "%s is the non-canonical tag form" % path, "a Stellar destination cannot mark a tag absent and still carry one")
+            if isinstance(value, dict) and set(value) == {"address", "tag"} and value.get("tag") is not None:
+                address = value.get("address")
+                if isinstance(address, str) and not self.is_account(address):
+                    self.problem("%s gives %s a tag, but only an account actor can take one (the runner builds an M address on Stellar)" % (path, address))
+
+    def check_amount(self, path, value):
+        number = decimal(value)
+        if number is None:
+            return
+        if number < I128_MIN:
+            self.problem("%s is %s, below the smallest i128, which no chain can express" % (path, value))
+        elif number < 0:
+            self.only_on("stellar", "%s is the negative amount %s" % (path, value), "Celo amounts are unsigned")
+        elif number > I128_MAX:
+            self.only_on("celo", "%s is %s, above I128_MAX" % (path, value), "Stellar amounts are i128")
+
+    def is_account(self, actor):
+        declared = self.setup.get("actors")
+        if isinstance(declared, dict):
+            spec = declared.get(actor)
+            if isinstance(spec, dict) and spec.get("kind") == "contract":
+                return False
+        return actor not in NOT_ACCOUNTS
+
+    def check_setup(self):
+        tokens = self.setup.get("tokens")
+        for name, spec in tokens.items() if isinstance(tokens, dict) else []:
+            if not isinstance(spec, dict):
+                continue
+            if spec.get("kind") == "reentrant":
+                self.only_on(
+                    "celo",
+                    "token %s is a reentrant test token" % name,
+                    "the Stellar host refuses any call into a contract already on the call stack",
+                )
+            elif spec.get("kind") == "moves_settlement":
+                self.movers.add(name)
+        config = self.setup.get("mandate")
+        if isinstance(config, dict) and config.get("recipient_mode") == "ATTESTED" and self.setup.get("allowlist"):
+            self.problem("setup has an allowlist, but an ATTESTED mandate has none")
+
+    def check_steps(self, steps):
+        now = decimal(self.setup.get("now"))
+        has_mandate = isinstance(self.setup.get("mandate"), dict)
+        attestations = {}
+        for n, step in enumerate(steps, 1):
+            if not isinstance(step, dict):
+                continue
+            kind = step.get("step")
+            if kind == "advance_time":
+                seconds = decimal(step.get("seconds"))
+                if now is not None and seconds is not None:
+                    now += seconds
+                    if now > U64_MAX:
+                        self.problem("time passes the largest u64", n)
+            elif kind == "set_time":
+                target = decimal(step.get("now"))
+                if now is not None and target is not None and target < now:
+                    self.problem("set_time moves time back from %d to %d; ledger time never goes back" % (now, target), n)
+                if target is not None:
+                    now = target
+            elif kind == "attest":
+                self.check_attest(step, n, has_mandate, attestations)
+            elif kind == "call":
+                if self.check_call(step, n, has_mandate, attestations):
+                    has_mandate = True
+
+    def check_attest(self, step, n, has_mandate, attestations):
+        if not has_mandate:
+            self.problem("attests before the mandate exists; an attestation binds the mandate's address", n)
+        name = step.get("name")
+        if isinstance(name, str):
+            if name in attestations:
+                self.problem("makes a second attestation named %s" % name, n)
+            attestations[name] = step.get("tamper")
+        tamper = step.get("tamper")
+        if tamper == "wrong_signer" and step.get("signer") == WRONG_SIGNER:
+            self.problem("wrong_signer signs with %s, so the signer cannot be %s too" % (WRONG_SIGNER, WRONG_SIGNER), n)
+        if isinstance(tamper, str):
+            retired = {tamper} & RETIRED_TAMPER
+        elif isinstance(tamper, dict):
+            retired = set(tamper) & RETIRED_TAMPER
+        else:
+            retired = set()
+        for kind in sorted(retired):
+            self.problem(
+                "tamper %s is a retired secp256k1 kind; attestations are ed25519 signatures, so use one of %s"
+                % (kind, ", ".join(sorted(INVALID_SIGNATURE | WRONG_LENGTH))),
+                n,
+            )
+
+    def check_call(self, step, n, has_mandate, attestations):
+        """Checks one call and returns True when it creates the mandate."""
+        fn = step.get("fn") if isinstance(step.get("fn"), str) else ""
+        for role in ("caller", "signed_by"):
+            actor = step.get(role)
+            if isinstance(actor, str) and actor in NOT_ACCOUNTS:
+                self.problem("%s %s can never make a call" % (role, actor), n)
+        if "signed_by" in step and fn not in CALLER_ARG:
+            self.problem("signed_by is only for calls that take a caller argument, and %s takes none" % fn, n)
+        if fn != "create" and not has_mandate:
+            self.problem("calls %s before the mandate exists; add setup.mandate or a create step that succeeds" % fn, n)
+        expect = step.get("expect") if isinstance(step.get("expect"), dict) else {}
+        args = step.get("args") if isinstance(step.get("args"), dict) else {}
+
+        self.check_expect(expect, n)
+        used = self.attestations_used(fn, args, n, attestations)
+        self.check_overrides(step, fn, expect, used, n)
+        token = args.get("token")
+        if fn == "recover_token" and token in self.movers:
+            stellar_transfer_failed = self.runs_on == {"stellar"} and expect.get("error") == "TRANSFER_FAILED"
+            if self.runs_on != {"celo"} and not stellar_transfer_failed:
+                self.problem(
+                    "recovers %s, a token that moves the settlement balance; restrict the vector to celo, "
+                    "or to stellar with TRANSFER_FAILED expected there" % token,
+                    n,
+                )
+        if refuses(expect):
+            self.refused = True
+        if fn == "create" and "error" not in expect and expect.get("ok") is True:
+            if has_mandate:
+                self.problem("creates a second mandate; a vector has one mandate", n)
+            return True
+        return False
+
+    def check_expect(self, expect, n):
+        error = expect.get("error")
+        if isinstance(error, str) and error not in self.errors:
+            self.problem("expects error %s, which is not in errors.json" % error, n)
+        events = expect.get("events")
+        for i, event in enumerate(events if isinstance(events, list) else [], 1):
+            name = event.get("name") if isinstance(event, dict) else None
+            if not isinstance(name, str):
+                continue
+            if name not in self.events:
+                self.problem("expects event %s, which is not in EVENTS.md" % name, n)
+                continue
+            fields = event.get("fields")
+            if not isinstance(fields, dict):
+                continue
+            want = self.events[name]
+            if sorted(fields) != sorted(want):
+                self.problem(
+                    "event %d (%s) has the fields %s, but EVENTS.md gives it %s"
+                    % (i, name, ", ".join(sorted(fields)) or "none", ", ".join(want) or "none"),
+                    n,
+                )
+            code = fields.get("code")
+            if isinstance(code, str) and code not in self.errors:
+                self.problem("event %d (%s) has the code %s, which is not in errors.json" % (i, name, code), n)
+        result = expect.get("return")
+        for item in result if isinstance(result, list) else []:
+            code = item.get("code") if isinstance(item, dict) else None
+            if isinstance(code, str) and code not in self.errors:
+                self.problem("a batch item has the code %s, which is not in errors.json" % code, n)
+
+    def attestations_used(self, fn, args, n, attestations):
+        """Returns the tamper of every attestation the call's requests carry."""
+        if fn == "request_payout":
+            reqs = [args.get("req")]
+        elif fn == "request_payouts" and isinstance(args.get("reqs"), list):
+            reqs = args.get("reqs")
+        else:
+            return []
+        used = []
+        for req in reqs:
+            names = req.get("attestations") if isinstance(req, dict) else None
+            for name in names if isinstance(names, list) else []:
+                if not isinstance(name, str):
+                    continue
+                if name in attestations:
+                    used.append(attestations[name])
+                else:
+                    self.problem("uses the attestation %s, which no earlier attest step made" % name, n)
+        return used
+
+    def check_overrides(self, step, fn, expect, used, n):
+        per_chain = expect.get("per_chain")
+        if not isinstance(per_chain, dict):
+            return
+        for chain in per_chain:
+            if chain in CHAINS and chain not in self.runs_on:
+                self.problem("has a per_chain expectation for %s, but the vector does not run there" % chain, n)
+        stellar = per_chain.get("stellar")
+        if not isinstance(stellar, dict):
+            return
+        if "host_abort" in stellar:
+            self.check_host_abort(fn, expect, used, n)
+        if "host_auth_failure" in stellar:
+            self.check_host_auth_failure(step, fn, n)
+
+    def check_host_abort(self, fn, expect, used, n):
+        if fn not in REQUESTS:
+            self.problem("expects a Stellar host_abort from %s; only a request carrying an attestation with an invalid signature traps" % fn, n)
+        elif not any(isinstance(t, str) and t in INVALID_SIGNATURE for t in used):
+            tampers = sorted({t for t in used if isinstance(t, str)})
+            self.problem(
+                "expects a Stellar host_abort, but no attestation it carries has an invalid-signature tamper (%s); "
+                "a signature that is not 64 bytes is refused with ATTESTATION_INVALID before verification"
+                % (", ".join(tampers) if tampers else "none is tampered"),
+                n,
+            )
+        if fn == "request_payouts" and "error" not in expect:
+            also = ""
+            if "payout_request_rejected" in event_names(expect):
+                also = ", so it cannot also expect payout_request_rejected events"
+            self.problem(
+                "a request_payouts call with a Stellar host_abort fails as a whole%s; expect "
+                "{ \"error\": \"ATTESTATION_INVALID\", \"events\": [] } for the other chain" % also,
+                n,
+            )
+        elif expect.get("error") != "ATTESTATION_INVALID":
+            self.problem(
+                "a Stellar host_abort needs ATTESTATION_INVALID as the other chain's error, not %s"
+                % (expect.get("error") or "success"),
+                n,
+            )
+
+    def check_host_auth_failure(self, step, fn, n):
+        if fn in VIEWS:
+            self.problem("expects a host_auth_failure from the view %s, which needs no authorization" % fn, n)
+            return
+        if fn not in CALLER_ARG:
+            return
+        if CALLER_AUTH_RULE not in self.cited:
+            self.problem(
+                "expects a host_auth_failure from %s, which takes a caller argument; only a vector that cites %s may"
+                % (fn, CALLER_AUTH_RULE),
+                n,
+            )
+        signed_by = step.get("signed_by")
+        if not isinstance(signed_by, str) or signed_by == step.get("caller"):
+            self.problem("expects a host_auth_failure, but the call is signed by its own caller; set signed_by to another actor", n)
+
+
+def rule_area(rid):
+    return rid.split("-")[1]
+
+
+def coverage_gaps(spec, vectors, areas):
+    """Returns (rules checked, gaps). Exits 2 when an area has no MANDATE rule."""
+    rules, retired, _, _ = spec
+    live = sorted(r for r in rules if r.startswith("MANDATE-") and r not in retired)
+    if areas is not None:
+        known = {rule_area(r) for r in rules if r.startswith("MANDATE-")}
+        unknown = [a for a in areas if a not in known]
+        if unknown:
+            fail_usage("--areas names %s, which has no MANDATE rule; CHAINOPS rules are never covered by vectors" % ", ".join(unknown))
+        live = [r for r in live if rule_area(r) in areas]
+    passing, failing = set(), set()
+    for vector in vectors:
+        (failing if vector.refused else passing).update(vector.cited)
+    gaps = []
+    for rid in live:
+        lacks = [kind for kind, have in (("passing", passing), ("failing", failing)) if rid not in have]
+        if lacks:
+            gaps.append("%s has no %s vector" % (rid, " and no ".join(lacks)))
+    return live, gaps
+
+
+def main(argv):
+    spec_dir, require_all, areas, files = None, False, None, []
+    args = iter(argv[1:])
+    for arg in args:
+        if arg == "--spec":
+            spec_dir = next(args, None)
+        elif arg == "--require-all":
+            require_all = True
+        elif arg == "--areas":
+            value = next(args, None) or ""
+            areas = sorted({a for a in value.split(",") if a})
+            if not areas or any(not re.fullmatch(r"[A-Z]+", a) for a in areas):
+                fail_usage("--areas takes a comma separated list of rule areas, such as PAUSE,FEE")
+        elif arg.startswith("-"):
+            fail_usage("unknown option %s" % arg)
+        else:
+            files.append(arg)
+    if spec_dir is None or not files:
+        fail_usage("usage: check-vectors.py --spec DIR [--require-all | --areas A,B] FILE...")
+    if require_all and areas is not None:
+        fail_usage("--require-all and --areas cannot be combined")
+
+    spec = load_spec(spec_dir)
+    seen_ids = {}
+    vectors = []
+    for path in files:
+        data = load_vectors(path)
+        if data is None:
+            continue
+        if not isinstance(data, dict):
+            report(path, "must hold a JSON object")
+            continue
+        if data.get("format") != FORMAT:
+            report(path, "format must be %s" % FORMAT)
+        items = data.get("vectors")
+        for index, item in enumerate(items if isinstance(items, list) else []):
+            if isinstance(item, dict):
+                vector = Vector(path, index, item, spec, seen_ids)
+                vector.check()
+                vectors.append(vector)
+
+    covered = None
+    if require_all or areas is not None:
+        covered, gaps = coverage_gaps(spec, vectors, areas)
+        for gap in gaps:
+            report("coverage", gap)
+    if problems:
+        print("check-vectors: %d problem(s)" % problems, file=sys.stderr)
+        return 1
+    print(
+        "check-vectors: %d vector(s) in %d file(s) pass the checks against the spec: rule IDs, errors, "
+        "events, chain restrictions, attestations and per-chain expectations" % (len(vectors), len(files))
+    )
+    if covered is not None:
+        rules, retired = spec[0], spec[1]
+        print(
+            "coverage: each of %d MANDATE rule(s) %s has a passing and a failing vector; "
+            "%d retired rule(s) and %d CHAINOPS rule(s) excluded"
+            % (
+                len(covered),
+                "in %s" % ", ".join(areas) if areas is not None else "in the spec",
+                len(retired & set(rules)),
+                sum(1 for r in rules if r.startswith("CHAINOPS-")),
+            )
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

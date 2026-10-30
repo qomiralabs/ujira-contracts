@@ -143,6 +143,40 @@ jobs:
           scripts/attestation-message.py --check-doc spec/ENCODING.md
           scripts/attestation-message.py --check-constants spec/constants.json
 
+  # The shared test vectors must match spec/vectors/schema.json and the spec's
+  # rules, errors and events. check-jsonschema and every dependency are pinned
+  # with SHA256 hashes in scripts/check-vectors.requirements.txt and installed
+  # as wheels only, so nothing is built or run at install time, and the check
+  # refuses any other check-jsonschema version. The self test runs first, and
+  # the check still reports when it fails.
+  vectors:
+    name: vectors
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install check-jsonschema
+        run: |
+          python3 --version
+          python3 -m venv "${RUNNER_TEMP}/check-jsonschema"
+          "${RUNNER_TEMP}/check-jsonschema/bin/pip" install --disable-pip-version-check --no-input \
+            --require-hashes --no-deps --only-binary :all: -r scripts/check-vectors.requirements.txt
+          echo "CHECK_JSONSCHEMA=${RUNNER_TEMP}/check-jsonschema/bin/check-jsonschema" >> "$GITHUB_ENV"
+
+      - name: Test the vector check
+        run: scripts/check-vectors.test.sh
+
+      - name: Check the vectors
+        if: ${{ !cancelled() }}
+        run: scripts/check-vectors.sh
+
   # The attestation parity fixture is generated, and the Soroban suite trusts
   # it. Rebuilding it from the reference signer must give the committed bytes,
   # so a hand edit or a signer change cannot drift from what the suite runs.

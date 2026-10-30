@@ -1,0 +1,79 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "vectors": [
+    {
+      "id": "fixture_noncanonical_tag_celo",
+      "rules": [
+        "MANDATE-RECIPIENT-016"
+      ],
+      "description": "The non-canonical tag, which only Celo can express.",
+      "applies_to": [
+        "celo"
+      ],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "1000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "allow_recipients",
+          "caller": "principal",
+          "args": {
+            "entries": [
+              {
+                "recipient_ref": "#bob",
+                "destination": {
+                  "address": "bob",
+                  "tag": {
+                    "has_tag": false,
+                    "tag": "7"
+                  }
+                }
+              }
+            ]
+          },
+          "expect": {
+            "error": "CONFIG_INVALID",
+            "events": []
+          }
+        }
+      ]
+    }
+  ]
+}
