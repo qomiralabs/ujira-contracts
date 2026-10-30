@@ -85,6 +85,9 @@ A vector runs on every chain, `stellar` and `celo`, unless `applies_to` lists fe
 | The non-canonical tag | `celo` | A Stellar destination cannot mark a tag absent and still carry one. |
 | A `reentrant` test token | `celo` | The Stellar host refuses any call into a contract already on the call stack, views included. |
 | `recover_token` of a `moves_settlement` token | `celo`, or `stellar` expecting `TRANSFER_FAILED` | Only on Celo can a second token address move the settlement balance; on Stellar the token's attempt fails its transfer. |
+| A `returns_value` test token | `stellar` | Only a Stellar transfer returns nothing, so only there is a returned value unexpected. |
+| A `returns_no_data` test token | `celo` | Only an EVM call can return no data at all. |
+| A `set_receiving` step to `no_trustline` | `stellar` | Only Stellar has trustlines. |
 
 ## Setup
 
@@ -110,6 +113,10 @@ Test tokens:
 | `standard` | A plain token. |
 | `reentrant` | Celo only. Its transfer calls `reenters` on the mandate, with the token as the caller: `sweep`, or `cancel` or `execute` of `payout_id`. With `"variant": "propagate"` the refused nested call fails the token's transfer; with `"variant": "catch"` the token catches the refusal and completes the transfer. |
 | `moves_settlement` | `other_token` only. Its transfer also tries to move the mandate's settlement balance, as a second address for the same asset would. |
+| `returns_value` | `other_token` only, Stellar only. Its transfer moves the tokens and then returns a value instead of nothing. |
+| `returns_no_data` | `other_token` only, Celo only. Its transfer moves the tokens and returns no data, as some older ERC-20 tokens do. |
+
+Every account starts able to receive both tokens: on Stellar the runner gives it an authorized trustline for each. A `set_receiving` step changes that for the settlement asset.
 
 ## Steps
 
@@ -120,11 +127,21 @@ Each step names its kind in `"step"`:
 | `call` | `fn`, `caller`, `signed_by`, `args`, `expect` | Calls the factory or the mandate at the current time. |
 | `advance_time` | `seconds` | Moves the ledger time forward. |
 | `set_time` | `now` | Sets the ledger time, never to before the current time. |
-| `transfer` | `token`, `from`, `to`, `amount` | A plain token transfer that does not call the mandate, such as funding it. |
+| `transfer` | `token`, `from`, `to`, `amount`, `events` | A plain token transfer that does not call the mandate, such as funding it. |
 | `mint` | `token`, `to`, `amount` | Mints the test token. |
 | `attest` | `name`, `signer`, `recipient_ref`, `destination`, `valid_until`, `policy_epoch`, `tamper` | Makes an attestation for a later request. |
+| `set_receiving` | `token`, `account`, `state` | Sets whether the account actor `account` can receive `token`, which is always `asset`. |
+| `clawback` | `token`, `from`, `amount` | The issuer of `token`, always `asset`, takes `amount` from `from` without its authorization, which is how an asset can remove the mandate's balance. On Stellar the runner issues the asset with clawback enabled; on Celo the test token burns it. It never calls the mandate. |
 
-Only a call has an expectation; the other steps cannot fail.
+Only a call has an expectation; the other steps cannot fail. A transfer may carry `"events": []`, the only value it takes, and the runner then checks that the mandate and the factory emit nothing during it, which is how a vector shows that funding is not a mandate call.
+
+The states of `set_receiving`:
+
+| State | Stellar | Celo |
+| --- | --- | --- |
+| `receivable` | The account holds an authorized trustline, opened if it had none. | The test token stops blocking transfers to the account. |
+| `deauthorized` | The issuer clears the authorization of the account's trustline, opened first if it had none. | The test token refuses every transfer to the account. |
+| `no_trustline` | The account's trustline is removed. Stellar removes a trustline only at a zero balance, so the account holds none of the asset at that point. | Not expressible. |
 
 ### Calls
 
@@ -193,10 +210,10 @@ The tamper kinds of the secp256k1 attestations, which were never deployed (`high
 
 Every call has one `expect`:
 
-- `{ "ok": true, "return": ..., "events": [ ... ], "state": { ... } }` for success, where `return` and `state` are optional;
+- `{ "ok": true, "return": ..., "events": [ ... ], "token_events": [], "state": { ... } }` for success, where `return`, `token_events` and `state` are optional;
 - `{ "error": "<NAME>", "events": [] }` for a refusal: the first failing check of the operation's check order, with nothing written and nothing emitted.
 
-`events` lists every event the mandate and the factory emit during the call, in order, and nothing else, so a missing or an extra event fails. Token events are not listed. Each event is `{ "name": "...", "fields": { ... } }` with exactly the fields `spec/EVENTS.md` gives it, in canonical form: the topic key is a field like any other, destinations are `{ address, tag }`, and an error code is its name.
+`events` lists every event the mandate and the factory emit during the call, in order, and nothing else, so a missing or an extra event fails. Token events are not listed. `token_events` takes only `[]`, and says that no token emits any event during the call, so the call moved no tokens; without it token events are not compared. Each event is `{ "name": "...", "fields": { ... } }` with exactly the fields `spec/EVENTS.md` gives it, in canonical form: the topic key is a field like any other, destinations are `{ address, tag }`, and an error code is its name.
 
 `return` is compared exactly. `state` is compared after the call, and only on what it names:
 
@@ -218,7 +235,7 @@ Every call has one `expect`:
 
 - every cited rule is in `spec/MANDATE.md` and not retired, every error is in `spec/errors.json`, and every event is in `spec/EVENTS.md` with exactly its fields;
 - vector IDs are unique across files, no number has a fraction, and no object repeats a key;
-- every input that only one chain can express is in a vector restricted to that chain, and only accounts take tags;
+- every input that only one chain can express is in a vector restricted to that chain, and only accounts take tags or change whether they can receive;
 - requests name only attestations made earlier, the secp256k1 tamper kinds are refused, and the per-chain overrides appear only where the rules above allow them;
 - calls come after the mandate exists, and time never moves back.
 

@@ -1,0 +1,58 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "vectors": [
+    {
+      "id": "fixture_lifecycle_steps",
+      "rules": ["MANDATE-REVOKE-001", "MANDATE-REVOKE-003"],
+      "description": "The principal cannot receive, revoke moves no tokens, the issuer claws back, a transfer refunds, and the principal can receive again.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "mints": [
+          { "token": "asset", "to": "mandate", "amount": "1000" },
+          { "token": "asset", "to": "funder", "amount": "100" }
+        ]
+      },
+      "steps": [
+        { "step": "set_receiving", "token": "asset", "account": "principal", "state": "deauthorized" },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": []
+          }
+        },
+        { "step": "clawback", "token": "asset", "from": "mandate", "amount": "100" },
+        { "step": "transfer", "token": "asset", "from": "funder", "to": "mandate", "amount": "100", "events": [] },
+        { "step": "set_receiving", "token": "asset", "account": "principal", "state": "receivable" }
+      ]
+    }
+  ]
+}

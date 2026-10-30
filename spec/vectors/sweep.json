@@ -1,0 +1,744 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "description": "Sweep needs a closed mandate and a balance, pays only the principal, and respects the principal change and grace guards.",
+  "vectors": [
+    {
+      "id": "sweep_of_an_active_mandate_refused",
+      "rules": ["MANDATE-SWEEP-001", "MANDATE-SWEEP-004"],
+      "description": "An active mandate cannot be swept by anyone, empty or funded, paused or not.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "funder", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "principal",
+          "expect": { "error": "MANDATE_ACTIVE", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "MANDATE_ACTIVE", "events": [] }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "1000",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "MANDATE_ACTIVE", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": { "ok": true, "events": [{ "name": "paused", "fields": { "by": "guardian" } }] }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "principal",
+          "expect": { "error": "MANDATE_ACTIVE", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "MANDATE_ACTIVE", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "1000",
+              "free": "1000",
+              "paused": true,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "sweep_of_a_revoked_mandate_by_a_third_party_at_once",
+      "rules": [
+        "MANDATE-SWEEP-001",
+        "MANDATE-SWEEP-003",
+        "MANDATE-SWEEP-004",
+        "MANDATE-SWEEP-005",
+        "MANDATE-REVOKE-003"
+      ],
+      "description": "Right after revoke, with no grace, an outsider sweeps the whole balance to the principal.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "1000" } }],
+            "state": {
+              "mandate": { "balance": "0", "free": "0" },
+              "balances": { "asset": { "mandate": "0", "principal": "1000", "stranger": "0" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sweep_by_the_principal_right_after_expiry",
+      "rules": ["MANDATE-SWEEP-001", "MANDATE-SWEEP-003", "MANDATE-SWEEP-005"],
+      "description": "The grace never holds the principal, which sweeps at the moment of expiry.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1767312000"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        { "step": "set_time", "now": "1767312000" },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "swept", "fields": { "by": "principal", "amount": "1000" } }],
+            "state": {
+              "mandate": { "expired": true, "balance": "0" },
+              "balances": { "asset": { "mandate": "0", "principal": "1000" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sweep_of_an_expired_and_revoked_mandate_within_the_grace",
+      "rules": ["MANDATE-SWEEP-003", "MANDATE-SWEEP-005"],
+      "description": "Once an expired mandate is revoked, the grace no longer applies and an outsider sweeps at once.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1767312000"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        { "step": "set_time", "now": "1767312000" },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "1000" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1000", "stranger": "0" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sweep_of_an_empty_mandate_refused",
+      "rules": ["MANDATE-SWEEP-004", "MANDATE-SWEEP-005", "MANDATE-DUST-001"],
+      "description": "A revoked mandate with nothing left cannot be swept by anyone, and a one unit deposit can then be swept to the principal.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [
+          { "token": "asset", "to": "mandate", "amount": "1000" },
+          { "token": "asset", "to": "funder", "amount": "1" }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "1000" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal", "amount": "1000" } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "NOTHING_TO_SWEEP", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "principal",
+          "expect": { "error": "NOTHING_TO_SWEEP", "events": [] }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "1",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "1",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "1" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1001", "stranger": "0" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sweep_by_every_role_pays_only_the_principal",
+      "rules": ["MANDATE-SWEEP-005", "MANDATE-REVOKE-003"],
+      "description": "Each role, the fee address, an outsider and the principal sweep in turn, and each sweep raises only the principal's balance.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": ["guardian"],
+          "executors": ["executor"],
+          "recovery": ["rescuer"],
+          "recovery_threshold": 1,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [
+          { "token": "asset", "to": "mandate", "amount": "1000" },
+          { "token": "asset", "to": "funder", "amount": "700" }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "agent",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "swept", "fields": { "by": "agent", "amount": "1000" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1000", "agent": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "100",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "approver",
+          "expect": {
+            "ok": true,
+            "return": "100",
+            "events": [{ "name": "swept", "fields": { "by": "approver", "amount": "100" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1100", "approver": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "100",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "guardian",
+          "expect": {
+            "ok": true,
+            "return": "100",
+            "events": [{ "name": "swept", "fields": { "by": "guardian", "amount": "100" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1200", "guardian": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "100",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "executor",
+          "expect": {
+            "ok": true,
+            "return": "100",
+            "events": [{ "name": "swept", "fields": { "by": "executor", "amount": "100" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1300", "executor": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "100",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "rescuer",
+          "expect": {
+            "ok": true,
+            "return": "100",
+            "events": [{ "name": "swept", "fields": { "by": "rescuer", "amount": "100" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1400", "rescuer": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "100",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "fee_address",
+          "expect": {
+            "ok": true,
+            "return": "100",
+            "events": [{ "name": "swept", "fields": { "by": "fee_address", "amount": "100" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1500", "fee_address": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "100",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "100",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "100" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1600", "stranger": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "100",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "100",
+            "events": [{ "name": "swept", "fields": { "by": "principal", "amount": "100" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1700" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sweep_held_while_a_principal_change_is_pending",
+      "rules": ["MANDATE-SWEEP-002", "MANDATE-SWEEP-003", "MANDATE-PRINCIPAL-003"],
+      "description": "A proposed principal change holds every third-party sweep, within the grace and after it, until the proposal is cancelled.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1767312000"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        { "step": "set_time", "now": "1767312000" },
+        {
+          "step": "call",
+          "fn": "propose_principal",
+          "caller": "principal",
+          "args": { "proposed": "principal2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_proposed",
+                "fields": { "current": "principal", "proposed": "principal2" }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "PRINCIPAL_CHANGE_PENDING", "events": [] }
+        },
+        { "step": "set_time", "now": "1769904000" },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "PRINCIPAL_CHANGE_PENDING", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel_principal_proposal",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_proposal_cancelled",
+                "fields": { "current": "principal", "proposed": "principal2" }
+              }
+            ],
+            "state": { "mandate": { "proposed_principal": null } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "1000" } }],
+            "state": {
+              "balances": {
+                "asset": { "mandate": "0", "principal": "1000", "principal2": "0", "stranger": "0" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sweep_by_the_principal_during_a_principal_change",
+      "rules": ["MANDATE-SWEEP-002", "MANDATE-SWEEP-005"],
+      "description": "A pending principal change never holds the principal itself, whose sweep pays the current principal.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "propose_principal",
+          "caller": "principal",
+          "args": { "proposed": "principal2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_proposed",
+                "fields": { "current": "principal", "proposed": "principal2" }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "swept", "fields": { "by": "principal", "amount": "1000" } }],
+            "state": {
+              "mandate": { "proposed_principal": "principal2" },
+              "balances": { "asset": { "mandate": "0", "principal": "1000", "principal2": "0" } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
