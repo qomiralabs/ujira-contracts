@@ -88,6 +88,7 @@ A vector runs on every chain, `stellar` and `celo`, unless `applies_to` lists fe
 | A `returns_value` test token | `stellar` | Only a Stellar transfer returns nothing, so only there is a returned value unexpected. |
 | A `returns_no_data` test token | `celo` | Only an EVM call can return no data at all. |
 | A `set_receiving` step to `no_trustline` | `stellar` | Only Stellar has trustlines. |
+| An attester written `{ "account_key": "<actor>" }` | `stellar` | Only a Stellar account address is an ed25519 key. |
 
 ## Setup
 
@@ -206,6 +207,8 @@ The test key `signer` signs an attestation for one leg: the version 2 message of
 
 The tamper kinds of the secp256k1 attestations, which were never deployed (`high_s`, `bad_v`, `r_zero`, `s_zero`, `r_order`, `r_not_on_curve` and `recovers_to_infinity`), are retired and refused.
 
+An untampered attestation also fails verification when a request uses it for a leg whose destination differs from the attestation's, for another `recipient_ref`, or after the attester changed, because the contract builds the message from the leg, the request and the attester it holds at that moment. A vector writes that as it happens: an attestation made for one tag and used for a leg with another, or two attestations given in the wrong leg order.
+
 ## Expectations
 
 Every call has one `expect`:
@@ -226,7 +229,7 @@ Every call has one `expect`:
 
 `expect` may carry `"per_chain": { "stellar": { ... } }`, saying what happens on Stellar instead while every other chain keeps the expectation around it. There are two overrides, and each means the call fails with no state change and no events:
 
-- `{ "host_abort": "Crypto.InvalidInput" }`: ed25519 verification traps in the host. Allowed only on `request_payout` and `request_payouts` calls carrying an attestation with one of the ten invalid-signature tamper kinds, and the expectation around it must be `{ "error": "ATTESTATION_INVALID", "events": [] }`. A `request_payouts` call that traps fails as a whole, so it never expects `payout_request_rejected` events for its other items.
+- `{ "host_abort": "Crypto.InvalidInput" }`: ed25519 verification traps in the host. Allowed only on `request_payout` and `request_payouts` calls carrying an attestation with one of the ten invalid-signature tamper kinds, or an untampered one made for another destination or `recipient_ref` than the leg and request it is used with, or signed by a test key that is not the attester when the request is made, and the expectation around it must be `{ "error": "ATTESTATION_INVALID", "events": [] }`. A `request_payouts` call that traps fails as a whole, so it never expects `payout_request_rejected` events for its other items.
 - `{ "host_auth_failure": true }`: the call fails host authorization. Allowed on a call without a caller argument, whose signer is not the address it must authorize, and on a call with a caller argument that `signed_by` signs instead, in a vector that cites `MANDATE-ROLE-019`. Never on a view, which needs no authorization.
 
 ## Checking
@@ -240,6 +243,8 @@ Every call has one `expect`:
 - calls come after the mandate exists, and time never moves back.
 
 Coverage is checked on request. `--require-all` needs every `MANDATE` rule that is not retired to have at least one passing and one failing vector, and `--areas A,B` needs the same of the rules in the named areas only, so each vector set can prove its own coverage. A vector is failing when any call in it is refused on some chain: an error, a per-chain override, a `payout_request_rejected` event or a batch item with a non-zero code. Every other vector is passing. `CHAINOPS` rules bind the off-chain services and never count as uncovered.
+
+Parity with the attestation fixture is checked with `--fixture spikes/attestation-parity/fixture.json`, as CI does: every case of the fixture needs a vector named `parity_` and the case name that runs the same case through the mandate, and every `parity_` vector must name a case. Six cases are exempt because an attest step cannot build them, and the check prints them: `valid_policy_epoch_u64_max` (no call sequence raises the policy epoch that far), `wrong_policy_epoch_signed` (an attest step signs the epoch it carries), and `flipped_s_bit`, `zero_signature`, `identity_r_zero_s` and `small_order_attester_key` (no tamper kind writes those signature bytes). The contract passes every 64-byte signature to the host unchanged, so those four test the host's verifier, and the attest step itself is still compared with every case of the fixture.
 
 check-jsonschema is pinned, with a hash for every dependency, in `scripts/check-vectors.requirements.txt`, and the check refuses any other version. To run the check and its self test locally:
 

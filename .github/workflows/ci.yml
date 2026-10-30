@@ -173,9 +173,11 @@ jobs:
       - name: Test the vector check
         run: scripts/check-vectors.test.sh
 
+      # Every case of the attestation parity fixture must also have its vector,
+      # so a case added to the reference signer cannot go untested.
       - name: Check the vectors
         if: ${{ !cancelled() }}
-        run: scripts/check-vectors.sh
+        run: scripts/check-vectors.sh --fixture spikes/attestation-parity/fixture.json
 
   # The attestation parity fixture is generated, and the Soroban suite trusts
   # it. Rebuilding it from the reference signer must give the committed bytes,

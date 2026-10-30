@@ -18,10 +18,11 @@
 #   - JSON numbers are integers only (no fraction, exponent, NaN or Infinity),
 #     no object repeats a key, and vector IDs are unique across all files;
 #   - an input only one chain's types can express restricts the vector to that
-#     chain: a negative amount, an account with no trustline or a token whose
-#     transfer returns a value (Stellar), an amount above I128_MAX, the zero
-#     address, the non-canonical tag, a reentrant test token or a token whose
-#     transfer returns no data (Celo);
+#     chain: a negative amount, an account with no trustline, a token whose
+#     transfer returns a value or an attester given as an account's key
+#     (Stellar), an amount above I128_MAX, the zero address, the non-canonical
+#     tag, a reentrant test token or a token whose transfer returns no data
+#     (Celo);
 #   - a tagged destination is an account actor, only an account actor changes
 #     whether it can receive, and the mandate, the tokens and the zero address
 #     never make a call;
@@ -29,9 +30,11 @@
 #     the retired secp256k1 tamper kinds are refused by name, and a
 #     wrong_signer tamper never signs with the key it already uses;
 #   - a Stellar host_abort is expected only from a request carrying an
-#     attestation whose tamper leaves a 64-byte signature that fails
-#     verification, and only with ATTESTATION_INVALID on the other chain, so a
-#     request_payouts batch can never also expect per-item rejections;
+#     attestation that fails verification with a 64-byte signature: one whose
+#     tamper damages it that way, or an untampered one made for another
+#     destination, recipient_ref or signer than its leg, request and the
+#     attester in force; and only with ATTESTATION_INVALID on the other chain,
+#     so a request_payouts batch can never also expect per-item rejections;
 #   - a Stellar host_auth_failure is expected only from a call with no caller
 #     argument, or from a call signed by someone other than its caller in a
 #     vector that cites the caller authorization rule;
@@ -48,9 +51,13 @@
 # code. Every other vector is passing. CHAINOPS rules bind the off-chain
 # services and never count as uncovered.
 #
+# Parity (--fixture FILE): every case of the attestation parity fixture has a
+# vector named parity_<case>, except the cases PARITY_EXEMPT names with the
+# reason, and every parity_ vector names a case of the fixture.
+#
 # Standard library only.
 #
-# Usage: check-vectors.py --spec DIR [--require-all | --areas A,B,...] FILE...
+# Usage: check-vectors.py --spec DIR [--require-all | --areas A,B,...] [--fixture FILE] FILE...
 # Exit codes: 0 every check passes, 1 problems named on stderr, 2 bad usage or
 # a spec file that cannot be read.
 
@@ -85,6 +92,22 @@ WRONG_LENGTH = {"empty", "truncated", "short_signature", "long_signature", "exte
 RETIRED_TAMPER = {"high_s", "bad_v", "r_zero", "s_zero", "r_order", "r_not_on_curve", "recovers_to_infinity"}
 # The test key a wrong_signer attestation is signed with.
 WRONG_SIGNER = "#wrong_signer"
+
+# With --fixture, each case of the attestation parity fixture needs a vector
+# named PARITY_PREFIX + its case name. The cases below are the ones an attest
+# step cannot build. The contract hands every 64-byte signature to the host
+# unchanged, so a damaged signature it cannot build is a test of the host's
+# verifier, which the spike suite runs against the prototype; the runner's
+# attest step is still compared with every case of the fixture.
+PARITY_PREFIX = "parity_"
+PARITY_EXEMPT = {
+    "valid_policy_epoch_u64_max": "the policy epoch reaches the u64 maximum only after as many policy changes",
+    "wrong_policy_epoch_signed": "an attest step signs the policy_epoch it carries, so it cannot sign one and carry another",
+    "flipped_s_bit": "flipped_bit is the one tamper kind that flips a bit, and it flips one in R",
+    "zero_signature": "no tamper kind replaces the whole signature",
+    "identity_r_zero_s": "no tamper kind replaces the whole signature",
+    "small_order_attester_key": "no tamper kind writes the identity point and a zero S as the signature",
+}
 
 # Functions that take a caller argument, which the call authorizes first.
 CALLER_ARG = {
@@ -292,6 +315,8 @@ class Vector:
         self.cited = set()
         self.refused = False
         self.movers = set()
+        config = self.setup.get("mandate")
+        self.attester = config.get("attester") if isinstance(config, dict) else None
 
     def problem(self, msg, step=None):
         report(self.where if step is None else "%s step %d" % (self.where, step), msg)
@@ -336,6 +361,8 @@ class Vector:
                 self.check_amount(path, value)
             if isinstance(value, dict) and "has_tag" in value:
                 self.only_on("celo", "%s is the non-canonical tag form" % path, "a Stellar destination cannot mark a tag absent and still carry one")
+            if isinstance(value, dict) and set(value) == {"account_key"}:
+                self.only_on("stellar", "%s is the ed25519 key of an account" % path, "only a Stellar account address is an ed25519 key")
             if isinstance(value, dict) and set(value) == {"address", "tag"} and value.get("tag") is not None:
                 address = value.get("address")
                 if isinstance(address, str) and not self.is_account(address):
@@ -435,7 +462,12 @@ class Vector:
         if isinstance(name, str):
             if name in attestations:
                 self.problem("makes a second attestation named %s" % name, n)
-            attestations[name] = step.get("tamper")
+            attestations[name] = {
+                "tamper": step.get("tamper"),
+                "signer": step.get("signer"),
+                "recipient_ref": step.get("recipient_ref"),
+                "destination": step.get("destination"),
+            }
         tamper = step.get("tamper")
         if tamper == "wrong_signer" and step.get("signer") == WRONG_SIGNER:
             self.problem("wrong_signer signs with %s, so the signer cannot be %s too" % (WRONG_SIGNER, WRONG_SIGNER), n)
@@ -480,9 +512,14 @@ class Vector:
                 )
         if refuses(expect):
             self.refused = True
+        succeeds = "error" not in expect and expect.get("ok") is True and not expect.get("per_chain")
+        if fn == "set_attestation_policy" and succeeds:
+            self.attester = args.get("attester")
         if fn == "create" and "error" not in expect and expect.get("ok") is True:
             if has_mandate:
                 self.problem("creates a second mandate; a vector has one mandate", n)
+            config = args.get("config")
+            self.attester = config.get("attester") if isinstance(config, dict) else None
             return True
         return False
 
@@ -518,7 +555,12 @@ class Vector:
                 self.problem("a batch item has the code %s, which is not in errors.json" % code, n)
 
     def attestations_used(self, fn, args, n, attestations):
-        """Returns the tamper of every attestation the call's requests carry."""
+        """Returns (tamper, verifiable) for every attestation the call's
+        requests carry. An attestation can only verify when nothing tampered
+        with it and it was made for the leg at its own index, for the request's
+        recipient_ref, and by the key that is the attester at this call. A label
+        is the only signer the checker can compare, so a raw or account_key
+        attester never counts as the signer."""
         if fn == "request_payout":
             reqs = [args.get("req")]
         elif fn == "request_payouts" and isinstance(args.get("reqs"), list):
@@ -527,14 +569,26 @@ class Vector:
             return []
         used = []
         for req in reqs:
-            names = req.get("attestations") if isinstance(req, dict) else None
-            for name in names if isinstance(names, list) else []:
+            if not isinstance(req, dict):
+                continue
+            names = req.get("attestations")
+            legs = req.get("legs") if isinstance(req.get("legs"), list) else []
+            for i, name in enumerate(names if isinstance(names, list) else []):
                 if not isinstance(name, str):
                     continue
-                if name in attestations:
-                    used.append(attestations[name])
-                else:
+                if name not in attestations:
                     self.problem("uses the attestation %s, which no earlier attest step made" % name, n)
+                    continue
+                made = attestations[name]
+                leg = legs[i] if i < len(legs) and isinstance(legs[i], dict) else {}
+                verifiable = (
+                    made["tamper"] is None
+                    and made["destination"] == leg.get("destination")
+                    and made["recipient_ref"] == req.get("recipient_ref")
+                    and isinstance(self.attester, str)
+                    and made["signer"] == self.attester
+                )
+                used.append((made["tamper"], verifiable))
         return used
 
     def check_overrides(self, step, fn, expect, used, n):
@@ -555,10 +609,11 @@ class Vector:
     def check_host_abort(self, fn, expect, used, n):
         if fn not in REQUESTS:
             self.problem("expects a Stellar host_abort from %s; only a request carrying an attestation with an invalid signature traps" % fn, n)
-        elif not any(isinstance(t, str) and t in INVALID_SIGNATURE for t in used):
-            tampers = sorted({t for t in used if isinstance(t, str)})
+        elif not any(t in INVALID_SIGNATURE or (t is None and not ok) for t, ok in used):
+            tampers = sorted({t for t, _ in used if isinstance(t, str)})
             self.problem(
-                "expects a Stellar host_abort, but no attestation it carries has an invalid-signature tamper (%s); "
+                "expects a Stellar host_abort, but no attestation it carries has an invalid-signature tamper (%s), "
+                "and each untampered one was made for its own leg and recipient_ref by the attester; "
                 "a signature that is not 64 bytes is refused with ATTESTATION_INVALID before verification"
                 % (", ".join(tampers) if tampers else "none is tampered"),
                 n,
@@ -621,12 +676,39 @@ def coverage_gaps(spec, vectors, areas):
     return live, gaps
 
 
+def parity_gaps(fixture_path, vectors):
+    """Returns (case names, gaps): every case of the attestation parity
+    fixture needs a vector named parity_<case>, unless it is in PARITY_EXEMPT."""
+    try:
+        cases = [c["name"] for c in json.loads(read_text(fixture_path))["cases"]]
+    except (ValueError, TypeError, KeyError) as err:
+        fail_usage("cannot read the case names from %s: %s" % (fixture_path, err))
+    if not cases or not all(isinstance(c, str) for c in cases):
+        fail_usage("%s has no named cases" % fixture_path)
+    ids = {v.data.get("id") for v in vectors}
+    gaps = []
+    for case in cases:
+        vid = PARITY_PREFIX + case
+        if case in PARITY_EXEMPT and vid in ids:
+            gaps.append("%s now has the vector %s; drop it from PARITY_EXEMPT in scripts/check-vectors.py" % (case, vid))
+        elif case not in PARITY_EXEMPT and vid not in ids:
+            gaps.append("case %s of %s has no vector %s" % (case, fixture_path, vid))
+    for vid in sorted(i for i in ids if isinstance(i, str) and i.startswith(PARITY_PREFIX)):
+        if vid[len(PARITY_PREFIX):] not in cases:
+            gaps.append("vector %s names no case of %s" % (vid, fixture_path))
+    return cases, gaps
+
+
 def main(argv):
-    spec_dir, require_all, areas, files = None, False, None, []
+    spec_dir, require_all, areas, files, fixture = None, False, None, [], None
     args = iter(argv[1:])
     for arg in args:
         if arg == "--spec":
             spec_dir = next(args, None)
+        elif arg == "--fixture":
+            fixture = next(args, None)
+            if not fixture:
+                fail_usage("--fixture needs the attestation parity fixture file")
         elif arg == "--require-all":
             require_all = True
         elif arg == "--areas":
@@ -639,7 +721,7 @@ def main(argv):
         else:
             files.append(arg)
     if spec_dir is None or not files:
-        fail_usage("usage: check-vectors.py --spec DIR [--require-all | --areas A,B] FILE...")
+        fail_usage("usage: check-vectors.py --spec DIR [--require-all | --areas A,B] [--fixture FILE] FILE...")
     if require_all and areas is not None:
         fail_usage("--require-all and --areas cannot be combined")
 
@@ -667,6 +749,11 @@ def main(argv):
         covered, gaps = coverage_gaps(spec, vectors, areas)
         for gap in gaps:
             report("coverage", gap)
+    cases = None
+    if fixture is not None:
+        cases, gaps = parity_gaps(fixture, vectors)
+        for gap in gaps:
+            report("parity", gap)
     if problems:
         print("check-vectors: %d problem(s)" % problems, file=sys.stderr)
         return 1
@@ -685,6 +772,12 @@ def main(argv):
                 len(retired & set(rules)),
                 sum(1 for r in rules if r.startswith("CHAINOPS-")),
             )
+        )
+    if cases is not None:
+        exempt = sorted(c for c in cases if c in PARITY_EXEMPT)
+        print(
+            "parity: %d of %d case(s) in %s have a %s vector; %d exempt: %s"
+            % (len(cases) - len(exempt), len(cases), fixture, PARITY_PREFIX + "<case>", len(exempt), ", ".join(exempt) or "none")
         )
     return 0
 
