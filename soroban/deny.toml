@@ -21,6 +21,14 @@ ignore = [
   # maintained replacement upstream yet. Drop this once soroban-env-host
   # moves off it.
   { id = "RUSTSEC-2024-0436", reason = "unmaintained compile time proc macro from soroban-env-host, no upgrade available" },
+  # crypto-bigint 0.5.5 has timing variability in operations meant to be
+  # constant time. It arrives through elliptic-curve 0.13 from
+  # soroban-env-host, which soroban-sdk pulls only with testutils, the native
+  # test host: cargo tree for wasm32v1-none has no path to it, so it cannot
+  # reach a deployed contract. The fix, crypto-bigint 0.7.6, needs
+  # elliptic-curve 0.14, which no stable soroban-env-host uses yet. Drop this
+  # once soroban-env-host moves off elliptic-curve 0.13.
+  { id = "RUSTSEC-2026-0387", reason = "test host only via soroban-sdk testutils, not in the wasm graph, no compatible upgrade yet" },
 ]
 
 [licenses]
