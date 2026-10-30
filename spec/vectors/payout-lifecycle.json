@@ -1,0 +1,4054 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "description": "Payout lifecycle vectors: every status transition and every refused one, lapse at the time to live and at an attestation's valid_until, who may cancel for each reason, agent removal, and transfer failures inside execute.",
+  "vectors": [
+    {
+      "id": "lifecycle_pending_approved_executed",
+      "rules": [
+        "MANDATE-PAYOUT-004",
+        "MANDATE-PAYOUT-005",
+        "MANDATE-PAYOUT-006",
+        "MANDATE-PAYOUT-007",
+        "MANDATE-PAYOUT-012",
+        "MANDATE-PAYOUT-013",
+        "MANDATE-PAYOUT-014",
+        "MANDATE-APPROVAL-001"
+      ],
+      "description": "A payout at the approval threshold is PENDING, one approval makes it APPROVED, and the executor pays it, leaving an EXECUTED tombstone.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": ["executor"],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "pending": "600", "committed": "0", "free": "4400" },
+              "payouts": {
+                "#p1": {
+                  "status": "PENDING",
+                  "agent": "agent",
+                  "agent_epoch": 0,
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "created_at": "1767225600",
+                  "expires_at": "1767312000",
+                  "policy_epoch": "0",
+                  "approvals": []
+                }
+              }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_approval_added",
+                "fields": { "payout_id": "#p1", "approver": "approver", "approvals": 1, "required": 1 }
+              },
+              { "name": "payout_approved", "fields": { "payout_id": "#p1" } }
+            ],
+            "state": {
+              "mandate": { "pending": "0", "committed": "600", "free": "4400" },
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["approver"] } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "executor",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "day": "20454",
+                  "spent": "600"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "600", "pending": "0", "committed": "0", "balance": "4400", "free": "4400" },
+              "payouts": { "#p1": { "status": "EXECUTED" } },
+              "balances": { "asset": { "mandate": "4400", "bob": "600" } },
+              "daily": { "#bob": { "day": "20454", "used": "600" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "payout",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": { "payout_id": "#p1", "status": "EXECUTED" },
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_approved_on_request_executed_by_each_role",
+      "rules": [
+        "MANDATE-PAYOUT-005",
+        "MANDATE-PAYOUT-007",
+        "MANDATE-PAYOUT-012",
+        "MANDATE-PAYOUT-013",
+        "MANDATE-APPROVAL-001"
+      ],
+      "description": "Payouts below the threshold are APPROVED on request and are executed by the agent, the principal and an executor.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": ["executor"],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          { "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } },
+          { "recipient_ref": "#carol", "destination": { "address": "carol", "tag": null } }
+        ],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "pending": "0", "committed": "100" },
+              "payouts": { "#p1": { "status": "APPROVED" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#carol",
+              "total": "200",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "200" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#carol",
+                  "total": "200",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "200" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p3",
+              "recipient_ref": "#bob",
+              "total": "300",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "300" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p3",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p3",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "300",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "300" }],
+                  "task_ref": "#task_p3",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "day": "20454",
+                  "spent": "100"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "principal",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p2",
+                  "recipient_ref": "#carol",
+                  "total": "200",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "200" }],
+                  "day": "20454",
+                  "spent": "300"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "executor",
+          "args": { "payout_id": "#p3" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p3",
+                  "recipient_ref": "#bob",
+                  "total": "300",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "300" }],
+                  "day": "20454",
+                  "spent": "600"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "600", "committed": "0", "balance": "4400" },
+              "balances": { "asset": { "mandate": "4400", "bob": "400", "carol": "200" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_pending_rejected",
+      "rules": ["MANDATE-PAYOUT-001", "MANDATE-PAYOUT-005", "MANDATE-APPROVAL-005"],
+      "description": "Pending payouts are rejected by an approver and by the principal, releasing pending and leaving REJECTED tombstones.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#bob",
+              "total": "700",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "700" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "700",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "700" }],
+                  "task_ref": "#task_p2",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_rejected", "fields": { "payout_id": "#p1", "by": "approver" } }],
+            "token_events": [],
+            "state": { "mandate": { "pending": "700" }, "payouts": { "#p1": { "status": "REJECTED" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "principal",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_rejected", "fields": { "payout_id": "#p2", "by": "principal" } }],
+            "state": {
+              "mandate": { "pending": "0", "committed": "0", "free": "5000" },
+              "payouts": { "#p2": { "status": "REJECTED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_pending_cannot_execute",
+      "rules": ["MANDATE-PAYOUT-005"],
+      "description": "A PENDING payout cannot be executed, by the agent or the principal, and stays reserved.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "600",
+              "committed": "0",
+              "balance": "5000",
+              "free": "4400",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": { "payouts": { "#p1": { "status": "PENDING" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_approved_cannot_be_approved_or_rejected",
+      "rules": ["MANDATE-PAYOUT-005"],
+      "description": "An APPROVED payout can be neither approved again nor rejected, by an approver or the principal.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "100",
+              "balance": "5000",
+              "free": "4900",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": { "mandate": { "committed": "100" }, "payouts": { "#p1": { "status": "APPROVED" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_executed_is_terminal",
+      "rules": ["MANDATE-PAYOUT-001", "MANDATE-PAYOUT-005"],
+      "description": "Once EXECUTED, approve, reject, cancel by the principal or a third party, and execute are all PAYOUT_WRONG_STATUS.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "day": "20454",
+                  "spent": "100"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "100",
+              "pending": "0",
+              "committed": "0",
+              "balance": "4900",
+              "free": "4900",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": {
+              "mandate": { "spent": "100", "pending": "0", "committed": "0" },
+              "payouts": { "#p1": { "status": "EXECUTED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_rejected_is_terminal",
+      "rules": ["MANDATE-PAYOUT-001", "MANDATE-PAYOUT-005"],
+      "description": "Once REJECTED, approve, reject, cancel by the principal or a third party, and execute are all PAYOUT_WRONG_STATUS.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_rejected", "fields": { "payout_id": "#p1", "by": "approver" } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "5000",
+              "free": "5000",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": {
+              "mandate": { "spent": "0", "pending": "0", "committed": "0" },
+              "payouts": { "#p1": { "status": "REJECTED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancelled_is_terminal",
+      "rules": ["MANDATE-PAYOUT-001", "MANDATE-PAYOUT-005"],
+      "description": "Once CANCELLED, approve, reject, cancel by the principal or a third party, and execute are all PAYOUT_WRONG_STATUS.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "principal", "reason": 1 } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "5000",
+              "free": "5000",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": {
+              "mandate": { "spent": "0", "pending": "0", "committed": "0" },
+              "payouts": { "#p1": { "status": "CANCELLED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_unknown_payout_refused",
+      "rules": ["MANDATE-PAYOUT-004"],
+      "description": "Every call on an ID with no record and no tombstone is PAYOUT_NOT_FOUND, a third party's cancel included, and the view reads null.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#missing" },
+          "expect": { "error": "PAYOUT_NOT_FOUND", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#missing" },
+          "expect": { "error": "PAYOUT_NOT_FOUND", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#missing" },
+          "expect": { "error": "PAYOUT_NOT_FOUND", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#missing" },
+          "expect": { "error": "PAYOUT_NOT_FOUND", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#missing" },
+          "expect": { "error": "PAYOUT_NOT_FOUND", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "payout",
+          "caller": "principal",
+          "args": { "payout_id": "#missing" },
+          "expect": {
+            "ok": true,
+            "return": null,
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_execute_last_second_before_lapse",
+      "rules": ["MANDATE-PAYOUT-006", "MANDATE-EXPIRY-003"],
+      "description": "A payout expires one time to live after its request; one second before that it still executes.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ],
+            "state": { "payouts": { "#p1": { "created_at": "1767225600", "expires_at": "1767312000" } } }
+          }
+        },
+        { "step": "set_time", "now": "1767311999" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "day": "20454",
+                  "spent": "100"
+                }
+              }
+            ],
+            "state": { "mandate": { "spent": "100", "committed": "0" }, "payouts": { "#p1": { "status": "EXECUTED" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_approve_last_second_before_lapse",
+      "rules": ["MANDATE-PAYOUT-006"],
+      "description": "A pending payout approved one second before it lapses becomes APPROVED and executes in that same second.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_time", "now": "1767311999" },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_approval_added",
+                "fields": { "payout_id": "#p1", "approver": "approver", "approvals": 1, "required": 1 }
+              },
+              { "name": "payout_approved", "fields": { "payout_id": "#p1" } }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "day": "20454",
+                  "spent": "600"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "600", "pending": "0", "committed": "0" },
+              "payouts": { "#p1": { "status": "EXECUTED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_lapsed_payout_cannot_be_approved_or_executed",
+      "rules": ["MANDATE-PAYOUT-006", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011", "MANDATE-EXPIRY-003"],
+      "description": "At its expiry a pending payout cannot be approved and an approved one cannot be executed; both stay reserved until anyone cancels them.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_time", "now": "1767312000" },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_LAPSED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p2" },
+          "expect": { "error": "PAYOUT_LAPSED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "600",
+              "committed": "100",
+              "balance": "5000",
+              "free": "4300",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": { "payouts": { "#p1": { "status": "PENDING" }, "#p2": { "status": "APPROVED" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "stranger", "reason": 3 } }],
+            "state": { "mandate": { "pending": "0", "committed": "100" } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p2", "by": "stranger", "reason": 3 } }],
+            "state": { "mandate": { "pending": "0", "committed": "0", "free": "5000" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancel_by_principal",
+      "rules": ["MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011"],
+      "description": "The principal cancels a pending and an approved payout with reason 1, releasing pending and committed.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              { "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "principal", "reason": 1 } }
+            ],
+            "token_events": [],
+            "state": {
+              "mandate": { "pending": "0", "committed": "100" },
+              "payouts": { "#p1": { "status": "CANCELLED" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              { "name": "payout_cancelled", "fields": { "payout_id": "#p2", "by": "principal", "reason": 1 } }
+            ],
+            "token_events": [],
+            "state": {
+              "mandate": { "pending": "0", "committed": "0", "free": "5000" },
+              "payouts": { "#p2": { "status": "CANCELLED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancel_by_own_agent",
+      "rules": ["MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011"],
+      "description": "The requesting agent cancels its own pending and approved payouts with reason 2.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "agent", "reason": 2 } }],
+            "state": { "mandate": { "pending": "0", "committed": "100" } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p2", "by": "agent", "reason": 2 } }],
+            "state": {
+              "mandate": { "pending": "0", "committed": "0", "free": "5000" },
+              "payouts": { "#p1": { "status": "CANCELLED" }, "#p2": { "status": "CANCELLED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancel_by_anyone_waits_for_own_lapse",
+      "rules": ["MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011", "MANDATE-EXPIRY-003"],
+      "description": "Before a payout's own expiry no third party, approver, guardian or executor may cancel it; from that second anyone may, while the mandate is active.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": ["guardian"],
+          "executors": ["executor"],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "3600",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767229200"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "guardian",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "executor",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        { "step": "set_time", "now": "1767229199" },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        { "step": "set_time", "now": "1767229200" },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "stranger", "reason": 3 } }],
+            "state": {
+              "mandate": { "committed": "0", "expired": false },
+              "payouts": { "#p1": { "status": "CANCELLED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancel_lapsed_by_anyone",
+      "rules": ["MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011"],
+      "description": "Once a payout's own time to live has run out a third party cancels it with reason 3.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "3600",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767229200"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_time", "now": "1767229200" },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "stranger", "reason": 3 } }],
+            "state": {
+              "mandate": { "committed": "0", "free": "5000" },
+              "payouts": { "#p1": { "status": "CANCELLED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancel_by_another_agent_refused",
+      "rules": ["MANDATE-PAYOUT-010"],
+      "description": "A second agent cannot cancel another agent's payout; the agent that requested it can.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent", "agent2"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent2",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "agent", "reason": 2 } }],
+            "state": { "mandate": { "committed": "0" }, "payouts": { "#p1": { "status": "CANCELLED" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_removed_and_readded_agent_loses_its_payouts",
+      "rules": ["MANDATE-PAYOUT-010", "MANDATE-PAYOUT-014"],
+      "description": "An agent removed and added back holds a new epoch: it cannot cancel or execute its earlier payouts, while its new ones work.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#bob",
+              "total": "200",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "200" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "200",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "200" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "remove_role",
+          "caller": "principal",
+          "args": { "role": 1, "account": "agent" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "role_removed", "fields": { "role": 1, "account": "agent" } }],
+            "state": { "mandate": { "agents": [], "agent_epoch": 0 } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "add_role",
+          "caller": "principal",
+          "args": { "role": 1, "account": "agent" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "role_added", "fields": { "role": 1, "account": "agent" } }],
+            "state": { "mandate": { "agents": ["agent"], "agent_epoch": 1 } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p2" },
+          "expect": { "error": "AGENT_REMOVED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "principal", "reason": 1 } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p3",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p3",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p3",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p3",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ],
+            "state": { "payouts": { "#p3": { "status": "APPROVED", "agent": "agent", "agent_epoch": 1 } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p3" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p3", "by": "agent", "reason": 2 } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              { "name": "payout_cancelled", "fields": { "payout_id": "#p2", "by": "principal", "reason": 1 } }
+            ],
+            "state": { "mandate": { "pending": "0", "committed": "0" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_removed_agent_payouts_stop",
+      "rules": ["MANDATE-PAYOUT-014", "MANDATE-PAYOUT-010"],
+      "description": "Removing an agent stops its pending payout at approve and its approved payout at execute; the principal cancels both.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": [],
+          "executors": ["executor"],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "remove_role",
+          "caller": "principal",
+          "args": { "role": 1, "account": "agent" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "role_removed", "fields": { "role": 1, "account": "agent" } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "AGENT_REMOVED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "executor",
+          "args": { "payout_id": "#p2" },
+          "expect": { "error": "AGENT_REMOVED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "principal", "reason": 1 } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              { "name": "payout_cancelled", "fields": { "payout_id": "#p2", "by": "principal", "reason": 1 } }
+            ],
+            "state": { "mandate": { "pending": "0", "committed": "0", "free": "5000" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancel_after_mandate_expiry",
+      "rules": ["MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011", "MANDATE-EXPIRY-003"],
+      "description": "After the mandate expires a third party still waits for a payout's own expiry inside the grace, while the agent cancels at once.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "2592000",
+            "expires_at": "1767312000"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1769817600"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1769817600"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p3",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p3",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p3",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p3",
+                  "status": "APPROVED",
+                  "expires_at": "1769817600"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_time", "now": "1767312000" },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p3" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p3", "by": "agent", "reason": 2 } }],
+            "state": { "mandate": { "expired": true, "committed": "200", "free": "5000" } }
+          }
+        },
+        { "step": "set_time", "now": "1769817599" },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        },
+        { "step": "set_time", "now": "1769817600" },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "stranger", "reason": 3 } }],
+            "state": { "mandate": { "committed": "100" } }
+          }
+        },
+        { "step": "set_time", "now": "1769904000" },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p2" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p2", "by": "stranger", "reason": 3 } }],
+            "state": { "mandate": { "committed": "0" }, "payouts": { "#p2": { "status": "CANCELLED" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_attested_expiry_is_earliest_valid_until",
+      "rules": ["MANDATE-PAYOUT-006", "MANDATE-PAYOUT-010", "MANDATE-EXPIRY-004"],
+      "description": "An attested payout expires at its earliest leg valid_until, before its time to live; execute then is PAYOUT_LAPSED and anyone may cancel.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ATTESTED",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": "#attester",
+          "country_policy_hash": "#countries_a",
+          "max_fee_bps": 0
+        },
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "attest",
+          "name": "a1",
+          "signer": "#attester",
+          "recipient_ref": "#bob",
+          "destination": { "address": "bob", "tag": null },
+          "valid_until": "1767229200"
+        },
+        {
+          "step": "attest",
+          "name": "a2",
+          "signer": "#attester",
+          "recipient_ref": "#bob",
+          "destination": { "address": "bob", "tag": "7" },
+          "valid_until": "1767227400"
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                { "destination": { "address": "bob", "tag": null }, "amount": "60" },
+                { "destination": { "address": "bob", "tag": "7" }, "amount": "40" }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": ["a1", "a2"]
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [
+                    { "destination": { "address": "bob", "tag": null }, "amount": "60" },
+                    { "destination": { "address": "bob", "tag": "7" }, "amount": "40" }
+                  ],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767227400"
+                }
+              }
+            ],
+            "state": {
+              "payouts": { "#p1": { "status": "APPROVED", "created_at": "1767225600", "expires_at": "1767227400" } }
+            }
+          }
+        },
+        { "step": "set_time", "now": "1767227400" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_LAPSED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "stranger", "reason": 3 } }],
+            "state": {
+              "mandate": { "committed": "0", "free": "5000" },
+              "payouts": { "#p1": { "status": "CANCELLED" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_attested_executes_before_valid_until",
+      "rules": ["MANDATE-PAYOUT-006", "MANDATE-PAYOUT-012", "MANDATE-EXPIRY-004"],
+      "description": "An attested payout capped at its attestation's valid_until still executes one second before it.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ATTESTED",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": "#attester",
+          "country_policy_hash": "#countries_a",
+          "max_fee_bps": 0
+        },
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "attest",
+          "name": "a1",
+          "signer": "#attester",
+          "recipient_ref": "#bob",
+          "destination": { "address": "bob", "tag": null },
+          "valid_until": "1767227400"
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": ["a1"]
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767227400"
+                }
+              }
+            ],
+            "state": { "payouts": { "#p1": { "expires_at": "1767227400" } } }
+          }
+        },
+        { "step": "set_time", "now": "1767227399" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "day": "20454",
+                  "spent": "100"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "100", "committed": "0" },
+              "balances": { "asset": { "mandate": "4900", "bob": "100" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_attested_ttl_before_valid_until",
+      "rules": ["MANDATE-PAYOUT-006", "MANDATE-EXPIRY-003", "MANDATE-EXPIRY-004"],
+      "description": "When the time to live ends before the attestation, an attested payout expires with its time to live.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ATTESTED",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "3600",
+            "expires_at": "1798761600"
+          },
+          "attester": "#attester",
+          "country_policy_hash": "#countries_a",
+          "max_fee_bps": 0
+        },
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "attest",
+          "name": "a1",
+          "signer": "#attester",
+          "recipient_ref": "#bob",
+          "destination": { "address": "bob", "tag": null },
+          "valid_until": "1767232800"
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": ["a1"]
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767229200"
+                }
+              }
+            ],
+            "state": { "payouts": { "#p1": { "created_at": "1767225600", "expires_at": "1767229200" } } }
+          }
+        },
+        { "step": "set_time", "now": "1767229199" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "day": "20454",
+                  "spent": "100"
+                }
+              }
+            ],
+            "state": { "mandate": { "spent": "100", "committed": "0" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_execute_transfer_failure_reverts",
+      "rules": ["MANDATE-PAYOUT-012", "MANDATE-PAYOUT-013", "MANDATE-PAYOUT-015"],
+      "description": "The asset calls back into execute during the leg transfer and lets the refusal fail its transfer: execute is TRANSFER_FAILED and nothing changes.",
+      "applies_to": ["celo"],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "tokens": {
+          "asset": { "kind": "reentrant", "reenters": "execute", "variant": "propagate", "payout_id": "#p1" }
+        },
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "payout",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": {
+              "payout_id": "#p1",
+              "status": "APPROVED",
+              "agent": "agent",
+              "agent_epoch": 0,
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "created_at": "1767225600",
+              "expires_at": "1767312000",
+              "policy_epoch": "0",
+              "approvals": []
+            },
+            "events": [],
+            "state": {
+              "mandate": { "spent": "0", "committed": "100", "balance": "5000" },
+              "balances": { "asset": { "mandate": "5000", "bob": "0" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_execute_nested_call_caught",
+      "rules": ["MANDATE-PAYOUT-012", "MANDATE-PAYOUT-013", "MANDATE-PAYOUT-015"],
+      "description": "The asset calls back into execute during the leg transfer and catches the refusal: execute completes as if no nested call was made.",
+      "applies_to": ["celo"],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "tokens": { "asset": { "kind": "reentrant", "reenters": "execute", "variant": "catch", "payout_id": "#p1" } },
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "day": "20454",
+                  "spent": "100"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "100", "committed": "0", "balance": "4900" },
+              "payouts": { "#p1": { "status": "EXECUTED" } },
+              "balances": { "asset": { "mandate": "4900", "bob": "100" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_failed_second_leg_reverts_first",
+      "rules": ["MANDATE-PAYOUT-012", "MANDATE-PAYOUT-013"],
+      "description": "When the second leg's destination cannot receive, execute is TRANSFER_FAILED and the first leg, already paid within the call, is reverted too.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          { "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } },
+          { "recipient_ref": "#bob", "destination": { "address": "bob_bank", "tag": null } }
+        ],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                { "destination": { "address": "bob", "tag": null }, "amount": "70" },
+                { "destination": { "address": "bob_bank", "tag": null }, "amount": "30" }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [
+                    { "destination": { "address": "bob", "tag": null }, "amount": "70" },
+                    { "destination": { "address": "bob_bank", "tag": null }, "amount": "30" }
+                  ],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_receiving", "token": "asset", "account": "bob_bank", "state": "deauthorized" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "payout",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": {
+              "payout_id": "#p1",
+              "status": "APPROVED",
+              "agent": "agent",
+              "agent_epoch": 0,
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                { "destination": { "address": "bob", "tag": null }, "amount": "70" },
+                { "destination": { "address": "bob_bank", "tag": null }, "amount": "30" }
+              ],
+              "created_at": "1767225600",
+              "expires_at": "1767312000",
+              "policy_epoch": "0",
+              "approvals": []
+            },
+            "events": [],
+            "state": {
+              "mandate": { "spent": "0", "committed": "100", "balance": "5000" },
+              "balances": { "asset": { "mandate": "5000", "bob": "0", "bob_bank": "0" } }
+            }
+          }
+        },
+        { "step": "set_receiving", "token": "asset", "account": "bob_bank", "state": "receivable" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [
+                    { "destination": { "address": "bob", "tag": null }, "amount": "70" },
+                    { "destination": { "address": "bob_bank", "tag": null }, "amount": "30" }
+                  ],
+                  "day": "20454",
+                  "spent": "100"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "100", "committed": "0", "balance": "4900" },
+              "balances": { "asset": { "mandate": "4900", "bob": "70", "bob_bank": "30" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_failed_fee_transfer_reverts_legs",
+      "rules": ["MANDATE-PAYOUT-012", "MANDATE-PAYOUT-013"],
+      "description": "The fee is transferred last; when the fee address cannot receive, execute is TRANSFER_FAILED and the legs are reverted with it.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 100
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "900",
+              "fee": "9",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "900" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "900",
+                  "fee": "9",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "900" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ],
+            "state": { "mandate": { "committed": "909" }, "payouts": { "#p1": { "total": "900", "fee": "9" } } }
+          }
+        },
+        { "step": "set_receiving", "token": "asset", "account": "fee_address", "state": "deauthorized" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "909",
+              "balance": "5000",
+              "free": "4091",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": {
+              "payouts": { "#p1": { "status": "APPROVED" } },
+              "balances": { "asset": { "mandate": "5000", "bob": "0", "fee_address": "0" } }
+            }
+          }
+        },
+        { "step": "set_receiving", "token": "asset", "account": "fee_address", "state": "receivable" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "payout_executed",
+                "fields": {
+                  "payout_id": "#p1",
+                  "recipient_ref": "#bob",
+                  "total": "900",
+                  "fee": "9",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "900" }],
+                  "day": "20454",
+                  "spent": "909"
+                }
+              }
+            ],
+            "state": {
+              "mandate": { "spent": "909", "committed": "0", "balance": "4091" },
+              "balances": { "asset": { "mandate": "4091", "bob": "900", "fee_address": "9" } },
+              "daily": { "#bob": { "day": "20454", "used": "900" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_record_live_through_margin",
+      "rules": ["MANDATE-PAYOUT-016", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011"],
+      "description": "A lapsed payout's record still reads back one second before the end of its one day margin, and a third party cancels it then.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_time", "now": "1767398399" },
+        {
+          "step": "call",
+          "fn": "payout",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": {
+              "payout_id": "#p1",
+              "status": "APPROVED",
+              "agent": "agent",
+              "agent_epoch": 0,
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "created_at": "1767225600",
+              "expires_at": "1767312000",
+              "policy_epoch": "0",
+              "approvals": []
+            },
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "stranger", "reason": 3 } }],
+            "state": { "mandate": { "committed": "0" }, "payouts": { "#p1": { "status": "CANCELLED" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_lapsed_record_cancellable_in_margin",
+      "rules": ["MANDATE-PAYOUT-016", "MANDATE-PAYOUT-006"],
+      "description": "Execute at a payout's expiry is PAYOUT_LAPSED, and the record stays readable and cancellable through its margin.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_time", "now": "1767312000" },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "PAYOUT_LAPSED", "events": [] }
+        },
+        { "step": "set_time", "now": "1767398399" },
+        {
+          "step": "call",
+          "fn": "payout",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": {
+              "payout_id": "#p1",
+              "status": "APPROVED",
+              "agent": "agent",
+              "agent_epoch": 0,
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "created_at": "1767225600",
+              "expires_at": "1767312000",
+              "policy_epoch": "0",
+              "approvals": []
+            },
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "stranger",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "stranger", "reason": 3 } }],
+            "state": { "mandate": { "committed": "0" }, "payouts": { "#p1": { "status": "CANCELLED" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle_cancel_refused_after_revoke",
+      "rules": ["MANDATE-PAYOUT-011", "MANDATE-REVOKE-002"],
+      "description": "After revoke no payout can be cancelled, its record stays as it was, and revoke already released every reservation.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "5000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "5000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "5000" } }],
+            "state": { "mandate": { "revoked": true, "pending": "0", "committed": "0", "free": "5000" } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "payout",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": {
+            "ok": true,
+            "return": {
+              "payout_id": "#p1",
+              "status": "APPROVED",
+              "agent": "agent",
+              "agent_epoch": 0,
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "100" }],
+              "created_at": "1767225600",
+              "expires_at": "1767312000",
+              "policy_epoch": "0",
+              "approvals": []
+            },
+            "events": []
+          }
+        }
+      ]
+    }
+  ]
+}
