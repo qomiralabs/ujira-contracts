@@ -1,0 +1,384 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "description": "Self test vectors for the vector runner. The reference factory and mandate under soroban/vector-runner/contracts do all of this correctly, so every vector here passes.",
+  "vectors": [
+    {
+      "id": "reference_creates_and_reports",
+      "rules": [
+        "MANDATE-CONFIG-006",
+        "MANDATE-PAUSE-002",
+        "MANDATE-PAUSE-003",
+        "MANDATE-ROLE-015"
+      ],
+      "description": "Create through the factory, fund, read state, pause, and resume only with the principal's signature.",
+      "setup": {
+        "now": "1767225600",
+        "mints": [
+          {
+            "token": "asset",
+            "to": "principal",
+            "amount": "500"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "create",
+          "caller": "principal",
+          "args": {
+            "config": {
+              "principal": "principal",
+              "asset": "other_token",
+              "recipient_mode": "ALLOWLIST",
+              "tenant_ref": "#tenant",
+              "agents": [
+                "agent"
+              ],
+              "approvers": [],
+              "approvals_required": 0,
+              "guardians": [
+                "guardian"
+              ],
+              "executors": [],
+              "recovery": [],
+              "recovery_threshold": 0,
+              "limits": {
+                "total_budget": "10000",
+                "per_payment_cap": "1000",
+                "per_recipient_daily_cap": "500",
+                "approval_threshold": "1001",
+                "payout_ttl_seconds": "86400",
+                "expires_at": "1798761600"
+              },
+              "attester": null,
+              "country_policy_hash": "#no_countries",
+              "max_fee_bps": 0
+            },
+            "salt": "#salt"
+          },
+          "expect": {
+            "error": "ASSET_NOT_SUPPORTED",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "create",
+          "caller": "principal",
+          "args": {
+            "config": {
+              "principal": "principal",
+              "asset": "asset",
+              "recipient_mode": "ALLOWLIST",
+              "tenant_ref": "#tenant",
+              "agents": [
+                "agent"
+              ],
+              "approvers": [],
+              "approvals_required": 0,
+              "guardians": [
+                "guardian"
+              ],
+              "executors": [],
+              "recovery": [],
+              "recovery_threshold": 0,
+              "limits": {
+                "total_budget": "10000",
+                "per_payment_cap": "1000",
+                "per_recipient_daily_cap": "500",
+                "approval_threshold": "1001",
+                "payout_ttl_seconds": "86400",
+                "expires_at": "1798761600"
+              },
+              "attester": null,
+              "country_policy_hash": "#no_countries",
+              "max_fee_bps": 0
+            },
+            "salt": "#salt"
+          },
+          "expect": {
+            "ok": true,
+            "return": "mandate",
+            "events": [
+              {
+                "name": "mandate_created",
+                "fields": {
+                  "mandate": "mandate",
+                  "principal": "principal",
+                  "asset": "asset",
+                  "tenant_ref": "#tenant",
+                  "spec_version": 1,
+                  "fee_address": "fee_address"
+                }
+              },
+              {
+                "name": "mandate_initialized",
+                "fields": {
+                  "principal": "principal",
+                  "asset": "asset",
+                  "recipient_mode": "ALLOWLIST",
+                  "tenant_ref": "#tenant",
+                  "agents": [
+                    "agent"
+                  ],
+                  "approvers": [],
+                  "approvals_required": 0,
+                  "guardians": [
+                    "guardian"
+                  ],
+                  "executors": [],
+                  "recovery": [],
+                  "recovery_threshold": 0,
+                  "limits": {
+                    "total_budget": "10000",
+                    "per_payment_cap": "1000",
+                    "per_recipient_daily_cap": "500",
+                    "approval_threshold": "1001",
+                    "payout_ttl_seconds": "86400",
+                    "expires_at": "1798761600"
+                  },
+                  "attester": null,
+                  "country_policy_hash": "#no_countries",
+                  "max_fee_bps": 0,
+                  "fee_address": "fee_address"
+                }
+              }
+            ],
+            "token_events": []
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "principal",
+          "to": "mandate",
+          "amount": "500",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "500",
+              "free": "500",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "paused",
+                "fields": {
+                  "by": "guardian"
+                }
+              }
+            ],
+            "token_events": [],
+            "state": {
+              "mandate": {
+                "paused": true
+              }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": {
+            "error": "ALREADY_PAUSED",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "resume",
+          "caller": "guardian",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": {
+              "stellar": {
+                "host_auth_failure": true
+              }
+            }
+          }
+        },
+        {
+          "step": "advance_time",
+          "seconds": "60"
+        },
+        {
+          "step": "call",
+          "fn": "resume",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "resumed",
+                "fields": {
+                  "by": "principal"
+                }
+              }
+            ],
+            "state": {
+              "mandate": {
+                "paused": false,
+                "balance": "500",
+                "free": "500",
+                "principal": "principal",
+                "guardians": [
+                  "guardian"
+                ],
+                "limits": {
+                  "total_budget": "10000",
+                  "per_payment_cap": "1000",
+                  "per_recipient_daily_cap": "500",
+                  "approval_threshold": "1001",
+                  "payout_ttl_seconds": "86400",
+                  "expires_at": "1798761600"
+                },
+                "attester": null,
+                "country_policy_hash": "#no_countries"
+              },
+              "balances": {
+                "asset": {
+                  "mandate": "500",
+                  "principal": "0"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "reference_attests_and_moves_tokens",
+      "rules": [
+        "MANDATE-FUND-001"
+      ],
+      "description": "An attest step signs for the mandate's own address, and the receiving and clawback steps act on the settlement asset.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "1000"
+          },
+          {
+            "token": "asset",
+            "to": "bob",
+            "amount": "50"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "attest",
+          "name": "att_bob",
+          "signer": "#attester",
+          "recipient_ref": "#bob",
+          "destination": {
+            "address": "bob",
+            "tag": "7"
+          },
+          "valid_until": "1767229200"
+        },
+        {
+          "step": "clawback",
+          "token": "asset",
+          "from": "mandate",
+          "amount": "300"
+        },
+        {
+          "step": "set_receiving",
+          "token": "asset",
+          "account": "carol",
+          "state": "deauthorized"
+        },
+        {
+          "step": "set_receiving",
+          "token": "asset",
+          "account": "bob",
+          "state": "receivable"
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "700",
+              "free": "700",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": {
+              "balances": {
+                "asset": {
+                  "mandate": "700",
+                  "bob": "50",
+                  "carol": "0"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+[package]
+name = "vector-runner-reference-factory"
+version = "0.0.0"
+description = "Test only: a stand-in factory the vector runner's self tests run against. Never deployed."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+mandate-errors = { workspace = true }

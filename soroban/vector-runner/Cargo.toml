@@ -1,0 +1,25 @@
+[package]
+name = "vector-runner"
+version = "0.0.0"
+description = "Runs the shared mandate vectors against the compiled Soroban factory and mandate, writes a trace and compares it with the expectations."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[[bin]]
+name = "vector-run"
+path = "src/bin/vector-run.rs"
+
+[[bin]]
+name = "vector-compare"
+path = "src/bin/vector-compare.rs"
+
+[dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+mandate-errors = { workspace = true }
+ed25519-dalek = "=2.2.0"
+serde_json = "=1.0.154"
+sha2 = "=0.10.9"
