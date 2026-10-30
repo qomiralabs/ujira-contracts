@@ -18,10 +18,13 @@
 #   - JSON numbers are integers only (no fraction, exponent, NaN or Infinity),
 #     no object repeats a key, and vector IDs are unique across all files;
 #   - an input only one chain's types can express restricts the vector to that
-#     chain: a negative amount (Stellar), an amount above I128_MAX, the zero
-#     address, the non-canonical tag or a reentrant test token (Celo);
-#   - a tagged destination is an account actor, and the mandate, the tokens and
-#     the zero address never make a call;
+#     chain: a negative amount, an account with no trustline or a token whose
+#     transfer returns a value (Stellar), an amount above I128_MAX, the zero
+#     address, the non-canonical tag, a reentrant test token or a token whose
+#     transfer returns no data (Celo);
+#   - a tagged destination is an account actor, only an account actor changes
+#     whether it can receive, and the mandate, the tokens and the zero address
+#     never make a call;
 #   - every attestation a request names was made by an earlier attest step,
 #     the retired secp256k1 tamper kinds are refused by name, and a
 #     wrong_signer tamper never signs with the key it already uses;
@@ -370,6 +373,18 @@ class Vector:
                 )
             elif spec.get("kind") == "moves_settlement":
                 self.movers.add(name)
+            elif spec.get("kind") == "returns_value":
+                self.only_on(
+                    "stellar",
+                    "token %s returns a value from transfer" % name,
+                    "only a Stellar transfer returns nothing, so only there is a returned value unexpected",
+                )
+            elif spec.get("kind") == "returns_no_data":
+                self.only_on(
+                    "celo",
+                    "token %s returns no data from transfer" % name,
+                    "only an EVM call can return no data at all",
+                )
         config = self.setup.get("mandate")
         if isinstance(config, dict) and config.get("recipient_mode") == "ATTESTED" and self.setup.get("allowlist"):
             self.problem("setup has an allowlist, but an ATTESTED mandate has none")
@@ -396,9 +411,22 @@ class Vector:
                     now = target
             elif kind == "attest":
                 self.check_attest(step, n, has_mandate, attestations)
+            elif kind == "set_receiving":
+                self.check_receiving(step, n)
             elif kind == "call":
                 if self.check_call(step, n, has_mandate, attestations):
                     has_mandate = True
+
+    def check_receiving(self, step, n):
+        account = step.get("account")
+        if isinstance(account, str) and not self.is_account(account):
+            self.problem(
+                "set_receiving names %s, which is not an account; only an account holds a trustline "
+                "or is blocked by the Celo test token" % account,
+                n,
+            )
+        if step.get("state") == "no_trustline":
+            self.only_on("stellar", "step %d leaves %s with no trustline" % (n, account), "only Stellar has trustlines")
 
     def check_attest(self, step, n, has_mandate, attestations):
         if not has_mandate:

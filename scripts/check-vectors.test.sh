@@ -52,8 +52,10 @@ check() {
     fail "$name: exit $code, want $want" "$out"
     return
   fi
+  # A here-string, not a pipe: under pipefail, grep -q exiting at its first
+  # match can kill the writer with SIGPIPE and turn a match into a failure.
   for needle in ${needles[@]+"${needles[@]}"}; do
-    if ! printf '%s\n' "$out" | grep -qF -- "$needle"; then
+    if ! grep -qF -- "$needle" <<<"$out"; then
       fail "$name: the output does not mention '$needle'" "$out"
       return
     fi
@@ -160,6 +162,30 @@ check "reentrant token on both chains" 1 "token asset is a reentrant test token,
 check "reentrant token on celo only" 0 "every check passed" -- "$fx/reentrant-token-celo-only.json"
 check "settlement-moving token recovered on both chains" 1 "recovers other_token, a token that moves the settlement balance" -- "$fx/settlement-mover-both-chains.json"
 check "settlement-moving token on stellar expecting TRANSFER_FAILED" 0 "every check passed" -- "$fx/settlement-mover-stellar-transfer-failed.json"
+check "token returning a value on stellar only" 0 "every check passed" -- "$fx/returns-value-stellar-only.json"
+sed '/"applies_to"/d; /"skip_reason"/d' "$fx/returns-value-stellar-only.json" >"$work/returns-value-both-chains.json"
+check "token returning a value on both chains" 1 "token other_token returns a value from transfer, which only Stellar can express" -- "$work/returns-value-both-chains.json"
+sed 's/returns_value/returns_no_data/; s/"stellar"/"celo"/' "$fx/returns-value-stellar-only.json" >"$work/returns-no-data-celo-only.json"
+check "token returning no data on celo only" 0 "every check passed" -- "$work/returns-no-data-celo-only.json"
+sed '/"applies_to"/d; /"skip_reason"/d; s/returns_value/returns_no_data/' "$fx/returns-value-stellar-only.json" >"$work/returns-no-data-both-chains.json"
+check "token returning no data on both chains" 1 "token other_token returns no data from transfer, which only Celo can express" -- "$work/returns-no-data-both-chains.json"
+sed 's/"other_token": { "kind": "returns_value" }/"asset": { "kind": "returns_value" }/' "$fx/returns-value-stellar-only.json" >"$work/returns-value-asset.json"
+check "settlement asset returning a value" 1 "tokens.asset.kind: 'returns_value' should not be valid under" -- "$work/returns-value-asset.json"
+
+# Whether an account can receive the asset, a clawback by its issuer, and the
+# expectations that a call moved no tokens and a transfer called nothing.
+check "receiving, clawback and nothing-moved expectations validate" 0 "every check passed" -- "$fx/lifecycle-steps.json"
+sed 's/"token_events": \[\]/"token_events": [{ "name": "revoked", "fields": {} }]/' "$fx/lifecycle-steps.json" >"$work/token-events.json"
+check "token_events that are not empty" 1 "expect.token_events: [{'name': 'revoked', 'fields': {}}] is expected to be empty" -- "$work/token-events.json"
+sed 's/"amount": "100", "events": \[\]/"amount": "100", "events": [{ "name": "paused", "fields": { "by": "funder" } }]/' "$fx/lifecycle-steps.json" >"$work/transfer-events.json"
+check "transfer step expecting mandate events" 1 "steps[3].events: [{'name': 'paused', 'fields': {'by': 'funder'}}] is expected to be empty" -- "$work/transfer-events.json"
+sed 's/"account": "principal", "state": "deauthorized"/"account": "mandate", "state": "deauthorized"/' "$fx/lifecycle-steps.json" >"$work/receiving-mandate.json"
+check "set_receiving on an actor that is not an account" 1 "set_receiving names mandate, which is not an account" -- "$work/receiving-mandate.json"
+sed 's/"state": "deauthorized"/"state": "frozen"/' "$fx/lifecycle-steps.json" >"$work/receiving-unknown-state.json"
+check "set_receiving with an unknown state" 1 "'frozen' is not one of" -- "$work/receiving-unknown-state.json"
+check "no_trustline on stellar only" 0 "every check passed" -- "$fx/no-trustline-stellar-only.json"
+sed '/"applies_to"/d; /"skip_reason"/d' "$fx/no-trustline-stellar-only.json" >"$work/no-trustline-both-chains.json"
+check "no_trustline on both chains" 1 "leaves principal with no trustline, which only Stellar can express" -- "$work/no-trustline-both-chains.json"
 
 # Fee fields.
 check "numeric fee" 1 "args.req.fee: 5 is not of type 'string'" -- "$fx/numeric-fee.json"
@@ -193,12 +219,12 @@ check "require-all on the real spec names uncovered rules" 1 "coverage: MANDATE-
 # The pinned check-jsonschema, and bad usage.
 code=0
 out=$(CHECK_JSONSCHEMA="$work/no-such-tool" "$script" 2>&1) || code=$?
-if [ "$code" -eq 2 ] && printf '%s\n' "$out" | grep -qF "no-such-tool not found"; then pass "missing check-jsonschema (exits 2 as intended)"; else fail "missing check-jsonschema: exit $code, want 2" "$out"; fi
+if [ "$code" -eq 2 ] && grep -qF "no-such-tool not found" <<<"$out"; then pass "missing check-jsonschema (exits 2 as intended)"; else fail "missing check-jsonschema: exit $code, want 2" "$out"; fi
 printf '#!/bin/sh\necho "check-jsonschema, version 0.1.0"\n' >"$work/old-check-jsonschema"
 chmod +x "$work/old-check-jsonschema"
 code=0
 out=$(CHECK_JSONSCHEMA="$work/old-check-jsonschema" "$script" 2>&1) || code=$?
-if [ "$code" -eq 2 ] && printf '%s\n' "$out" | grep -qF "is version 0.1.0, not the pinned"; then pass "wrong check-jsonschema version (exits 2 as intended)"; else fail "wrong check-jsonschema version: exit $code, want 2" "$out"; fi
+if [ "$code" -eq 2 ] && grep -qF "is version 0.1.0, not the pinned" <<<"$out"; then pass "wrong check-jsonschema version (exits 2 as intended)"; else fail "wrong check-jsonschema version: exit $code, want 2" "$out"; fi
 check "unknown option" 2 "unknown option --frobnicate" -- --frobnicate
 check "unreadable vector file" 2 "cannot read" -- "$work/no-such-file.json"
 
@@ -211,7 +237,7 @@ cp "$root/spec/vectors/example.json" "$work/tree/spec/vectors/"
 printf '{ "type": "not a type" }\n' >"$work/tree/spec/vectors/schema.json"
 code=0
 out=$("$work/tree/scripts/check-vectors.sh" 2>&1) || code=$?
-if [ "$code" -eq 1 ] && printf '%s\n' "$out" | grep -qF "schemafile was not valid"; then pass "invalid JSON Schema (refused as intended)"; else fail "invalid JSON Schema: exit $code, want 1" "$out"; fi
+if [ "$code" -eq 1 ] && grep -qF "schemafile was not valid" <<<"$out"; then pass "invalid JSON Schema (refused as intended)"; else fail "invalid JSON Schema: exit $code, want 1" "$out"; fi
 
 echo
 echo "$passed passed, $failures failed"

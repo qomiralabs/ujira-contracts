@@ -282,10 +282,10 @@
       ]
     },
     "token_spec": {
-      "description": "A test token. reentrant calls back into the mandate from its transfer and is Celo only; moves_settlement tries to move the mandate's settlement balance when it is transferred.",
+      "description": "A test token. reentrant calls back into the mandate from its transfer and is Celo only; moves_settlement tries to move the mandate's settlement balance when it is transferred; returns_value (Stellar only) and returns_no_data (Celo only) transfer and then return what the chain's token interface does not.",
       "type": "object",
       "properties": {
-        "kind": { "enum": ["standard", "reentrant", "moves_settlement"] },
+        "kind": { "enum": ["standard", "reentrant", "moves_settlement", "returns_value", "returns_no_data"] },
         "reenters": { "enum": ["sweep", "cancel", "execute"] },
         "variant": { "enum": ["propagate", "catch"] },
         "payout_id": { "$ref": "#/$defs/bytes32" }
@@ -328,7 +328,7 @@
             "asset": {
               "allOf": [
                 { "$ref": "#/$defs/token_spec" },
-                { "properties": { "kind": { "not": { "const": "moves_settlement" } } } }
+                { "properties": { "kind": { "not": { "enum": ["moves_settlement", "returns_value", "returns_no_data"] } } } }
               ]
             },
             "other_token": { "$ref": "#/$defs/token_spec" }
@@ -605,6 +605,11 @@
           "description": "Every event the mandate and the factory emit, in order. Token events are not listed.",
           "type": "array",
           "items": { "$ref": "#/$defs/event" }
+        },
+        "token_events": {
+          "description": "Only an empty list: no token emits an event during the call, so the call moved no tokens. Without it token events are not compared.",
+          "type": "array",
+          "maxItems": 0
         },
         "state": { "$ref": "#/$defs/state" },
         "per_chain": { "$ref": "#/$defs/per_chain" }
@@ -1146,9 +1151,38 @@
         "token": { "$ref": "#/$defs/token" },
         "from": { "$ref": "#/$defs/actor" },
         "to": { "$ref": "#/$defs/actor" },
-        "amount": { "$ref": "#/$defs/positive_amount" }
+        "amount": { "$ref": "#/$defs/positive_amount" },
+        "events": {
+          "description": "Only an empty list: the mandate and the factory emit nothing during the transfer.",
+          "type": "array",
+          "maxItems": 0
+        }
       },
       "required": ["step", "token", "from", "to", "amount"],
+      "additionalProperties": false
+    },
+    "set_receiving_step": {
+      "description": "Whether an account can receive the settlement asset from now on. no_trustline is Stellar only.",
+      "type": "object",
+      "properties": {
+        "step": { "const": "set_receiving" },
+        "token": { "const": "asset" },
+        "account": { "$ref": "#/$defs/actor" },
+        "state": { "enum": ["receivable", "no_trustline", "deauthorized"] }
+      },
+      "required": ["step", "token", "account", "state"],
+      "additionalProperties": false
+    },
+    "clawback_step": {
+      "description": "The issuer of the settlement asset takes tokens back from an address without its authorization. It never calls the mandate.",
+      "type": "object",
+      "properties": {
+        "step": { "const": "clawback" },
+        "token": { "const": "asset" },
+        "from": { "$ref": "#/$defs/actor" },
+        "amount": { "$ref": "#/$defs/positive_amount" }
+      },
+      "required": ["step", "token", "from", "amount"],
       "additionalProperties": false
     },
     "mint_step": {
@@ -1181,7 +1215,7 @@
     "step": {
       "type": "object",
       "properties": {
-        "step": { "enum": ["call", "advance_time", "set_time", "transfer", "mint", "attest"] }
+        "step": { "enum": ["call", "advance_time", "set_time", "transfer", "mint", "attest", "set_receiving", "clawback"] }
       },
       "required": ["step"],
       "allOf": [
@@ -1208,6 +1242,14 @@
         {
           "if": { "required": ["step"], "properties": { "step": { "const": "attest" } } },
           "then": { "$ref": "#/$defs/attest_step" }
+        },
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "set_receiving" } } },
+          "then": { "$ref": "#/$defs/set_receiving_step" }
+        },
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "clawback" } } },
+          "then": { "$ref": "#/$defs/clawback_step" }
         }
       ]
     },

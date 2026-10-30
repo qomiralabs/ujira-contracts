@@ -1,0 +1,1385 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "description": "Revoke freezes without moving tokens, ends every role-gated power, and leaves withdraw and sweep to the principal, retried after a failed transfer.",
+  "vectors": [
+    {
+      "id": "revoke_freezes_the_balance_and_moves_nothing",
+      "rules": ["MANDATE-REVOKE-001", "MANDATE-REVOKE-003", "MANDATE-WITHDRAW-003", "MANDATE-WITHDRAW-004"],
+      "description": "Revoke clears the reservations, moves no tokens and leaves every balance as it was, and the principal then withdraws all of it.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": ["guardian"],
+          "executors": ["executor"],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          { "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } },
+          { "recipient_ref": "#carol", "destination": { "address": "carol", "tag": null } }
+        ],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#carol",
+              "total": "300",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "300" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#carol",
+                  "total": "300",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "300" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": {
+                "revoked": true,
+                "spent": "0",
+                "pending": "0",
+                "committed": "0",
+                "balance": "1000",
+                "free": "1000"
+              },
+              "balances": { "asset": { "mandate": "1000", "principal": "0", "bob": "0", "carol": "0" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "1000" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal", "amount": "1000" } }],
+            "state": {
+              "mandate": { "spent": "0", "pending": "0", "committed": "0", "balance": "0", "free": "0" },
+              "balances": { "asset": { "mandate": "0", "principal": "1000" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_refuses_every_role_gated_call",
+      "rules": ["MANDATE-REVOKE-002"],
+      "description": "After revoke every agent, approver, executor, guardian, recovery and administrative call is refused with MANDATE_REVOKED.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": ["guardian"],
+          "executors": ["executor"],
+          "recovery": ["rescuer"],
+          "recovery_threshold": 1,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          { "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } },
+          { "recipient_ref": "#carol", "destination": { "address": "carol", "tag": null } }
+        ],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "600",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "PENDING",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "600",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "600" }],
+                  "task_ref": "#task_p1",
+                  "status": "PENDING",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p2",
+              "recipient_ref": "#carol",
+              "total": "300",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "300" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p2",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p2",
+                  "agent": "agent",
+                  "recipient_ref": "#carol",
+                  "total": "300",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "300" }],
+                  "task_ref": "#task_p2",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": {
+                "revoked": true,
+                "spent": "0",
+                "pending": "0",
+                "committed": "0",
+                "balance": "1000",
+                "free": "1000"
+              },
+              "balances": { "asset": { "mandate": "1000", "principal": "0" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p3",
+              "recipient_ref": "#carol",
+              "total": "100",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "100" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p3",
+              "attestations": []
+            }
+          },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "request_payouts",
+          "caller": "agent",
+          "args": {
+            "reqs": [
+              {
+                "payout_id": "#p3",
+                "recipient_ref": "#carol",
+                "total": "100",
+                "fee": "0",
+                "legs": [{ "destination": { "address": "carol", "tag": null }, "amount": "100" }],
+                "deadline": "1767226200",
+                "task_ref": "#task_p3",
+                "attestations": []
+              }
+            ]
+          },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "approve",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "approver",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "reject",
+          "caller": "principal",
+          "args": { "payout_id": "#p1" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "agent",
+          "args": { "payout_id": "#p2" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "executor",
+          "args": { "payout_id": "#p2" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute",
+          "caller": "principal",
+          "args": { "payout_id": "#p2" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "execute_batch",
+          "caller": "executor",
+          "args": { "ids": ["#p2"] },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel",
+          "caller": "agent",
+          "args": { "payout_id": "#p2" },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "cancel_batch",
+          "caller": "principal",
+          "args": { "ids": ["#p1", "#p2"] },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "recovery_revoke",
+          "caller": "rescuer",
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "resume",
+          "caller": "principal",
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "update_limits",
+          "caller": "principal",
+          "args": {
+            "limits": {
+              "total_budget": "10000",
+              "per_payment_cap": "1000",
+              "per_recipient_daily_cap": "1000",
+              "approval_threshold": "500",
+              "payout_ttl_seconds": "86400",
+              "expires_at": "1798761600"
+            }
+          },
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "1000",
+              "free": "1000",
+              "paused": false,
+              "revoked": true,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_while_paused",
+      "rules": ["MANDATE-REVOKE-001", "MANDATE-PAUSE-002", "MANDATE-WITHDRAW-001"],
+      "description": "A paused mandate is revoked without moving tokens, stays paused, and the principal withdraws everything.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": { "ok": true, "events": [{ "name": "paused", "fields": { "by": "guardian" } }] }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": {
+                "paused": true,
+                "revoked": true,
+                "spent": "0",
+                "pending": "0",
+                "committed": "0",
+                "balance": "1000",
+                "free": "1000"
+              },
+              "balances": { "asset": { "mandate": "1000", "principal": "0" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "1000" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal", "amount": "1000" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1000" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_after_expiry",
+      "rules": ["MANDATE-REVOKE-001", "MANDATE-EXPIRY-002", "MANDATE-WITHDRAW-003"],
+      "description": "An expired mandate is revoked without moving tokens, its committed reservation is cleared, and the principal withdraws everything.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "172800",
+            "expires_at": "1767312000"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "300",
+              "fee": "0",
+              "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "300" }],
+              "deadline": "1767226200",
+              "task_ref": "#task_p1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "300",
+                  "fee": "0",
+                  "legs": [{ "destination": { "address": "bob", "tag": null }, "amount": "300" }],
+                  "task_ref": "#task_p1",
+                  "status": "APPROVED",
+                  "expires_at": "1767398400"
+                }
+              }
+            ]
+          }
+        },
+        { "step": "set_time", "now": "1767312000" },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": {
+                "expired": true,
+                "revoked": true,
+                "spent": "0",
+                "pending": "0",
+                "committed": "0",
+                "balance": "1000",
+                "free": "1000"
+              },
+              "balances": { "asset": { "mandate": "1000", "principal": "0", "bob": "0" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "1000" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal", "amount": "1000" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1000" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_by_anyone_but_the_principal_refused",
+      "rules": ["MANDATE-REVOKE-001", "MANDATE-ROLE-015"],
+      "description": "Every role, an outsider and the fee address are refused revoke, and the principal's revoke then moves no tokens.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": ["approver"],
+          "approvals_required": 1,
+          "guardians": ["guardian"],
+          "executors": ["executor"],
+          "recovery": ["rescuer"],
+          "recovery_threshold": 1,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "500",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "agent",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "approver",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "guardian",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "executor",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "rescuer",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "stranger",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "fee_address",
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "1000",
+              "free": "1000",
+              "paused": false,
+              "revoked": false,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": { "revoked": true, "balance": "1000" },
+              "balances": { "asset": { "mandate": "1000", "principal": "0" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_with_principal_without_trustline",
+      "rules": ["MANDATE-REVOKE-001", "MANDATE-REVOKE-003", "MANDATE-WITHDRAW-004"],
+      "description": "With no trustline the principal still revokes, attempting no transfer; its withdrawal fails until it opens the trustline, then succeeds.",
+      "applies_to": ["stellar"],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        { "step": "set_receiving", "token": "asset", "account": "principal", "state": "no_trustline" },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": { "revoked": true, "balance": "1000", "free": "1000" },
+              "balances": { "asset": { "mandate": "1000", "principal": "0" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "1000" },
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "1000",
+              "free": "1000",
+              "paused": false,
+              "revoked": true,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        { "step": "set_receiving", "token": "asset", "account": "principal", "state": "receivable" },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "1000" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal", "amount": "1000" } }],
+            "state": {
+              "mandate": { "balance": "0", "free": "0" },
+              "balances": { "asset": { "mandate": "0", "principal": "1000" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_with_principal_unable_to_receive",
+      "rules": ["MANDATE-REVOKE-001", "MANDATE-REVOKE-003", "MANDATE-WITHDRAW-004", "MANDATE-SWEEP-005"],
+      "description": "A principal that cannot receive still revokes; withdraw and sweep fail and change nothing until it can receive, then both succeed.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        { "step": "set_receiving", "token": "asset", "account": "principal", "state": "deauthorized" },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": { "revoked": true, "balance": "1000", "free": "1000" },
+              "balances": { "asset": { "mandate": "1000", "principal": "0" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "1000" },
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "1000",
+              "free": "1000",
+              "paused": false,
+              "revoked": true,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0", "stranger": "0" } } }
+          }
+        },
+        { "step": "set_receiving", "token": "asset", "account": "principal", "state": "receivable" },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "400" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal", "amount": "400" } }],
+            "state": { "balances": { "asset": { "mandate": "600", "principal": "400" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "600",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "600" } }],
+            "state": {
+              "mandate": { "balance": "0", "free": "0" },
+              "balances": { "asset": { "mandate": "0", "principal": "1000", "stranger": "0" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_return_after_principal_transfer",
+      "rules": [
+        "MANDATE-REVOKE-003",
+        "MANDATE-WITHDRAW-001",
+        "MANDATE-WITHDRAW-004",
+        "MANDATE-SWEEP-002",
+        "MANDATE-SWEEP-005",
+        "MANDATE-PRINCIPAL-004"
+      ],
+      "description": "Returns to a principal that cannot receive fail, so it moves to a new address that can, and withdraw and sweep then pay the new principal.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [{ "token": "asset", "to": "mandate", "amount": "1000" }]
+      },
+      "steps": [
+        { "step": "set_receiving", "token": "asset", "account": "principal", "state": "deauthorized" },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": {
+              "mandate": { "revoked": true, "balance": "1000" },
+              "balances": { "asset": { "mandate": "1000", "principal": "0" } }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "400" },
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "TRANSFER_FAILED", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "propose_principal",
+          "caller": "principal",
+          "args": { "proposed": "principal2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_proposed",
+                "fields": { "current": "principal", "proposed": "principal2" }
+              }
+            ],
+            "state": { "mandate": { "principal": "principal", "proposed_principal": "principal2" } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": { "error": "PRINCIPAL_CHANGE_PENDING", "events": [] }
+        },
+        {
+          "step": "call",
+          "fn": "accept_principal",
+          "caller": "principal2",
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_transferred",
+                "fields": { "previous": "principal", "current": "principal2" }
+              }
+            ],
+            "state": { "mandate": { "principal": "principal2", "proposed_principal": null } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal2",
+          "args": { "amount": "400" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal2", "amount": "400" } }],
+            "state": { "balances": { "asset": { "mandate": "600", "principal": "0", "principal2": "400" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": { "amount": "100" },
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": { "stellar": { "host_auth_failure": true } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "600",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "600" } }],
+            "state": {
+              "balances": {
+                "asset": { "mandate": "0", "principal": "0", "principal2": "1000", "stranger": "0" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_then_anyone_sweeps_to_the_principal",
+      "rules": ["MANDATE-REVOKE-003", "MANDATE-SWEEP-005"],
+      "description": "After revoke a recovery approver sweeps everything to the principal, and an outsider sweeps a later deposit to the principal too.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": ["rescuer"],
+          "recovery_threshold": 1,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [
+          { "token": "asset", "to": "mandate", "amount": "1000" },
+          { "token": "asset", "to": "funder", "amount": "50" }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "rescuer",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "swept", "fields": { "by": "rescuer", "amount": "1000" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1000", "rescuer": "0" } } }
+          }
+        },
+        {
+          "step": "transfer",
+          "token": "asset",
+          "from": "funder",
+          "to": "mandate",
+          "amount": "50",
+          "events": []
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "50",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "50" } }],
+            "state": { "balances": { "asset": { "mandate": "0", "principal": "1050", "stranger": "0" } } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke_leaves_the_return_paths_open",
+      "rules": ["MANDATE-REVOKE-002", "MANDATE-REVOKE-003", "MANDATE-PRINCIPAL-004", "MANDATE-RECOVER-003"],
+      "description": "After revoke token recovery, the principal transfer and its cancellation, withdraw, sweep and the views all still work.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [{ "recipient_ref": "#bob", "destination": { "address": "bob", "tag": null } }],
+        "mints": [
+          { "token": "asset", "to": "mandate", "amount": "1000" },
+          { "token": "other_token", "to": "mandate", "amount": "100" }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "1000",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "1000" } }],
+            "token_events": [],
+            "state": { "balances": { "asset": { "mandate": "1000", "principal": "0" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": {
+              "spent": "0",
+              "pending": "0",
+              "committed": "0",
+              "balance": "1000",
+              "free": "1000",
+              "paused": false,
+              "revoked": true,
+              "expired": false,
+              "policy_epoch": "0"
+            },
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "recover_token",
+          "caller": "principal",
+          "args": { "token": "other_token", "amount": "100" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "token_recovered", "fields": { "token": "other_token", "amount": "100" } }],
+            "state": {
+              "balances": {
+                "other_token": { "mandate": "0", "principal": "100" },
+                "asset": { "mandate": "1000" }
+              }
+            }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "propose_principal",
+          "caller": "principal",
+          "args": { "proposed": "principal2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_proposed",
+                "fields": { "current": "principal", "proposed": "principal2" }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "cancel_principal_proposal",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_proposal_cancelled",
+                "fields": { "current": "principal", "proposed": "principal2" }
+              }
+            ],
+            "state": { "mandate": { "proposed_principal": null } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "propose_principal",
+          "caller": "principal",
+          "args": { "proposed": "principal2" },
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_proposed",
+                "fields": { "current": "principal", "proposed": "principal2" }
+              }
+            ]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "accept_principal",
+          "caller": "principal2",
+          "expect": {
+            "ok": true,
+            "events": [
+              {
+                "name": "principal_transferred",
+                "fields": { "previous": "principal", "current": "principal2" }
+              }
+            ],
+            "state": { "mandate": { "principal": "principal2", "proposed_principal": null } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal2",
+          "args": { "amount": "500" },
+          "expect": {
+            "ok": true,
+            "events": [{ "name": "withdrawn", "fields": { "to": "principal2", "amount": "500" } }],
+            "state": { "balances": { "asset": { "mandate": "500", "principal2": "500" } } }
+          }
+        },
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "stranger",
+          "expect": {
+            "ok": true,
+            "return": "500",
+            "events": [{ "name": "swept", "fields": { "by": "stranger", "amount": "500" } }],
+            "state": {
+              "balances": {
+                "asset": { "mandate": "0", "principal": "0", "principal2": "1000", "stranger": "0" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
