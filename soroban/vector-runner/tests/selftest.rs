@@ -169,6 +169,18 @@ fn invariant_violation_fails() {
     assert_eq!(m.step, Some(3));
     assert!(m.detail.starts_with("I9:"), "{m}");
 
+    // I13: a recovery threshold with no recovery set, and one that fits.
+    let mut tv = echo_trace(&v, "stellar");
+    tv["steps"][0]["state"]["mandate"]["recovery"] = json!([]);
+    tv["steps"][0]["state"]["mandate"]["recovery_threshold"] = json!(1);
+    let m = mismatch(&v, &tv);
+    assert_eq!(m.step, Some(1));
+    assert!(m.detail.starts_with("I13:"), "{m}");
+    let mut tv = echo_trace(&v, "stellar");
+    tv["steps"][0]["state"]["mandate"]["recovery"] = json!(["r1", "r2"]);
+    tv["steps"][0]["state"]["mandate"]["recovery_threshold"] = json!(2);
+    compare_vector(&v, &tv, "stellar").unwrap();
+
     // I10: committed does not match the open payouts.
     let mut tv = echo_trace(&v, "stellar");
     tv["steps"][5]["state"]["mandate"]["committed"] = json!("99");

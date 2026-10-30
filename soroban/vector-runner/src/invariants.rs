@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Qomira Labs
 
-//! The spec's invariants I1 to I10, checked after every step of a trace.
+//! The spec's invariants I1 to I10 and I13, checked after every step of a
+//! trace.
 //!
 //! Each check reads only the trace: the state before and after the step, the
 //! step's result and its events. A check whose inputs the trace does not
@@ -91,6 +92,7 @@ impl Checker {
         if !cur.is_null() {
             let m = &cur["mandate"];
             i1(m)?;
+            i13(m)?;
             i7(&prev["mandate"], m)?;
             if !self.asset_intervened {
                 i2(m)?;
@@ -345,6 +347,24 @@ impl Checker {
             }
         }
         Ok(())
+    }
+}
+
+/// I13: the recovery threshold is 0 exactly when the recovery set is empty,
+/// and otherwise between 1 and the size of the set.
+fn i13(m: &Value) -> Check {
+    let (Some(set), Some(t)) = (m["recovery"].as_array(), m["recovery_threshold"].as_u64()) else {
+        return Ok(());
+    };
+    let n = set.len() as u64;
+    let fits = if n == 0 { t == 0 } else { (1..=n).contains(&t) };
+    if fits {
+        Ok(())
+    } else {
+        fail(
+            "I13",
+            format!("the recovery threshold is {t} with {n} recovery approvers"),
+        )
     }
 }
 

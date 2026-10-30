@@ -84,7 +84,9 @@ A `result` is `{ ok, return }`, `{ error }` with an error name, `{ host_auth_fai
 
 ## The comparator
 
-For each call it checks the result against `expect` (a `per_chain` override for the chain replaces it), the events exhaustively and in order, `token_events: []` when given, and the named parts of `state` only. Labels, hex and attester keys are compared by the bytes they stand for. After every step it checks invariants I1 to I10 of `spec/MANDATE.md` on the recorded state, events and results; a failed call that emitted anything or changed the state fails I9. Comparing two traces checks the results, events, states and whether tokens moved, step by step.
+For each call it checks the result against `expect` (a `per_chain` override for the chain replaces it), the events exhaustively and in order, `token_events: []` when given, and the named parts of `state` only. Labels, hex and attester keys are compared by the bytes they stand for. After every step it checks invariants I1 to I10 and I13 of `spec/MANDATE.md` on the recorded state, events and results; a failed call that emitted anything or changed the state fails I9.
+
+Lists are compared in order, role sets included. The vectors write a role set in insertion order with removed members taken out and the rest keeping their order (`["agent2", "agent3"]` after `agent1` is rotated out and `agent3` added), so the mandate's `config()` and its events must report the set in the order it stores it, which must be that order: append on add, remove without reordering. Comparing two traces checks the results, events, states and whether tokens moved, step by step.
 
 ## Self tests
 
