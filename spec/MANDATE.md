@@ -246,14 +246,14 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 #### MANDATE-RECOVERYSET-002 Threshold bounds
 
-- Precondition: a configuration, `set_recovery_threshold(n)` or `remove_role(5, account)` that would leave `recovery_threshold` other than 0 while `recovery` is empty, or outside `[1, len(recovery)]` while it is not.
-- Effect: refused.
+- Precondition: a configuration or `set_recovery_threshold(n)` that would leave `recovery_threshold` other than 0 while `recovery` is empty, or outside `[1, len(recovery)]` while it is not; or `remove_role(5, account)` of one member among several that would leave `len(recovery) < recovery_threshold`.
+- Effect: refused; to remove that member the principal lowers the threshold first. The threshold also follows the set on its own when the first member is added (`MANDATE-RECOVERYSET-010`) and when the last is removed (`MANDATE-RECOVERYSET-011`), so after every call `recovery_threshold` is 0 exactly when `recovery` is empty and in `[1, len(recovery)]` otherwise (invariant I13). A recovery action can therefore never run on a threshold of 0 while the set has a member.
 - Error: `CONFIG_INVALID`
 
 #### MANDATE-RECOVERYSET-003 Recovery epoch
 
 - Precondition: an executed recovery action, a change to `recovery` or `recovery_threshold`, or any change to `agents`.
-- Effect: `recovery_epoch` increases by one. Votes are kept per epoch and action, so votes cast before the change can never complete later.
+- Effect: `recovery_epoch` increases by one per call, however many of these the call changes, so adding the first member, which also sets the threshold, or a rotation, which also changes `agents`, increases it once. Votes are kept per epoch and action, so votes cast before the change can never complete later.
 - Error: none
 
 #### MANDATE-RECOVERYSET-004 Recovery-only calls
@@ -283,13 +283,25 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-RECOVERYSET-008 Voting and execution
 
 - Precondition: all checks of the recovery call pass.
-- Effect: record the vote and emit `recovery_vote_added { kind, old, new, votes, required, recovery_epoch }`, where `kind` is `1 REVOKE` or `2 ROTATE_AGENT`. When the votes of distinct current members reach `recovery_threshold`, perform the action exactly as the principal's own path would (the revoke effects of `MANDATE-REVOKE-001`, or `role_removed` for `old` and, if `new` is given, `role_added` for `new`, where the new agent takes the next `agent_epoch` value: the counter increases first and the agent stores the new value, `MANDATE-PAYOUT-014`), increase `recovery_epoch`, and emit `recovery_executed { kind, old, new, by }` last. For a revoke, `old` and `new` are empty. Returns `1` when a vote was recorded and `2` when the action ran.
+- Effect: record the vote and emit `recovery_vote_added { kind, old, new, votes, required, recovery_epoch }`, where `kind` is `1 REVOKE` or `2 ROTATE_AGENT`. When the votes of distinct current members reach `recovery_threshold`, perform the action exactly as the principal's own path would (the revoke effects of `MANDATE-REVOKE-001`, or `role_removed` for `old` and, if `new` is given, `role_added` for `new`, where the new agent takes the next `agent_epoch` value: the counter increases first and the agent stores the new value, `MANDATE-PAYOUT-014`), increase `recovery_epoch`, and emit `recovery_executed { kind, old, new, by }` last. For a revoke, `old` and `new` are empty. The `by` of `recovery_executed`, and of `revoked` for a revoke, is the member whose vote completed the action. `recovery_vote_added` carries the vote count including this vote, `required` as `recovery_threshold`, and the epoch the vote was cast in, before any increase. Returns `1` when a vote was recorded and `2` when the action ran. While the set has a member, `recovery_threshold` is at least 1 (`MANDATE-RECOVERYSET-002`), so a single vote completes an action only when the threshold is 1, never because it is 0.
 - Error: none
 
 #### MANDATE-RECOVERYSET-009 Recovery powers are limited
 
 - Precondition: none.
 - Effect: a single member may pause. With the threshold the set may revoke (which freezes the balance for the principal and moves no funds) or rotate one agent. Recovery never withdraws, never changes a destination, the allowlist, the attestation policy, a limit, the principal, the approvers, the guardians, the executors or the recovery set itself. Payout approvals never count as recovery votes and recovery votes never approve a payout. Recovery calls are allowed while paused and after expiry, because recovery never widens where money can go or any limit: a revoke only freezes, and a rotation only exchanges one agent for another under the same bound destinations and limits (`MANDATE-ROLE-006` records what a rotation followed by approvals can do).
+- Error: none
+
+#### MANDATE-RECOVERYSET-010 Adding the first recovery approver
+
+- Precondition: `add_role(5, account)` passed every check while `recovery` was empty.
+- Effect: `recovery_threshold` becomes 1 in the same call. The call increases `recovery_epoch` once (`MANDATE-RECOVERYSET-003`) and emits `role_added { role, account }` then `recovery_threshold_set { required, recovery_epoch }` with `required` 1 and the increased epoch. Without this a lone new member would face a threshold of 0 and could revoke or rotate an agent alone. Adding a member to a set that is not empty leaves the threshold as it was and emits no `recovery_threshold_set`; the principal raises it with `set_recovery_threshold` if it wants more votes.
+- Error: none
+
+#### MANDATE-RECOVERYSET-011 Removing the last recovery approver
+
+- Precondition: `remove_role(5, account)` passed every check while `account` was the only member of `recovery`.
+- Effect: allowed; the threshold is 1 at that point (`MANDATE-RECOVERYSET-002`) and no other condition applies, because no payout ever waits on a recovery vote. `recovery_threshold` becomes 0 in the same call. The call increases `recovery_epoch` once (`MANDATE-RECOVERYSET-003`) and emits `role_removed { role, account }` then `recovery_threshold_set { required, recovery_epoch }` with `required` 0 and the increased epoch. With the set empty no recovery call passes its caller check (`MANDATE-RECOVERYSET-004`).
 - Error: none
 
 ## State
@@ -1420,7 +1432,7 @@ Effects: `MANDATE-RECOVER-003`, then the settlement balance check of `MANDATE-RE
 7. The set would not exceed its bound (MANDATE-ROLE-007).
 <!-- /check-order -->
 
-Effects: add the account, emit `role_added { role, account }`; for an agent, increase `agent_epoch` and store the new value with it (`MANDATE-PAYOUT-014`); apply `MANDATE-APPROVAL-007` when it is the first approver, and increase `recovery_epoch` when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
+Effects: add the account, emit `role_added { role, account }`; for an agent, increase `agent_epoch` and store the new value with it (`MANDATE-PAYOUT-014`); apply `MANDATE-APPROVAL-007` when it is the first approver and `MANDATE-RECOVERYSET-010` when it is the first recovery approver, and increase `recovery_epoch` once when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
 
 ### remove_role
 
@@ -1432,10 +1444,10 @@ Effects: add the account, emit `role_added { role, account }`; for an agent, inc
 3. The role code is known and the account is in the set (MANDATE-ROLE-016).
 4. Removing one approver among several keeps `approvals_required` reachable (MANDATE-APPROVAL-006).
 5. Removing the last approver needs the threshold above the per-payment cap (MANDATE-APPROVAL-008).
-6. Removing a recovery approver keeps the threshold within the set size (MANDATE-RECOVERYSET-002).
+6. Removing one recovery approver among several keeps the threshold within the set size (MANDATE-RECOVERYSET-002).
 <!-- /check-order -->
 
-Effects: remove the account, emit `role_removed { role, account }`, apply `MANDATE-APPROVAL-008` when it was the last approver, and increase `recovery_epoch` when the role is agent or recovery.
+Effects: remove the account, emit `role_removed { role, account }`, apply `MANDATE-APPROVAL-008` when it was the last approver and `MANDATE-RECOVERYSET-011` when it was the last recovery approver, and increase `recovery_epoch` once when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
 
 ### set_approvals_required
 
@@ -1586,6 +1598,7 @@ The vector runner checks these after every step, and each chain's invariant test
 - I10. `pending` equals the sum of the charges of PENDING payouts and `committed` the sum of the charges of APPROVED payouts, until revoke sets both to zero.
 - I11. Recovery actions never transfer funds, and never change a destination, the allowlist, the attestation policy, a limit, the principal, the approvers, the guardians, the executors or the recovery set. A recovery revoke freezes the balance for the principal like any revoke.
 - I12. For every payout, `fee <= fee_cap(total)` under the `max_fee_bps` in force at request and at execute; `max_fee_bps <= MAX_FEE_BPS` always and never increases; the fee is transferred only to `fee_address`, only by `execute`, and exactly once per executed payout; rejected, cancelled and lapsed payouts pay no fee.
+- I13. `recovery_threshold` is 0 exactly when `recovery` is empty, and in `[1, len(recovery)]` otherwise, so no recovery action ever runs on a threshold of 0.
 
 ## Off-chain obligations
 
@@ -1717,6 +1730,8 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-RECOVERYSET-007` | One vote per member per action and epoch |
 | `MANDATE-RECOVERYSET-008` | Voting and execution |
 | `MANDATE-RECOVERYSET-009` | Recovery powers are limited |
+| `MANDATE-RECOVERYSET-010` | Adding the first recovery approver |
+| `MANDATE-RECOVERYSET-011` | Removing the last recovery approver |
 | `MANDATE-CONFIG-001` | Immutable fields |
 | `MANDATE-CONFIG-002` | Field domains and cross-field rules |
 | `MANDATE-CONFIG-003` | Caller of create is the principal |
