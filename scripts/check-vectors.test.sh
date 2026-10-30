@@ -61,8 +61,9 @@ check() {
   pass "$name ($verdict)"
 }
 
-# The real tree, and the example the README shows.
-check "the real tree passes" 0 "1 vector(s) in 1 file(s)" "every check passed" --
+# The real tree, and the example the README shows. The vector and file counts
+# are left out because every vector set added under spec/vectors/ changes them.
+check "the real tree passes" 0 "file(s) pass the checks against the spec" "every check passed" --
 check "example vector validates" 0 "every check passed" -- "$root/spec/vectors/example.json"
 if python3 -I - "$root/spec/vectors/README.md" "$root/spec/vectors/example.json" <<'PY'; then
 import json
