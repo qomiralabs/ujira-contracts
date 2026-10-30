@@ -173,9 +173,11 @@ jobs:
       - name: Test the vector check
         run: scripts/check-vectors.test.sh
 
+      # Every case of the attestation parity fixture must also have its vector,
+      # so a case added to the reference signer cannot go untested.
       - name: Check the vectors
         if: ${{ !cancelled() }}
-        run: scripts/check-vectors.sh
+        run: scripts/check-vectors.sh --fixture spikes/attestation-parity/fixture.json
 
   # The Rust error enum in soroban/crates/mandate-errors must match
   # spec/errors.json entry for entry, so a contract can never return a code
