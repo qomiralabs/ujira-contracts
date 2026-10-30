@@ -109,12 +109,13 @@ Every pull request starts from `.github/pull_request_template.md`: the linked is
 | Job | What it checks |
 | --- | --- |
 | `headers` | actionlint on the workflows, the license header check, the invisible character check, the mandate spec rule ID check, the pull request template check and their self tests. |
+| `vectors` | `scripts/check-vectors.sh` on the shared test vectors in `spec/vectors/`, after its self test `scripts/check-vectors.test.sh`. See `spec/vectors/README.md`. |
 | `fixtures` | Rebuilds the attestation parity fixture from its generator under `spikes/attestation-parity/generator/` and fails unless it matches the committed file byte for byte. |
 | `soroban` | From `soroban/`, with only the `rust-toolchain.toml` toolchain: `cargo fmt`, `cargo deny`, `cargo clippy` with warnings denied, `cargo test`, unchanged test snapshots, the build script self test, `scripts/soroban-build.sh` (production contracts only), a clean tree afterwards, the wasm fixture check's self test, and the spike wasm fixtures rebuilt from source byte for byte. |
 | `secrets` | gitleaks over the full history with `.gitleaks.toml`, and the scan's self test. See Secret scanning below. |
 | `dashes` | The shared dash check and its self test. See Dashes above. |
 
-Every action is pinned to a full commit SHA. actionlint, stellar-cli, cargo-deny and gitleaks are release binaries checked against a SHA256 in the workflow; bump a version and its hash together.
+Every action is pinned to a full commit SHA. actionlint, stellar-cli, cargo-deny and gitleaks are release binaries checked against a SHA256 in the workflow; bump a version and its hash together. check-jsonschema, which the `vectors` job runs, is pinned with every dependency and their SHA256 hashes in `scripts/check-vectors.requirements.txt`, compiled from `scripts/check-vectors.requirements.in`.
 
 ## Secret scanning
 

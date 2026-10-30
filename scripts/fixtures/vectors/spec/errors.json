@@ -1,0 +1,17 @@
+[
+  {
+    "name": "MANDATE_PAUSED",
+    "code": 22,
+    "summary": "The mandate is paused"
+  },
+  {
+    "name": "ALREADY_PAUSED",
+    "code": 23,
+    "summary": "Pause while paused"
+  },
+  {
+    "name": "FEE_EXCEEDS_CAP",
+    "code": 46,
+    "summary": "The fee exceeds the fee cap for the total"
+  }
+]

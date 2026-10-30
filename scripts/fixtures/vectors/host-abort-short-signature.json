@@ -1,0 +1,100 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "vectors": [
+    {
+      "id": "fixture_host_abort_short_signature",
+      "rules": [
+        "MANDATE-RECIPIENT-008"
+      ],
+      "description": "A host abort expected from a signature that is not 64 bytes.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ATTESTED",
+          "tenant_ref": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": "#attester",
+          "country_policy_hash": "#countries",
+          "max_fee_bps": 0
+        },
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "1000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "attest",
+          "name": "att1",
+          "signer": "#attester",
+          "recipient_ref": "#bob",
+          "destination": {
+            "address": "bob",
+            "tag": null
+          },
+          "valid_until": "1767229200",
+          "tamper": "short_signature"
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": [
+                "att1"
+              ]
+            }
+          },
+          "expect": {
+            "error": "ATTESTATION_INVALID",
+            "events": [],
+            "per_chain": {
+              "stellar": {
+                "host_abort": "Crypto.InvalidInput"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

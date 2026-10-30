@@ -1,0 +1,67 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "vectors": [
+    {
+      "id": "fixture_auth_without_rule",
+      "rules": [
+        "MANDATE-SWEEP-002"
+      ],
+      "description": "A forged caller on sweep, in a vector about the sweep guards.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "1000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "sweep",
+          "caller": "principal",
+          "signed_by": "mallory",
+          "expect": {
+            "error": "MANDATE_ACTIVE",
+            "events": [],
+            "per_chain": {
+              "stellar": {
+                "host_auth_failure": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

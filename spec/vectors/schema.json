@@ -1,0 +1,1254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UJIRA mandate test vectors, format ujira-mandate-vectors/1",
+  "description": "A file of shared test vectors for the mandate. Every vector must run unchanged on every chain it applies to. scripts/check-vectors.sh validates files against this schema and then runs the checks a schema cannot express: rule IDs, error and event names against the spec, cross references inside a vector, chain restrictions and coverage. spec/vectors/README.md explains every field.",
+  "type": "object",
+  "properties": {
+    "format": { "const": "ujira-mandate-vectors/1" },
+    "description": { "$ref": "#/$defs/text" },
+    "vectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/vector" }
+    }
+  },
+  "required": ["format", "vectors"],
+  "additionalProperties": false,
+  "$defs": {
+    "text": {
+      "description": "One line of printable ASCII.",
+      "type": "string",
+      "pattern": "^[ -~]+$"
+    },
+    "name": {
+      "description": "A vector ID or an attestation name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "actor": {
+      "description": "An address, written as the name of an actor. The runner creates one address per name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "reserved_actor": {
+      "description": "Names with a fixed meaning: the mandate, the settlement asset, a second token, the zero address (Celo only) and the factory's fee address.",
+      "enum": ["mandate", "asset", "other_token", "zero", "fee_address"]
+    },
+    "actor_or_null": {
+      "type": ["string", "null"],
+      "if": { "type": "string" },
+      "then": { "$ref": "#/$defs/actor" }
+    },
+    "actors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/actor" }
+    },
+    "token": {
+      "description": "A token: the settlement asset or the second token.",
+      "enum": ["asset", "other_token"]
+    },
+    "label": {
+      "description": "A label for a fixed 32-byte value or test key that the runner derives from the name.",
+      "type": "string",
+      "pattern": "^#[a-z][a-z0-9_]*$"
+    },
+    "bytes32": {
+      "description": "Exactly 32 bytes: 0x and 64 lowercase hex characters, or a label.",
+      "type": "string",
+      "pattern": "^(0x[0-9a-f]{64}|#[a-z][a-z0-9_]*)$"
+    },
+    "u64": {
+      "description": "An unsigned 64-bit integer as a decimal string, 0 to 18446744073709551615, with no leading zero.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]|1844674407370955161[0-4]|18446744073709551615)$"
+    },
+    "u32": {
+      "description": "A small count, code or basis point value as a JSON integer.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "amount": {
+      "description": "Raw minor units of the mandate's asset as a decimal string of at most 39 digits, with no leading zero. A negative value only Stellar can express and a value above I128_MAX only Celo can; check-vectors.sh enforces both.",
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]{0,38})$"
+    },
+    "positive_amount": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,38}$"
+    },
+    "rule_id": {
+      "type": "string",
+      "pattern": "^(MANDATE|CHAINOPS)-[A-Z]+-[0-9]{3}$"
+    },
+    "error_name": {
+      "description": "A name from spec/errors.json.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "event_name": {
+      "description": "A name from spec/EVENTS.md.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "chain": { "enum": ["stellar", "celo"] },
+    "recipient_mode": { "enum": ["ALLOWLIST", "ATTESTED", "BOTH"] },
+    "status": { "enum": ["PENDING", "APPROVED", "EXECUTED", "REJECTED", "CANCELLED"] },
+    "tag": {
+      "description": "null for no tag, a u64 decimal string for a tag, or the non-canonical Celo form that marks the tag absent but carries a value.",
+      "type": ["null", "string", "object"],
+      "if": { "type": "string" },
+      "then": { "$ref": "#/$defs/u64" },
+      "else": {
+        "if": { "type": "object" },
+        "then": { "$ref": "#/$defs/noncanonical_tag" }
+      }
+    },
+    "noncanonical_tag": {
+      "type": "object",
+      "properties": {
+        "has_tag": { "const": false },
+        "tag": {
+          "allOf": [{ "$ref": "#/$defs/u64" }, { "not": { "const": "0" } }]
+        }
+      },
+      "required": ["has_tag", "tag"],
+      "additionalProperties": false
+    },
+    "destination": {
+      "type": "object",
+      "properties": {
+        "address": { "$ref": "#/$defs/actor" },
+        "tag": { "$ref": "#/$defs/tag" }
+      },
+      "required": ["address", "tag"],
+      "additionalProperties": false
+    },
+    "leg": {
+      "type": "object",
+      "properties": {
+        "destination": { "$ref": "#/$defs/destination" },
+        "amount": { "$ref": "#/$defs/amount" }
+      },
+      "required": ["destination", "amount"],
+      "additionalProperties": false
+    },
+    "legs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/leg" }
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "total_budget": { "$ref": "#/$defs/amount" },
+        "per_payment_cap": { "$ref": "#/$defs/amount" },
+        "per_recipient_daily_cap": { "$ref": "#/$defs/amount" },
+        "approval_threshold": { "$ref": "#/$defs/amount" },
+        "payout_ttl_seconds": { "$ref": "#/$defs/u64" },
+        "expires_at": { "$ref": "#/$defs/u64" }
+      },
+      "required": [
+        "total_budget",
+        "per_payment_cap",
+        "per_recipient_daily_cap",
+        "approval_threshold",
+        "payout_ttl_seconds",
+        "expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "attester_key": {
+      "description": "An attester key: a label for the public key of a test key, raw bytes of any length up to 64 (0x and lowercase hex), or the ed25519 key of an account actor.",
+      "type": ["string", "object"],
+      "if": { "type": "string" },
+      "then": { "pattern": "^(#[a-z][a-z0-9_]*|0x([0-9a-f]{2}){0,64})$" },
+      "else": {
+        "properties": { "account_key": { "$ref": "#/$defs/actor" } },
+        "required": ["account_key"],
+        "additionalProperties": false
+      }
+    },
+    "attester": {
+      "description": "null for no attester, or an attester key.",
+      "type": ["null", "string", "object"],
+      "if": { "not": { "type": "null" } },
+      "then": { "$ref": "#/$defs/attester_key" }
+    },
+    "config": {
+      "description": "The mandate configuration passed to create. The fee address comes from the factory and is never part of it.",
+      "type": "object",
+      "properties": {
+        "principal": { "$ref": "#/$defs/actor" },
+        "asset": { "$ref": "#/$defs/token" },
+        "recipient_mode": { "$ref": "#/$defs/recipient_mode" },
+        "tenant_ref": { "$ref": "#/$defs/bytes32" },
+        "agents": { "$ref": "#/$defs/actors" },
+        "approvers": { "$ref": "#/$defs/actors" },
+        "approvals_required": { "$ref": "#/$defs/u32" },
+        "guardians": { "$ref": "#/$defs/actors" },
+        "executors": { "$ref": "#/$defs/actors" },
+        "recovery": { "$ref": "#/$defs/actors" },
+        "recovery_threshold": { "$ref": "#/$defs/u32" },
+        "limits": { "$ref": "#/$defs/limits" },
+        "attester": { "$ref": "#/$defs/attester" },
+        "country_policy_hash": { "$ref": "#/$defs/bytes32" },
+        "max_fee_bps": { "$ref": "#/$defs/u32" }
+      },
+      "required": [
+        "principal",
+        "asset",
+        "recipient_mode",
+        "tenant_ref",
+        "agents",
+        "approvers",
+        "approvals_required",
+        "guardians",
+        "executors",
+        "recovery",
+        "recovery_threshold",
+        "limits",
+        "attester",
+        "country_policy_hash",
+        "max_fee_bps"
+      ],
+      "additionalProperties": false
+    },
+    "allow_entry": {
+      "type": "object",
+      "properties": {
+        "recipient_ref": { "$ref": "#/$defs/bytes32" },
+        "destination": { "$ref": "#/$defs/destination" }
+      },
+      "required": ["recipient_ref", "destination"],
+      "additionalProperties": false
+    },
+    "request": {
+      "description": "A payout request. attestations names attestations made by earlier attest steps, in leg order.",
+      "type": "object",
+      "properties": {
+        "payout_id": { "$ref": "#/$defs/bytes32" },
+        "recipient_ref": { "$ref": "#/$defs/bytes32" },
+        "total": { "$ref": "#/$defs/amount" },
+        "fee": { "$ref": "#/$defs/amount", "default": "0" },
+        "legs": { "$ref": "#/$defs/legs" },
+        "deadline": { "$ref": "#/$defs/u64" },
+        "task_ref": { "$ref": "#/$defs/bytes32" },
+        "attestations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/name" }
+        }
+      },
+      "required": ["payout_id", "recipient_ref", "total", "legs", "deadline", "task_ref", "attestations"],
+      "additionalProperties": false
+    },
+    "item_result": {
+      "description": "One batch item: code is 0 for success or the item's error name; status is null when the item has none.",
+      "type": "object",
+      "properties": {
+        "payout_id": { "$ref": "#/$defs/bytes32" },
+        "code": {
+          "type": ["integer", "string"],
+          "if": { "type": "integer" },
+          "then": { "const": 0 },
+          "else": { "$ref": "#/$defs/error_name" }
+        },
+        "status": {
+          "type": ["string", "null"],
+          "if": { "type": "string" },
+          "then": { "$ref": "#/$defs/status" }
+        }
+      },
+      "required": ["payout_id", "code", "status"],
+      "additionalProperties": false
+    },
+    "tamper": {
+      "description": "How an attest step damages its attestation. Ten kinds give a 64-byte signature that fails ed25519 verification; five give a signature that is not 64 bytes. The secp256k1 kinds are retired.",
+      "enum": [
+        "wrong_signer",
+        "wrong_chain",
+        "wrong_mandate",
+        "wrong_destination",
+        "wrong_tag",
+        "wrong_policy",
+        "wrong_ref",
+        "wrong_valid_until",
+        "extended",
+        "empty",
+        "truncated",
+        "short_signature",
+        "long_signature",
+        "flipped_bit",
+        "non_canonical_s"
+      ]
+    },
+    "token_spec": {
+      "description": "A test token. reentrant calls back into the mandate from its transfer and is Celo only; moves_settlement tries to move the mandate's settlement balance when it is transferred.",
+      "type": "object",
+      "properties": {
+        "kind": { "enum": ["standard", "reentrant", "moves_settlement"] },
+        "reenters": { "enum": ["sweep", "cancel", "execute"] },
+        "variant": { "enum": ["propagate", "catch"] },
+        "payout_id": { "$ref": "#/$defs/bytes32" }
+      },
+      "required": ["kind"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "reentrant" } } },
+          "then": { "required": ["reenters", "variant"] },
+          "else": { "properties": { "reenters": false, "variant": false } }
+        },
+        {
+          "if": { "required": ["reenters"], "properties": { "reenters": { "enum": ["cancel", "execute"] } } },
+          "then": { "required": ["payout_id"] },
+          "else": { "properties": { "payout_id": false } }
+        }
+      ]
+    },
+    "setup": {
+      "type": "object",
+      "properties": {
+        "now": { "$ref": "#/$defs/u64" },
+        "actors": {
+          "description": "Actors that are contracts. An actor not listed here is an account.",
+          "type": "object",
+          "propertyNames": {
+            "allOf": [{ "$ref": "#/$defs/actor" }, { "not": { "$ref": "#/$defs/reserved_actor" } }]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": { "kind": { "enum": ["account", "contract"] } },
+            "required": ["kind"],
+            "additionalProperties": false
+          }
+        },
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "asset": {
+              "allOf": [
+                { "$ref": "#/$defs/token_spec" },
+                { "properties": { "kind": { "not": { "const": "moves_settlement" } } } }
+              ]
+            },
+            "other_token": { "$ref": "#/$defs/token_spec" }
+          },
+          "additionalProperties": false
+        },
+        "mandate": { "$ref": "#/$defs/config" },
+        "salt": { "$ref": "#/$defs/bytes32", "default": "#salt" },
+        "allowlist": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/allow_entry" }
+        },
+        "mints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "token": { "$ref": "#/$defs/token" },
+              "to": { "$ref": "#/$defs/actor" },
+              "amount": { "$ref": "#/$defs/positive_amount" }
+            },
+            "required": ["token", "to", "amount"],
+            "additionalProperties": false
+          }
+        },
+        "transfers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "token": { "$ref": "#/$defs/token" },
+              "from": { "$ref": "#/$defs/actor" },
+              "to": { "$ref": "#/$defs/actor" },
+              "amount": { "$ref": "#/$defs/positive_amount" }
+            },
+            "required": ["token", "from", "to", "amount"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["now"],
+      "additionalProperties": false,
+      "dependentRequired": {
+        "salt": ["mandate"],
+        "allowlist": ["mandate"]
+      }
+    },
+    "event_fields": {
+      "description": "The canonical fields of one event. check-vectors.sh checks that the names are exactly the event's fields in spec/EVENTS.md.",
+      "type": "object",
+      "properties": {
+        "mandate": { "$ref": "#/$defs/actor" },
+        "principal": { "$ref": "#/$defs/actor" },
+        "fee_address": { "$ref": "#/$defs/actor" },
+        "agent": { "$ref": "#/$defs/actor" },
+        "approver": { "$ref": "#/$defs/actor" },
+        "by": { "$ref": "#/$defs/actor" },
+        "to": { "$ref": "#/$defs/actor" },
+        "account": { "$ref": "#/$defs/actor" },
+        "current": { "$ref": "#/$defs/actor" },
+        "proposed": { "$ref": "#/$defs/actor" },
+        "previous": { "$ref": "#/$defs/actor" },
+        "asset": { "$ref": "#/$defs/token" },
+        "token": { "$ref": "#/$defs/token" },
+        "old": { "$ref": "#/$defs/actor_or_null" },
+        "new": { "$ref": "#/$defs/actor_or_null" },
+        "tenant_ref": { "$ref": "#/$defs/bytes32" },
+        "payout_id": { "$ref": "#/$defs/bytes32" },
+        "recipient_ref": { "$ref": "#/$defs/bytes32" },
+        "task_ref": { "$ref": "#/$defs/bytes32" },
+        "country_policy_hash": { "$ref": "#/$defs/bytes32" },
+        "total": { "$ref": "#/$defs/amount" },
+        "fee": { "$ref": "#/$defs/amount" },
+        "spent": { "$ref": "#/$defs/amount" },
+        "frozen": { "$ref": "#/$defs/amount" },
+        "amount": { "$ref": "#/$defs/amount" },
+        "total_budget": { "$ref": "#/$defs/amount" },
+        "per_payment_cap": { "$ref": "#/$defs/amount" },
+        "per_recipient_daily_cap": { "$ref": "#/$defs/amount" },
+        "approval_threshold": { "$ref": "#/$defs/amount" },
+        "expires_at": { "$ref": "#/$defs/u64" },
+        "day": { "$ref": "#/$defs/u64" },
+        "payout_ttl_seconds": { "$ref": "#/$defs/u64" },
+        "policy_epoch": { "$ref": "#/$defs/u64" },
+        "spec_version": { "$ref": "#/$defs/u32" },
+        "approvals_required": { "$ref": "#/$defs/u32" },
+        "recovery_threshold": { "$ref": "#/$defs/u32" },
+        "max_fee_bps": { "$ref": "#/$defs/u32" },
+        "approvals": { "$ref": "#/$defs/u32" },
+        "required": { "$ref": "#/$defs/u32" },
+        "reason": { "$ref": "#/$defs/u32" },
+        "role": { "$ref": "#/$defs/u32" },
+        "recovery_epoch": { "$ref": "#/$defs/u32" },
+        "kind": { "$ref": "#/$defs/u32" },
+        "votes": { "$ref": "#/$defs/u32" },
+        "status": { "$ref": "#/$defs/status" },
+        "code": { "$ref": "#/$defs/error_name" },
+        "legs": { "$ref": "#/$defs/legs" },
+        "destination": { "$ref": "#/$defs/destination" },
+        "limits": { "$ref": "#/$defs/limits" },
+        "attester": { "$ref": "#/$defs/attester" },
+        "recipient_mode": { "$ref": "#/$defs/recipient_mode" },
+        "agents": { "$ref": "#/$defs/actors" },
+        "approvers": { "$ref": "#/$defs/actors" },
+        "guardians": { "$ref": "#/$defs/actors" },
+        "executors": { "$ref": "#/$defs/actors" },
+        "recovery": { "$ref": "#/$defs/actors" }
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/event_name" },
+        "fields": { "$ref": "#/$defs/event_fields" }
+      },
+      "required": ["name", "fields"],
+      "additionalProperties": false
+    },
+    "mandate_state": {
+      "description": "Any subset of the mandate's state; only the fields given are compared.",
+      "type": "object",
+      "properties": {
+        "spent": { "$ref": "#/$defs/amount" },
+        "pending": { "$ref": "#/$defs/amount" },
+        "committed": { "$ref": "#/$defs/amount" },
+        "balance": { "$ref": "#/$defs/amount" },
+        "free": { "$ref": "#/$defs/amount" },
+        "paused": { "type": "boolean" },
+        "revoked": { "type": "boolean" },
+        "expired": { "type": "boolean" },
+        "policy_epoch": { "$ref": "#/$defs/u64" },
+        "recovery_epoch": { "$ref": "#/$defs/u32" },
+        "agent_epoch": { "$ref": "#/$defs/u32" },
+        "approvals_required": { "$ref": "#/$defs/u32" },
+        "recovery_threshold": { "$ref": "#/$defs/u32" },
+        "max_fee_bps": { "$ref": "#/$defs/u32" },
+        "principal": { "$ref": "#/$defs/actor" },
+        "proposed_principal": { "$ref": "#/$defs/actor_or_null" },
+        "agents": { "$ref": "#/$defs/actors" },
+        "approvers": { "$ref": "#/$defs/actors" },
+        "guardians": { "$ref": "#/$defs/actors" },
+        "executors": { "$ref": "#/$defs/actors" },
+        "recovery": { "$ref": "#/$defs/actors" },
+        "limits": { "$ref": "#/$defs/limits" },
+        "attester": { "$ref": "#/$defs/attester" },
+        "country_policy_hash": { "$ref": "#/$defs/bytes32" }
+      },
+      "additionalProperties": false
+    },
+    "payout_state": {
+      "description": "Any subset of a payout record. A tombstone has only its status.",
+      "type": "object",
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "agent": { "$ref": "#/$defs/actor" },
+        "agent_epoch": { "$ref": "#/$defs/u32" },
+        "recipient_ref": { "$ref": "#/$defs/bytes32" },
+        "total": { "$ref": "#/$defs/amount" },
+        "fee": { "$ref": "#/$defs/amount" },
+        "legs": { "$ref": "#/$defs/legs" },
+        "created_at": { "$ref": "#/$defs/u64" },
+        "expires_at": { "$ref": "#/$defs/u64" },
+        "policy_epoch": { "$ref": "#/$defs/u64" },
+        "approvals": { "$ref": "#/$defs/actors" }
+      },
+      "additionalProperties": false
+    },
+    "daily_entry": {
+      "type": "object",
+      "properties": {
+        "day": { "$ref": "#/$defs/u64" },
+        "used": { "$ref": "#/$defs/amount" }
+      },
+      "required": ["day", "used"],
+      "additionalProperties": false
+    },
+    "state": {
+      "description": "A partial match: only the keys given are compared. A payout given as null has no record and no tombstone.",
+      "type": "object",
+      "properties": {
+        "mandate": { "$ref": "#/$defs/mandate_state" },
+        "payouts": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/bytes32" },
+          "additionalProperties": {
+            "type": ["null", "object"],
+            "if": { "type": "object" },
+            "then": { "$ref": "#/$defs/payout_state" }
+          }
+        },
+        "balances": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/token" },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": { "$ref": "#/$defs/actor" },
+            "additionalProperties": { "$ref": "#/$defs/amount" }
+          }
+        },
+        "daily": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/bytes32" },
+          "additionalProperties": { "$ref": "#/$defs/daily_entry" }
+        }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    },
+    "state_view": {
+      "type": "object",
+      "properties": {
+        "spent": { "$ref": "#/$defs/amount" },
+        "pending": { "$ref": "#/$defs/amount" },
+        "committed": { "$ref": "#/$defs/amount" },
+        "balance": { "$ref": "#/$defs/amount" },
+        "free": { "$ref": "#/$defs/amount" },
+        "paused": { "type": "boolean" },
+        "revoked": { "type": "boolean" },
+        "expired": { "type": "boolean" },
+        "policy_epoch": { "$ref": "#/$defs/u64" }
+      },
+      "required": ["spent", "pending", "committed", "balance", "free", "paused", "revoked", "expired", "policy_epoch"],
+      "additionalProperties": false
+    },
+    "payout_view": {
+      "type": ["null", "object"],
+      "if": { "type": "object" },
+      "then": {
+        "properties": {
+          "payout_id": { "$ref": "#/$defs/bytes32" },
+          "status": { "$ref": "#/$defs/status" },
+          "agent": { "$ref": "#/$defs/actor" },
+          "agent_epoch": { "$ref": "#/$defs/u32" },
+          "recipient_ref": { "$ref": "#/$defs/bytes32" },
+          "total": { "$ref": "#/$defs/amount" },
+          "fee": { "$ref": "#/$defs/amount" },
+          "legs": { "$ref": "#/$defs/legs" },
+          "created_at": { "$ref": "#/$defs/u64" },
+          "expires_at": { "$ref": "#/$defs/u64" },
+          "policy_epoch": { "$ref": "#/$defs/u64" },
+          "approvals": { "$ref": "#/$defs/actors" }
+        },
+        "required": ["payout_id", "status"],
+        "additionalProperties": false
+      }
+    },
+    "stellar_override": {
+      "description": "host_abort: the call traps in the host with no state change, allowed only for a request carrying an attestation tampered so its signature fails verification. host_auth_failure: the call fails host authorization with no state change, allowed only where check-vectors.sh says.",
+      "type": "object",
+      "properties": {
+        "host_abort": { "const": "Crypto.InvalidInput" },
+        "host_auth_failure": { "const": true }
+      },
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false
+    },
+    "per_chain": {
+      "description": "What happens instead on one chain; every other chain keeps the expectation around it.",
+      "type": "object",
+      "properties": {
+        "stellar": { "$ref": "#/$defs/stellar_override" }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    },
+    "expect_ok": {
+      "type": "object",
+      "properties": {
+        "ok": { "const": true },
+        "return": true,
+        "events": {
+          "description": "Every event the mandate and the factory emit, in order. Token events are not listed.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/event" }
+        },
+        "state": { "$ref": "#/$defs/state" },
+        "per_chain": { "$ref": "#/$defs/per_chain" }
+      },
+      "required": ["ok", "events"],
+      "additionalProperties": false
+    },
+    "expect_error": {
+      "type": "object",
+      "properties": {
+        "error": { "$ref": "#/$defs/error_name" },
+        "events": { "type": "array", "maxItems": 0 },
+        "per_chain": { "$ref": "#/$defs/per_chain" }
+      },
+      "required": ["error", "events"],
+      "additionalProperties": false
+    },
+    "expect": {
+      "type": "object",
+      "if": { "required": ["error"] },
+      "then": { "$ref": "#/$defs/expect_error" },
+      "else": { "$ref": "#/$defs/expect_ok" }
+    },
+    "no_args": {
+      "type": "object",
+      "maxProperties": 0
+    },
+    "payout_id_args": {
+      "type": "object",
+      "properties": { "payout_id": { "$ref": "#/$defs/bytes32" } },
+      "required": ["payout_id"],
+      "additionalProperties": false
+    },
+    "ids_args": {
+      "type": "object",
+      "properties": {
+        "ids": { "type": "array", "items": { "$ref": "#/$defs/bytes32" } }
+      },
+      "required": ["ids"],
+      "additionalProperties": false
+    },
+    "returns_nothing": {
+      "properties": { "expect": { "properties": { "return": false } } }
+    },
+    "returns_status": {
+      "properties": { "expect": { "properties": { "return": { "$ref": "#/$defs/status" } } } }
+    },
+    "returns_items": {
+      "properties": {
+        "expect": {
+          "properties": { "return": { "type": "array", "items": { "$ref": "#/$defs/item_result" } } }
+        }
+      }
+    },
+    "returns_amount": {
+      "properties": { "expect": { "properties": { "return": { "$ref": "#/$defs/amount" } } } }
+    },
+    "returns_recovery": {
+      "properties": { "expect": { "properties": { "return": { "enum": [1, 2] } } } }
+    },
+    "call_step": {
+      "description": "A call to the factory (create) or to the mandate, at the current time. caller is the address that makes the call, and the caller argument for functions that take one. signed_by is the address whose authorization the call carries, and defaults to caller.",
+      "type": "object",
+      "properties": {
+        "step": { "const": "call" },
+        "fn": {
+          "enum": [
+            "create",
+            "request_payout",
+            "request_payouts",
+            "approve",
+            "reject",
+            "cancel",
+            "cancel_batch",
+            "execute",
+            "execute_batch",
+            "pause",
+            "resume",
+            "revoke",
+            "withdraw",
+            "sweep",
+            "recover_token",
+            "update_limits",
+            "add_role",
+            "remove_role",
+            "set_approvals_required",
+            "set_recovery_threshold",
+            "allow_recipients",
+            "disallow_recipients",
+            "set_attestation_policy",
+            "propose_principal",
+            "accept_principal",
+            "cancel_principal_proposal",
+            "lower_fee_cap",
+            "recovery_revoke",
+            "recovery_rotate_agent",
+            "version",
+            "config",
+            "state",
+            "payout",
+            "daily_used",
+            "is_allowed"
+          ]
+        },
+        "caller": { "$ref": "#/$defs/actor" },
+        "signed_by": { "$ref": "#/$defs/actor" },
+        "args": { "type": "object" },
+        "expect": { "$ref": "#/$defs/expect" }
+      },
+      "required": ["step", "fn", "caller", "expect"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "create" } } },
+          "then": {
+            "required": ["args"],
+            "properties": {
+              "args": {
+                "type": "object",
+                "properties": {
+                  "config": { "$ref": "#/$defs/config" },
+                  "salt": { "$ref": "#/$defs/bytes32" }
+                },
+                "required": ["config", "salt"],
+                "additionalProperties": false
+              },
+              "expect": { "properties": { "return": { "const": "mandate" } } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "request_payout" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": { "req": { "$ref": "#/$defs/request" } },
+                    "required": ["req"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_status" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "request_payouts" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "reqs": { "type": "array", "items": { "$ref": "#/$defs/request" } }
+                    },
+                    "required": ["reqs"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_items" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "approve" } } },
+          "then": {
+            "allOf": [
+              { "required": ["args"], "properties": { "args": { "$ref": "#/$defs/payout_id_args" } } },
+              { "$ref": "#/$defs/returns_status" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "enum": ["reject", "cancel", "execute"] } } },
+          "then": {
+            "allOf": [
+              { "required": ["args"], "properties": { "args": { "$ref": "#/$defs/payout_id_args" } } },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "cancel_batch" } } },
+          "then": {
+            "allOf": [
+              { "required": ["args"], "properties": { "args": { "$ref": "#/$defs/ids_args" } } },
+              { "$ref": "#/$defs/returns_items" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "execute_batch" } } },
+          "then": {
+            "allOf": [
+              { "required": ["args"], "properties": { "args": { "$ref": "#/$defs/ids_args" } } },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": ["fn"],
+            "properties": { "fn": { "enum": ["pause", "resume", "accept_principal", "cancel_principal_proposal"] } }
+          },
+          "then": {
+            "allOf": [
+              { "properties": { "args": { "$ref": "#/$defs/no_args" } } },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "enum": ["revoke", "sweep"] } } },
+          "then": {
+            "allOf": [
+              { "properties": { "args": { "$ref": "#/$defs/no_args" } } },
+              { "$ref": "#/$defs/returns_amount" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "recovery_revoke" } } },
+          "then": {
+            "allOf": [
+              { "properties": { "args": { "$ref": "#/$defs/no_args" } } },
+              { "$ref": "#/$defs/returns_recovery" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "recovery_rotate_agent" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "old": { "$ref": "#/$defs/actor" },
+                      "new": { "$ref": "#/$defs/actor_or_null" }
+                    },
+                    "required": ["old", "new"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_recovery" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "withdraw" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": { "amount": { "$ref": "#/$defs/amount" } },
+                    "required": ["amount"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "recover_token" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "token": { "$ref": "#/$defs/token" },
+                      "amount": { "$ref": "#/$defs/amount" }
+                    },
+                    "required": ["token", "amount"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "update_limits" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": { "limits": { "$ref": "#/$defs/limits" } },
+                    "required": ["limits"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "enum": ["add_role", "remove_role"] } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "role": { "$ref": "#/$defs/u32" },
+                      "account": { "$ref": "#/$defs/actor" }
+                    },
+                    "required": ["role", "account"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": ["fn"],
+            "properties": { "fn": { "enum": ["set_approvals_required", "set_recovery_threshold"] } }
+          },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": { "n": { "$ref": "#/$defs/u32" } },
+                    "required": ["n"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "enum": ["allow_recipients", "disallow_recipients"] } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "entries": { "type": "array", "items": { "$ref": "#/$defs/allow_entry" } }
+                    },
+                    "required": ["entries"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "set_attestation_policy" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "attester": { "$ref": "#/$defs/attester_key" },
+                      "country_policy_hash": { "$ref": "#/$defs/bytes32" }
+                    },
+                    "required": ["attester", "country_policy_hash"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "propose_principal" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": { "proposed": { "$ref": "#/$defs/actor" } },
+                    "required": ["proposed"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "lower_fee_cap" } } },
+          "then": {
+            "allOf": [
+              {
+                "required": ["args"],
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": { "new_bps": { "$ref": "#/$defs/u32" } },
+                    "required": ["new_bps"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              { "$ref": "#/$defs/returns_nothing" }
+            ]
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "version" } } },
+          "then": {
+            "properties": {
+              "args": { "$ref": "#/$defs/no_args" },
+              "expect": { "properties": { "return": { "$ref": "#/$defs/u32" } } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "config" } } },
+          "then": {
+            "properties": {
+              "args": { "$ref": "#/$defs/no_args" },
+              "expect": { "properties": { "return": { "type": "object" } } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "state" } } },
+          "then": {
+            "properties": {
+              "args": { "$ref": "#/$defs/no_args" },
+              "expect": { "properties": { "return": { "$ref": "#/$defs/state_view" } } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "payout" } } },
+          "then": {
+            "required": ["args"],
+            "properties": {
+              "args": { "$ref": "#/$defs/payout_id_args" },
+              "expect": { "properties": { "return": { "$ref": "#/$defs/payout_view" } } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "daily_used" } } },
+          "then": {
+            "required": ["args"],
+            "properties": {
+              "args": {
+                "type": "object",
+                "properties": { "recipient_ref": { "$ref": "#/$defs/bytes32" } },
+                "required": ["recipient_ref"],
+                "additionalProperties": false
+              },
+              "expect": { "properties": { "return": { "$ref": "#/$defs/daily_entry" } } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["fn"], "properties": { "fn": { "const": "is_allowed" } } },
+          "then": {
+            "required": ["args"],
+            "properties": {
+              "args": {
+                "type": "object",
+                "properties": {
+                  "recipient_ref": { "$ref": "#/$defs/bytes32" },
+                  "destination": { "$ref": "#/$defs/destination" }
+                },
+                "required": ["recipient_ref", "destination"],
+                "additionalProperties": false
+              },
+              "expect": { "properties": { "return": { "type": "boolean" } } }
+            }
+          }
+        }
+      ]
+    },
+    "advance_time_step": {
+      "type": "object",
+      "properties": {
+        "step": { "const": "advance_time" },
+        "seconds": { "$ref": "#/$defs/u64" }
+      },
+      "required": ["step", "seconds"],
+      "additionalProperties": false
+    },
+    "set_time_step": {
+      "type": "object",
+      "properties": {
+        "step": { "const": "set_time" },
+        "now": { "$ref": "#/$defs/u64" }
+      },
+      "required": ["step", "now"],
+      "additionalProperties": false
+    },
+    "transfer_step": {
+      "description": "A plain token transfer that does not call the mandate, such as funding it.",
+      "type": "object",
+      "properties": {
+        "step": { "const": "transfer" },
+        "token": { "$ref": "#/$defs/token" },
+        "from": { "$ref": "#/$defs/actor" },
+        "to": { "$ref": "#/$defs/actor" },
+        "amount": { "$ref": "#/$defs/positive_amount" }
+      },
+      "required": ["step", "token", "from", "to", "amount"],
+      "additionalProperties": false
+    },
+    "mint_step": {
+      "type": "object",
+      "properties": {
+        "step": { "const": "mint" },
+        "token": { "$ref": "#/$defs/token" },
+        "to": { "$ref": "#/$defs/actor" },
+        "amount": { "$ref": "#/$defs/positive_amount" }
+      },
+      "required": ["step", "token", "to", "amount"],
+      "additionalProperties": false
+    },
+    "attest_step": {
+      "description": "The attester signs an attestation for one leg of the mandate, under the mandate's current chain, address and country policy. policy_epoch defaults to the mandate's current epoch.",
+      "type": "object",
+      "properties": {
+        "step": { "const": "attest" },
+        "name": { "$ref": "#/$defs/name" },
+        "signer": { "$ref": "#/$defs/label" },
+        "recipient_ref": { "$ref": "#/$defs/bytes32" },
+        "destination": { "$ref": "#/$defs/destination" },
+        "valid_until": { "$ref": "#/$defs/u64" },
+        "policy_epoch": { "$ref": "#/$defs/u64" },
+        "tamper": { "$ref": "#/$defs/tamper" }
+      },
+      "required": ["step", "name", "signer", "recipient_ref", "destination", "valid_until"],
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "step": { "enum": ["call", "advance_time", "set_time", "transfer", "mint", "attest"] }
+      },
+      "required": ["step"],
+      "allOf": [
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "call" } } },
+          "then": { "$ref": "#/$defs/call_step" }
+        },
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "advance_time" } } },
+          "then": { "$ref": "#/$defs/advance_time_step" }
+        },
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "set_time" } } },
+          "then": { "$ref": "#/$defs/set_time_step" }
+        },
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "transfer" } } },
+          "then": { "$ref": "#/$defs/transfer_step" }
+        },
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "mint" } } },
+          "then": { "$ref": "#/$defs/mint_step" }
+        },
+        {
+          "if": { "required": ["step"], "properties": { "step": { "const": "attest" } } },
+          "then": { "$ref": "#/$defs/attest_step" }
+        }
+      ]
+    },
+    "vector": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/rule_id" }
+        },
+        "description": { "$ref": "#/$defs/text" },
+        "applies_to": {
+          "description": "The chains the vector runs on, when not every chain. Restricting a vector needs skip_reason.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/chain" },
+          "not": {
+            "allOf": [{ "contains": { "const": "stellar" } }, { "contains": { "const": "celo" } }]
+          }
+        },
+        "skip_reason": {
+          "description": "Why the chains left out cannot run the vector: their types cannot express its input.",
+          "const": "unrepresentable_input"
+        },
+        "setup": { "$ref": "#/$defs/setup" },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/step" }
+        }
+      },
+      "required": ["id", "rules", "description", "setup", "steps"],
+      "additionalProperties": false,
+      "dependentRequired": {
+        "applies_to": ["skip_reason"],
+        "skip_reason": ["applies_to"]
+      }
+    }
+  }
+}

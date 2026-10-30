@@ -1,0 +1,74 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "vectors": [
+    {
+      "id": "fixture_mover_stellar",
+      "rules": [
+        "MANDATE-RECOVER-004"
+      ],
+      "description": "On Stellar the token cannot move the mandate's balance, so its transfer fails.",
+      "applies_to": [
+        "stellar"
+      ],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "1000"
+          }
+        ],
+        "tokens": {
+          "other_token": {
+            "kind": "moves_settlement"
+          }
+        }
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "recover_token",
+          "caller": "principal",
+          "args": {
+            "token": "other_token",
+            "amount": "10"
+          },
+          "expect": {
+            "error": "TRANSFER_FAILED",
+            "events": []
+          }
+        }
+      ]
+    }
+  ]
+}
