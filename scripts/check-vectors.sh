@@ -23,6 +23,10 @@
 # for the rules of the given areas only, so a vector set can prove its own
 # coverage. CHAINOPS rules never count as uncovered.
 #
+# Parity: --fixture FILE needs a vector named parity_<case> for every case of
+# the attestation parity fixture FILE (spikes/attestation-parity/fixture.json),
+# apart from the few cases check-vectors.py lists as beyond the attest step.
+#
 # check-jsonschema is pinned, with the hash of every dependency, in
 # scripts/check-vectors.requirements.txt, and the check refuses any other
 # version so a local run and CI validate the same way. Install it once into a
@@ -34,7 +38,7 @@
 #     --only-binary :all: -r scripts/check-vectors.requirements.txt
 #   CHECK_JSONSCHEMA=~/.venvs/check-jsonschema/bin/check-jsonschema scripts/check-vectors.sh
 #
-# Usage: scripts/check-vectors.sh [--require-all | --areas A,B,...] [--spec DIR] [vector file...]
+# Usage: scripts/check-vectors.sh [--require-all | --areas A,B,...] [--fixture FILE] [--spec DIR] [vector file...]
 # Exit codes: 0 every check passes, 1 problems named on stderr, 2 bad usage,
 # a missing or wrong check-jsonschema, or a spec that cannot be read.
 set -euo pipefail
@@ -66,6 +70,14 @@ while [ $# -gt 0 ]; do
         exit 2
       fi
       spec_dir=$2
+      shift
+      ;;
+    --fixture)
+      if [ $# -lt 2 ] || [ ! -f "$2" ] || [ ! -r "$2" ]; then
+        echo "check-vectors: --fixture needs a readable attestation parity fixture file" >&2
+        exit 2
+      fi
+      mode+=(--fixture "$2")
       shift
       ;;
     --)

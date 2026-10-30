@@ -111,6 +111,8 @@ check "skip reason without applies_to" 1 "'applies_to' is a dependency of 'skip_
 check "applies_to listing every chain" 1 "applies_to: ['stellar', 'celo'] should not be valid under" -- "$fx/applies-to-every-chain.json"
 check "zero address on both chains" 1 "is the zero address, which only Celo can express" -- "$fx/zero-address-both-chains.json"
 check "zero address on celo only" 0 "every check passed" -- "$fx/zero-address-celo-only.json"
+check "attester as an account key on both chains" 1 "is the ed25519 key of an account, which only Stellar can express" -- "$fx/account-key-both-chains.json"
+check "attester as an account key on stellar only" 0 "every check passed" -- "$fx/account-key-stellar-only.json"
 
 # Names come from the spec.
 check "unknown rule" 1 "cites MANDATE-PAUSE-099, which is not a rule in MANDATE.md" -- "$fx/unknown-rule.json"
@@ -144,6 +146,14 @@ for kind in empty truncated long_signature extended; do
   check "host_abort on $kind" 1 "no attestation it carries has an invalid-signature tamper ($kind)" -- "$work/abort-$kind.json"
 done
 check "host_abort on an untampered attestation" 1 "no attestation it carries has an invalid-signature tamper (none is tampered)" -- "$fx/host-abort-untampered.json"
+
+# An untampered attestation also fails verification when it was made for
+# another destination than its leg, or by a key that is no longer the
+# attester, and the check follows the attester through policy changes.
+check "host_abort on an attestation made for another destination validates" 0 "every check passed" -- "$fx/host-abort-other-destination.json"
+check "host_abort on an attestation by a replaced attester validates" 0 "every check passed" -- "$fx/host-abort-replaced-attester.json"
+sed 's/"signer": "#attester"/"signer": "#attester2"/' "$fx/host-abort-replaced-attester.json" >"$work/abort-new-attester.json"
+check "host_abort on an attestation by the new attester" 1 "no attestation it carries has an invalid-signature tamper (none is tampered)" -- "$work/abort-new-attester.json"
 check "host_abort on a call that verifies nothing" 1 "expects a Stellar host_abort from pause" -- "$fx/host-abort-on-pause.json"
 check "request_payouts host_abort with payout_request_rejected events" 1 "so it cannot also expect payout_request_rejected events" -- "$fx/request-payouts-host-abort-rejected-events.json"
 check "request_payouts host_abort failing as a whole validates" 0 "every check passed" -- "$fx/request-payouts-host-abort.json"
@@ -215,6 +225,18 @@ check "CHAINOPS rules never count as uncovered" 0 "each of 1 MANDATE rule(s) in 
 check "areas naming an area with no MANDATE rule" 2 "--areas names SWEEP, which has no MANDATE rule" -- --areas SWEEP "${cov[@]}" "$fx/coverage/complete.json"
 check "require-all and areas together" 2 "cannot be combined" -- --require-all --areas PAUSE "${cov[@]}" "$fx/coverage/complete.json"
 check "require-all on the real spec names uncovered rules" 1 "coverage: MANDATE-FEE-003 has no passing and no failing vector" -- --require-all
+
+# Parity with the attestation fixture: one parity_<case> vector per case,
+# apart from the exempt cases, and no parity_ vector for a case it lacks.
+par=(--fixture "$fx/parity/fixture.json")
+check "every fixture case has a vector" 0 "parity: 2 of 2 case(s)" "every check passed" -- "${par[@]}" "$fx/parity/complete.json"
+check "a fixture case without a vector" 1 "case valid_two of" "has no vector parity_valid_two" -- "${par[@]}" "$fx/parity/incomplete.json"
+check "a parity vector for no fixture case" 1 "vector parity_valid_three names no case of" -- "${par[@]}" "$fx/parity/incomplete.json"
+check "an exempt case that has a vector" 1 "zero_signature now has the vector parity_zero_signature" -- --fixture "$fx/parity/fixture-exempt.json" "$fx/parity/exempt-covered.json"
+check "an exempt case is named, not required" 0 "1 exempt: zero_signature" -- --fixture "$fx/parity/fixture-exempt.json" "$fx/parity/one.json"
+check "the real fixture has a vector per case" 0 "have a parity_<case> vector" "every check passed" -- --fixture "$root/spikes/attestation-parity/fixture.json"
+check "fixture option without a file" 2 "--fixture needs a readable attestation parity fixture file" -- --fixture
+check "fixture option on a file with no cases" 2 "cannot read the case names from" -- --fixture "$fx/base.json" "$fx/base.json"
 
 # The pinned check-jsonschema, and bad usage.
 code=0
