@@ -1,0 +1,22 @@
+[
+  {
+    "name": "UNAUTHORIZED",
+    "code": 10,
+    "summary": "The caller does not hold a role this call allows"
+  },
+  {
+    "name": "PRINCIPAL_CHANGE_PENDING",
+    "code": 26,
+    "summary": "A third-party sweep while a principal change is proposed"
+  },
+  {
+    "name": "PAYOUT_ID_EXISTS",
+    "code": 60,
+    "summary": "The payout ID was already used"
+  },
+  {
+    "name": "AGENT_REMOVED",
+    "code": 65,
+    "summary": "The agent that requested the payout is no longer an agent"
+  }
+]

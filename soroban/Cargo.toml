@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "contracts/placeholder",
+    "crates/mandate-errors",
     "spikes/attestation-parity",
     "spikes/batch-limits",
     "spikes/batch-limits/proto",
@@ -20,6 +21,7 @@ publish = false
 
 [workspace.dependencies]
 soroban-sdk = "=29.0.1"
+mandate-errors = { path = "crates/mandate-errors" }
 
 [profile.release]
 opt-level = "z"
