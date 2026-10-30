@@ -16,7 +16,7 @@ Scope: spec version 1 is in force on Stellar only. Rules and text marked Celo or
 ## Files
 
 - `MANDATE.md`: the rules, each with a stable ID (`MANDATE-*` for the contracts, `CHAINOPS-*` for the off-chain services), the check order of every operation, the invariants and the rule index.
-- `errors.json`: the error table as `{ name, code, summary }`, append only; codes are never reused.
+- `errors.json`: the error table as `{ name, code, summary }`, append only; codes are never reused. The contracts return these codes from the `MandateError` enum in `soroban/crates/mandate-errors`, and `scripts/check-error-codes.py` fails on any entry missing, extra, renamed or renumbered between the two, so an entry is added to both in the same change.
 - `constants.json`: the constants, the role codes and the recovery action kinds.
 - `EVENTS.md`: the canonical events with their fields and their encoding on Stellar.
 - `ENCODING.md`: the byte layouts of the IDs and of the version 2 attestation message, with a worked example that `scripts/attestation-message.py --example` recomputes.

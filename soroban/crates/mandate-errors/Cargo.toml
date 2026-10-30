@@ -1,0 +1,17 @@
+[package]
+name = "mandate-errors"
+version = "0.0.0"
+description = "The mandate error codes, shared by every contract that returns them."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# A plain library: contracts link it in, and it never builds a wasm of its own.
+[lib]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+serde_json = "=1.0.154"

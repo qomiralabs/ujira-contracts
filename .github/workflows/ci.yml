@@ -177,6 +177,33 @@ jobs:
         if: ${{ !cancelled() }}
         run: scripts/check-vectors.sh
 
+  # The Rust error enum in soroban/crates/mandate-errors must match
+  # spec/errors.json entry for entry, so a contract can never return a code
+  # the spec gives another meaning. Uses the runner's python3 standard library
+  # only. The self test runs first, and the check still reports when it fails;
+  # --list keeps every matched code in the log.
+  error-codes:
+    name: error-codes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the error code check
+        run: |
+          python3 --version
+          scripts/check-error-codes.test.sh
+
+      - name: Check the error codes
+        if: ${{ !cancelled() }}
+        run: python3 scripts/check-error-codes.py --list
+
   # The attestation parity fixture is generated, and the Soroban suite trusts
   # it. Rebuilding it from the reference signer must give the committed bytes,
   # so a hand edit or a signer change cannot drift from what the suite runs.
