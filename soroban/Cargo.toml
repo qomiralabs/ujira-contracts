@@ -8,6 +8,10 @@ members = [
     "spikes/batch-limits/proto",
     "spikes/soroban-edges",
     "spikes/soroban-edges/child",
+    "vector-runner",
+    "vector-runner/contracts/reference-factory",
+    "vector-runner/contracts/reference-mandate",
+    "vector-runner/contracts/test-token",
 ]
 # Only production contracts build by default. The spikes are measurement code,
 # one of them a deliberately hostile token, and must never land in a release

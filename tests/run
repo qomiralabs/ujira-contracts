@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Qomira Labs
+#
+# Runs the shared mandate vectors against a chain and compares every result
+# with the vector's expectations. tests/README.md describes the options, the
+# trace and the exit codes.
+#
+# Usage: tests/run --chain stellar [--files a.json,b.json] [--areas A,B]
+#        [--only-calls f,g] [--trace-out FILE] [--factory-wasm FILE]
+#        [--mandate-wasm FILE] [--list]
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+
+# cargo runs from soroban/ so rust-toolchain.toml there picks the toolchain;
+# the binary resolves relative paths against the directory this was run from.
+cwd="$PWD"
+cd "$root/soroban"
+exec cargo run --quiet --locked -p vector-runner --bin vector-run -- --cwd "$cwd" "$@"

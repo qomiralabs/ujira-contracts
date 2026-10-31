@@ -3,7 +3,8 @@
 # Copyright 2026 Qomira Labs
 #
 # Checks that every committed wasm fixture under soroban/spikes/*/fixtures/
-# is exactly what its source builds to today. Tests load these files because
+# and soroban/vector-runner/fixtures/ is exactly what its source builds to
+# today. Tests load these files because
 # the deployer needs real wasm, so a fixture that drifted from its source
 # would make the tests assert on code nobody can read.
 #
@@ -32,7 +33,7 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-if ! git -C "$root" ls-files -z -- 'soroban/spikes/*/fixtures/*.wasm' >"$work/list"; then
+if ! git -C "$root" ls-files -z -- 'soroban/spikes/*/fixtures/*.wasm' 'soroban/vector-runner/fixtures/*.wasm' >"$work/list"; then
   echo "check-wasm-fixtures: git ls-files failed in $root" >&2
   exit 2
 fi

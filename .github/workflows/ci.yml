@@ -374,6 +374,90 @@ jobs:
       - name: Check wasm fixtures match their source
         run: ../scripts/check-wasm-fixtures.sh
 
+  # Runs every shared vector against the compiled factory and mandate with
+  # tests/run, and validates the traces against tests/trace.schema.json. The
+  # runner's own self tests run in the soroban job with the rest of the
+  # workspace. Until soroban/contracts/mandate exists the vectors cannot run,
+  # and tests/run says so with exit code 3, which this job accepts only while
+  # that directory is missing; once the contract lands, anything but a full
+  # pass fails.
+  vectors-stellar:
+    name: vectors-stellar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+    defaults:
+      run:
+        working-directory: soroban
+        shell: env -u RUSTUP_TOOLCHAIN bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Rust toolchain
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          [ -n "$channel" ] || { echo "no channel in rust-toolchain.toml" >&2; exit 1; }
+          rustup toolchain install
+          rustc --version | grep -q "^rustc ${channel} " || { echo "rustc is not ${channel}" >&2; exit 1; }
+          echo "toolchain=${channel}" >> "$GITHUB_ENV"
+
+      - name: Cache cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            soroban/target
+          key: vectors-stellar-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
+          restore-keys: |
+            vectors-stellar-${{ runner.os }}-${{ env.toolchain }}-
+
+      - name: Install stellar-cli
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -fsSLo stellar.tar.gz "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${STELLAR_CLI_SHA256}  stellar.tar.gz" | sha256sum --check --strict
+          tar -xzf stellar.tar.gz -C "${RUNNER_TEMP}/bin" stellar
+          rm stellar.tar.gz
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: Install check-jsonschema
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/check-jsonschema"
+          "${RUNNER_TEMP}/check-jsonschema/bin/pip" install --disable-pip-version-check --no-input \
+            --require-hashes --no-deps --only-binary :all: -r ../scripts/check-vectors.requirements.txt
+          echo "CHECK_JSONSCHEMA=${RUNNER_TEMP}/check-jsonschema/bin/check-jsonschema" >> "$GITHUB_ENV"
+
+      - name: Build the production contracts
+        run: ../scripts/soroban-build.sh
+
+      # The reference contracts answer these vectors correctly, so this run
+      # must pass and its trace proves the trace format end to end.
+      - name: Run the runner self test vectors and validate the trace
+        run: |
+          ../tests/run --chain stellar --files vector-runner/selftest/reference.json \
+            --factory-wasm vector-runner/fixtures/vector_runner_reference_factory.wasm \
+            --mandate-wasm vector-runner/fixtures/vector_runner_reference_mandate.wasm \
+            --trace-out "${RUNNER_TEMP}/reference-trace.json"
+          "$CHECK_JSONSCHEMA" --schemafile ../tests/trace.schema.json "${RUNNER_TEMP}/reference-trace.json"
+
+      - name: Run every shared vector
+        run: |
+          code=0
+          ../tests/run --chain stellar --trace-out "${RUNNER_TEMP}/trace.json" || code=$?
+          "$CHECK_JSONSCHEMA" --schemafile ../tests/trace.schema.json "${RUNNER_TEMP}/trace.json"
+          if [ "$code" -eq 3 ] && [ ! -d contracts/mandate ]; then
+            echo "::notice::the mandate contract does not exist yet, so the shared vectors are not runnable"
+            exit 0
+          fi
+          exit "$code"
+
   # Fails on any em dash or en dash in a tracked file's content or its path.
   # The same scripts run in every UJIRA repository. The self test runs first,
   # so the check's result is only trusted once the check is known to fail when

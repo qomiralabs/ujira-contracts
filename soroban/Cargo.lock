@@ -1960,6 +1960,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
+name = "vector-runner"
+version = "0.0.0"
+dependencies = [
+ "ed25519-dalek",
+ "mandate-errors",
+ "serde_json",
+ "sha2",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "vector-runner-reference-factory"
+version = "0.0.0"
+dependencies = [
+ "mandate-errors",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "vector-runner-reference-mandate"
+version = "0.0.0"
+dependencies = [
+ "mandate-errors",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "vector-runner-test-token"
+version = "0.0.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
