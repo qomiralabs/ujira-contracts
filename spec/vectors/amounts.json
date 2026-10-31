@@ -135,6 +135,7 @@
       "description": "A total and leg of I128_MAX meet every limit set to I128_MAX, are approved and paid, and spent reaches I128_MAX.",
       "setup": {
         "now": "1767225600",
+        "actors": { "bob": { "kind": "contract" } },
         "mandate": {
           "principal": "principal",
           "asset": "asset",

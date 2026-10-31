@@ -310,10 +310,10 @@
       "properties": {
         "now": { "$ref": "#/$defs/u64" },
         "actors": {
-          "description": "Actors that are contracts. An actor not listed here is an account.",
+          "description": "Actors that are contracts. An actor not listed here is an account. Of the reserved names only fee_address may be listed.",
           "type": "object",
           "propertyNames": {
-            "allOf": [{ "$ref": "#/$defs/actor" }, { "not": { "$ref": "#/$defs/reserved_actor" } }]
+            "allOf": [{ "$ref": "#/$defs/actor" }, { "not": { "enum": ["mandate", "asset", "other_token", "zero"] } }]
           },
           "additionalProperties": {
             "type": "object",

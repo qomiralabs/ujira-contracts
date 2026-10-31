@@ -457,24 +457,16 @@ jobs:
             --trace-out "${RUNNER_TEMP}/reference-trace.json"
           "$CHECK_JSONSCHEMA" --schemafile ../tests/trace.schema.json "${RUNNER_TEMP}/reference-trace.json"
 
-      # The mandate is built in parts, so this runs the vectors whose every
-      # call the mandate already has. Each part that adds operations adds its
-      # calls to MANDATE_CALLS, and the filter goes once every call exists.
-      # Creation goes through the production factory in
-      # soroban/contracts/factory; the reference factory is only a fallback
-      # for a tree without it.
+      # Every shared vector, against the mandate with every call in place. A
+      # failing vector fails the build. Creation goes through the production
+      # factory in soroban/contracts/factory; the reference factory is only a
+      # fallback for a tree without it.
       - name: Run the shared vectors
-        env:
-          MANDATE_CALLS: create,version,config,state,payout,daily_used,is_allowed,request_payout,request_payouts,approve,reject,cancel,cancel_batch,pause,resume,revoke,withdraw,sweep,recover_token,update_limits,add_role,remove_role,set_approvals_required,set_recovery_threshold,allow_recipients,disallow_recipients,set_attestation_policy,propose_principal,accept_principal,cancel_principal_proposal,lower_fee_cap,recovery_revoke,recovery_rotate_agent,execute,execute_batch
         run: |
           args=(--chain stellar --trace-out "${RUNNER_TEMP}/trace.json")
           if [ ! -d contracts/factory ]; then
             echo "::notice::no production factory yet, creating through the reference factory"
             args+=(--factory-wasm vector-runner/fixtures/vector_runner_reference_factory.wasm)
-          fi
-          if [ -n "${MANDATE_CALLS}" ]; then
-            echo "::notice::running only the vectors that use ${MANDATE_CALLS}"
-            args+=(--only-calls "${MANDATE_CALLS}")
           fi
           code=0
           ../tests/run "${args[@]}" || code=$?

@@ -40,7 +40,7 @@ Each actor name stands for one address, the same for the whole vector, which the
 | `mandate` | The mandate, created by the setup or by the one `create` call that succeeds. |
 | `asset` | The settlement asset, which the factory supports. |
 | `other_token` | A second token, which the factory does not support. |
-| `fee_address` | The factory's fee address, an account. It may make calls, so a vector can show that it holds no role. |
+| `fee_address` | The factory's fee address, an account unless the setup lists it as a contract, as a vector does when it pays a fee above what a Stellar trustline holds. It may make calls, so a vector can show that it holds no role. |
 | `zero` | The zero address. Only Celo has one, so a vector that names it is restricted to Celo. |
 
 `mandate`, `asset`, `other_token` and `zero` never make a call.
