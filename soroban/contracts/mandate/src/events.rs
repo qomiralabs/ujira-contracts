@@ -95,3 +95,19 @@ pub struct PayoutCancelled {
     pub by: Address,
     pub reason: u32,
 }
+
+/// A payout was paid. `day` is the UTC day its total was counted on and
+/// `spent` the mandate's spent total after it. The legs are repeated here
+/// because the token's own events do not tie a transfer to a payout.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PayoutExecuted {
+    #[topic]
+    pub payout_id: BytesN<32>,
+    pub recipient_ref: BytesN<32>,
+    pub total: i128,
+    pub fee: i128,
+    pub legs: Vec<Leg>,
+    pub day: u64,
+    pub spent: i128,
+}
