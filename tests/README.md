@@ -38,6 +38,12 @@ Exit codes: 0 every selected vector that applies to the chain ran and passed; 1 
 
 The driver is the `vector-runner` crate in `soroban/vector-runner`. It registers the compiled factory and mandate wasm, never a native test contract, because the host reports some errors differently through a native contract than a network does. By default it reads `soroban/target/wasm32v1-none/release/ujira_factory.wasm` and `ujira_mandate.wasm`, as `scripts/soroban-build.sh` leaves them; `--factory-wasm` and `--mandate-wasm` point it elsewhere.
 
+Until the production factory exists, CI creates mandates through the test-only reference factory in `soroban/vector-runner/contracts/reference-factory`, which validates a configuration with the mandate's own shared validation (`soroban/crates/mandate-config`) before it deploys, as the real factory must, and runs only the vectors whose every call the mandate already implements:
+
+```sh
+tests/run --chain stellar --factory-wasm soroban/vector-runner/fixtures/vector_runner_reference_factory.wasm --only-calls create,version,config,state,payout,daily_used,is_allowed
+```
+
 For each vector it:
 
 - sets the ledger time to `setup.now`, the network to the testnet passphrase, and testnet's entry TTLs; every later time step also moves the ledger sequence on by one ledger per 5 seconds, so records archive as they would on a network;
@@ -62,6 +68,7 @@ Factory:
 
 Mandate, deployed by the factory:
 
+- `__constructor(factory: Address, fee_address: Address, config: MandateConfig) -> Result<(), MandateError>`, called by the factory's deploy.
 - `MandateConfig { principal, asset, recipient_mode: u32, tenant_ref, agents, approvers, approvals_required: u32, guardians, executors, recovery, recovery_threshold: u32, limits: Limits, attester: Option<Bytes>, country_policy_hash, max_fee_bps: u32 }`
 - `Limits { total_budget: i128, per_payment_cap: i128, per_recipient_daily_cap: i128, approval_threshold: i128, payout_ttl_seconds: u64, expires_at: u64 }`
 - `PayoutRequest { payout_id, recipient_ref, total: i128, fee: i128, legs: Vec<Leg>, deadline: u64, task_ref, attestations: Vec<Attestation> }`

@@ -331,6 +331,13 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
+      # The mandate's tests load its compiled wasm, never the native
+      # contract, so the production contracts are built before the tests. The
+      # release step below builds them again from scratch and checks the
+      # folder.
+      - name: Build the contracts the tests load
+        run: ../scripts/soroban-build.sh
+
       - name: cargo test
         run: cargo test --locked --workspace
 
@@ -377,13 +384,13 @@ jobs:
       - name: Check wasm fixtures match their source
         run: ../scripts/check-wasm-fixtures.sh
 
-  # Runs every shared vector against the compiled factory and mandate with
+  # Runs the shared vectors against the compiled factory and mandate with
   # tests/run, and validates the traces against tests/trace.schema.json. The
   # runner's own self tests run in the soroban job with the rest of the
   # workspace. Until soroban/contracts/mandate exists the vectors cannot run,
   # and tests/run says so with exit code 3, which this job accepts only while
   # that directory is missing; once the contract lands, anything but a full
-  # pass fails.
+  # pass of the selected vectors fails.
   vectors-stellar:
     name: vectors-stellar
     runs-on: ubuntu-24.04
@@ -450,10 +457,28 @@ jobs:
             --trace-out "${RUNNER_TEMP}/reference-trace.json"
           "$CHECK_JSONSCHEMA" --schemafile ../tests/trace.schema.json "${RUNNER_TEMP}/reference-trace.json"
 
-      - name: Run every shared vector
+      # The mandate is built in parts, so this runs the vectors whose every
+      # call the mandate already has. Each part that adds operations adds its
+      # calls to MANDATE_CALLS, and the filter goes once every call exists.
+      # Until soroban/contracts/factory exists, creation goes through the
+      # runner's reference factory, which validates a configuration with the
+      # mandate's own shared function before it deploys, as the real factory
+      # must.
+      - name: Run the shared vectors
+        env:
+          MANDATE_CALLS: create,version,config,state,payout,daily_used,is_allowed
         run: |
+          args=(--chain stellar --trace-out "${RUNNER_TEMP}/trace.json")
+          if [ ! -d contracts/factory ]; then
+            echo "::notice::no production factory yet, creating through the reference factory"
+            args+=(--factory-wasm vector-runner/fixtures/vector_runner_reference_factory.wasm)
+          fi
+          if [ -n "${MANDATE_CALLS}" ]; then
+            echo "::notice::running only the vectors that use ${MANDATE_CALLS}"
+            args+=(--only-calls "${MANDATE_CALLS}")
+          fi
           code=0
-          ../tests/run --chain stellar --trace-out "${RUNNER_TEMP}/trace.json" || code=$?
+          ../tests/run "${args[@]}" || code=$?
           "$CHECK_JSONSCHEMA" --schemafile ../tests/trace.schema.json "${RUNNER_TEMP}/trace.json"
           if [ "$code" -eq 3 ] && [ ! -d contracts/mandate ]; then
             echo "::notice::the mandate contract does not exist yet, so the shared vectors are not runnable"

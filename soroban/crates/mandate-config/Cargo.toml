@@ -1,0 +1,16 @@
+[package]
+name = "mandate-config"
+version = "0.0.0"
+description = "The mandate configuration types and the one validation of them, shared by the factory and the mandate."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# A plain library: the factory and the mandate link it in, and it never
+# builds a wasm of its own.
+[lib]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+mandate-errors = { workspace = true }
