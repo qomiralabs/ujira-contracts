@@ -1955,6 +1955,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
+name = "ujira-factory"
+version = "0.0.0"
+dependencies = [
+ "mandate-config",
+ "mandate-errors",
+ "soroban-sdk",
+ "soroban-spec",
+ "ujira-mandate",
+]
+
+[[package]]
 name = "ujira-mandate"
 version = "0.0.0"
 dependencies = [
