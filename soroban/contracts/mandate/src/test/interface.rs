@@ -7,14 +7,14 @@
 extern crate std;
 
 use super::{mandate_wasm, Fx};
-use crate::types::{AllowEntry, ROLE_GUARDIAN};
+use crate::types::{AllowEntry, Leg, ROLE_GUARDIAN};
 use crate::{MandateError, UjiraMandateClient};
 use core::fmt::Debug;
 use soroban_sdk::{
     testutils::Address as _,
     token::StellarAssetClient,
     xdr::{Limited, Limits, ReadXdr, ScSpecEntry, ScSpecTypeDef},
-    Address, InvokeError, Vec,
+    Address, InvokeError, MuxedAddress, Vec,
 };
 use std::collections::BTreeMap;
 use std::string::String;
@@ -150,6 +150,28 @@ fn every_entrypoint_requires_auth() {
     needs_auth(&fx, "cancel_batch", || {
         m.try_cancel_batch(a, &Vec::from_array(&fx.env, [id(2)]))
     });
+    // A contract destination holds the asset without a trustline, so the
+    // executes below pay out for real.
+    let vault = MuxedAddress::from(Address::generate(&fx.env));
+    fx.allow(&m.address, &fx.bob(), &vault);
+    let to_vault = |n: u8| {
+        let mut r = fx.req(n, 100);
+        r.legs = Vec::from_array(
+            &fx.env,
+            [Leg {
+                destination: vault.clone(),
+                amount: 100,
+            }],
+        );
+        r
+    };
+    m.request_payout(a, &to_vault(4));
+    m.request_payout(a, &to_vault(5));
+    needs_auth(&fx, "execute", || m.try_execute(a, &id(4)));
+    needs_auth(&fx, "execute_batch", || {
+        m.try_execute_batch(&fx.executor, &Vec::from_array(&fx.env, [id(5)]))
+    });
+    assert_eq!(m.state().spent, 200);
     needs_auth(&fx, "pause", || m.try_pause(g));
     needs_auth(&fx, "resume", || m.try_resume());
     let limits = m.config().limits;
