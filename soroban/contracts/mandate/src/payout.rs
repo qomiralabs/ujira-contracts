@@ -51,12 +51,12 @@ pub const CANCEL_LAPSED: u32 = 3;
 /// The item code for success in a batch result.
 const ITEM_OK: u32 = 0;
 
-fn invariant<T>(v: Option<T>) -> Result<T, MandateError> {
+pub(crate) fn invariant<T>(v: Option<T>) -> Result<T, MandateError> {
     v.ok_or(MandateError::InternalInvariant)
 }
 
 /// The three active checks, in their fixed order.
-fn ensure_active(env: &Env, now: u64) -> Result<(), MandateError> {
+pub(crate) fn ensure_active(env: &Env, now: u64) -> Result<(), MandateError> {
     let flags = storage::flags(env)?;
     if flags.revoked {
         return Err(MandateError::MandateRevoked);
@@ -87,12 +87,12 @@ fn agent_entry(env: &Env, caller: &Address) -> Result<Agent, MandateError> {
 /// True while the payout's agent is still an agent under the epoch it held
 /// at request. A removal ends that, and so does adding the same address
 /// back, since the new entry carries a later epoch.
-fn same_agent(roles: &Roles, record: &PayoutRecord) -> bool {
+pub(crate) fn same_agent(roles: &Roles, record: &PayoutRecord) -> bool {
     matches!(roles.agent(&record.agent), Some(a) if a.epoch == record.agent_epoch)
 }
 
 /// What a payout charges against the mandate: the total and the fee.
-fn charged(total: i128, fee: i128) -> Result<i128, MandateError> {
+pub(crate) fn charged(total: i128, fee: i128) -> Result<i128, MandateError> {
     invariant(total.checked_add(fee))
 }
 
@@ -118,7 +118,7 @@ pub fn fee_cap(total: i128, max_fee_bps: u32) -> Result<i128, MandateError> {
 /// The record behind a payout ID. A tombstone is a payout that already
 /// reached a terminal status, so no call that takes an open payout accepts
 /// it.
-fn open_record(env: &Env, payout_id: &BytesN<32>) -> Result<PayoutRecord, MandateError> {
+pub(crate) fn open_record(env: &Env, payout_id: &BytesN<32>) -> Result<PayoutRecord, MandateError> {
     match storage::payout(env, payout_id) {
         None => Err(MandateError::PayoutNotFound),
         Some(PayoutEntry::Tombstone(_)) => Err(MandateError::PayoutWrongStatus),
@@ -129,7 +129,7 @@ fn open_record(env: &Env, payout_id: &BytesN<32>) -> Result<PayoutRecord, Mandat
 /// Takes `amount` back out of `pending` or `committed`, whichever the
 /// status reserved it in. Going below zero would mean the counters no
 /// longer match the open payouts.
-fn release(totals: &mut Totals, status: u32, amount: i128) -> Result<(), MandateError> {
+pub(crate) fn release(totals: &mut Totals, status: u32, amount: i128) -> Result<(), MandateError> {
     let slot = match status {
         STATUS_PENDING => &mut totals.pending,
         STATUS_APPROVED => &mut totals.committed,

@@ -465,7 +465,7 @@ jobs:
       # for a tree without it.
       - name: Run the shared vectors
         env:
-          MANDATE_CALLS: create,version,config,state,payout,daily_used,is_allowed,request_payout,request_payouts,approve,reject,cancel,cancel_batch,pause,resume,revoke,withdraw,sweep,recover_token,update_limits,add_role,remove_role,set_approvals_required,set_recovery_threshold,allow_recipients,disallow_recipients,set_attestation_policy,propose_principal,accept_principal,cancel_principal_proposal,lower_fee_cap,recovery_revoke,recovery_rotate_agent
+          MANDATE_CALLS: create,version,config,state,payout,daily_used,is_allowed,request_payout,request_payouts,approve,reject,cancel,cancel_batch,pause,resume,revoke,withdraw,sweep,recover_token,update_limits,add_role,remove_role,set_approvals_required,set_recovery_threshold,allow_recipients,disallow_recipients,set_attestation_policy,propose_principal,accept_principal,cancel_principal_proposal,lower_fee_cap,recovery_revoke,recovery_rotate_agent,execute,execute_batch
         run: |
           args=(--chain stellar --trace-out "${RUNNER_TEMP}/trace.json")
           if [ ! -d contracts/factory ]; then

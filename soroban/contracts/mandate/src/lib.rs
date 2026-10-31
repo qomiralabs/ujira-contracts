@@ -8,7 +8,8 @@
 //! leave to destinations bound to a recipient, or back to the principal.
 //!
 //! The constructor validates and stores the configuration; agents request
-//! payouts, approvers approve or reject them, and they can be cancelled.
+//! payouts, approvers approve or reject them, the principal, an agent or an
+//! executor executes the approved ones, and open ones can be cancelled.
 //! The contract is never upgradeable; there is no call that replaces its
 //! code.
 //!
@@ -17,6 +18,7 @@
 //! - `derived`: balance, expiry and free funds, computed on read.
 //! - `events`: the event shapes.
 //! - `payout`: requests, approvals, rejections and cancels.
+//! - `execute`: paying approved payouts, alone or in an atomic batch.
 //! - `attest`: recipient attestations and the message the attester signs.
 //! - `lifecycle`: pause, resume, revoke, withdraw, sweep and token recovery.
 //! - `admin`: limits, roles, the allowlist, the attestation policy, the
@@ -31,6 +33,7 @@ pub mod admin;
 pub mod attest;
 pub mod derived;
 pub mod events;
+pub mod execute;
 pub mod lifecycle;
 pub mod payout;
 pub mod recovery;
@@ -197,6 +200,24 @@ impl UjiraMandate {
     ) -> Result<Vec<ItemResult>, MandateError> {
         storage::extend_instance(&env);
         payout::cancel_batch(&env, &caller, &ids)
+    }
+
+    /// Pays an approved payout: every leg to its destination, tag included,
+    /// then the fee. On any failure nothing is paid and nothing changes, so
+    /// the same call can simply be retried.
+    pub fn execute(env: Env, caller: Address, payout_id: BytesN<32>) -> Result<(), MandateError> {
+        storage::extend_instance(&env);
+        execute::execute(&env, &caller, &payout_id)
+    }
+
+    /// Pays up to ten approved payouts in order, all or none.
+    pub fn execute_batch(
+        env: Env,
+        caller: Address,
+        ids: Vec<BytesN<32>>,
+    ) -> Result<(), MandateError> {
+        storage::extend_instance(&env);
+        execute::execute_batch(&env, &caller, &ids)
     }
 
     pub fn version(env: Env) -> u32 {
