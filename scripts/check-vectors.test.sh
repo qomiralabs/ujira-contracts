@@ -224,7 +224,10 @@ check "areas filter finds the gap in its area" 1 "coverage: MANDATE-FEE-003 has 
 check "CHAINOPS rules never count as uncovered" 0 "each of 1 MANDATE rule(s) in FEE has a passing and a failing vector" -- --areas FEE "${cov[@]}" "$fx/coverage/complete.json"
 check "areas naming an area with no MANDATE rule" 2 "--areas names SWEEP, which has no MANDATE rule" -- --areas SWEEP "${cov[@]}" "$fx/coverage/complete.json"
 check "require-all and areas together" 2 "cannot be combined" -- --require-all --areas PAUSE "${cov[@]}" "$fx/coverage/complete.json"
-check "require-all on the real spec names uncovered rules" 1 "coverage: MANDATE-FEE-003 has no passing and no failing vector" -- --require-all
+# Every MANDATE rule of the real spec has a passing and a failing vector, so
+# a new rule or a removed vector that opens a gap fails here. The counts are
+# left out because new rules change them.
+check "require-all on the real spec covers every rule" 0 "MANDATE rule(s) in the spec has a passing and a failing vector" "every check passed" -- --require-all
 
 # Parity with the attestation fixture: one parity_<case> vector per case,
 # apart from the exempt cases, and no parity_ vector for a case it lacks.
