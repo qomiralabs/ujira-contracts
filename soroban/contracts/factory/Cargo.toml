@@ -1,0 +1,21 @@
+[package]
+name = "ujira-factory"
+version = "0.0.0"
+description = "The UJIRA mandate factory: deploys each mandate at an address derived from its principal and salt, for an asset list and fee address fixed forever."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+mandate-errors = { workspace = true }
+mandate-config = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+soroban-spec = "=29.0.1"
+ujira-mandate = { path = "../mandate" }
