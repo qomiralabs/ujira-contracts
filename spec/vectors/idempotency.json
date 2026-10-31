@@ -2024,6 +2024,7 @@
               "attestations": []
             }
           },
+          "precedence": ["6", "7"],
           "expect": { "error": "PAYOUT_ID_EXISTS", "events": [] }
         },
         {

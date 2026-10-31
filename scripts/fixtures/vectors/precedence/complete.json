@@ -1,0 +1,259 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "vectors": [
+    {
+      "id": "fixture_prec_pause_auth",
+      "rules": ["MANDATE-ROLE-019", "MANDATE-ROLE-014"],
+      "description": "mallory, who may not pause, is named as the caller of a pause that eve signs.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        }
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "mallory",
+          "signed_by": "eve",
+          "precedence": ["1", "2"],
+          "expect": { "error": "UNAUTHORIZED", "events": [], "per_chain": { "stellar": { "host_auth_failure": true } } }
+        }
+      ]
+    },
+    {
+      "id": "fixture_prec_pause_role",
+      "rules": ["MANDATE-ROLE-014", "MANDATE-REVOKE-002"],
+      "description": "The agent, who may not pause, pauses a revoked mandate.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        }
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "0",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "0" } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "agent",
+          "precedence": ["2", "3"],
+          "expect": { "error": "UNAUTHORIZED", "events": [] }
+        }
+      ]
+    },
+    {
+      "id": "fixture_prec_pause_revoked",
+      "rules": ["MANDATE-REVOKE-002", "MANDATE-PAUSE-002"],
+      "description": "A guardian pauses a mandate that is both paused and revoked.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        }
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "expect": { "ok": true, "events": [{ "name": "paused", "fields": { "by": "guardian" } }] }
+        },
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "0",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "0" } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "pause",
+          "caller": "guardian",
+          "precedence": ["3", "4"],
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        }
+      ]
+    },
+    {
+      "id": "fixture_prec_remove_role_auth",
+      "rules": ["MANDATE-ROLE-015", "MANDATE-REVOKE-002"],
+      "description": "A guardian removes a role on a revoked mandate.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        }
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "0",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "0" } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "remove_role",
+          "caller": "guardian",
+          "args": { "role": 1, "account": "agent" },
+          "precedence": ["1", "2"],
+          "expect": { "error": "UNAUTHORIZED", "events": [], "per_chain": { "stellar": { "host_auth_failure": true } } }
+        }
+      ]
+    },
+    {
+      "id": "fixture_prec_remove_role_revoked",
+      "rules": ["MANDATE-REVOKE-002", "MANDATE-ROLE-016"],
+      "description": "The principal removes a role code that does not exist on a revoked mandate.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": ["agent"],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": ["guardian"],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        }
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "revoke",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": "0",
+            "events": [{ "name": "revoked", "fields": { "by": "principal", "frozen": "0" } }]
+          }
+        },
+        {
+          "step": "call",
+          "fn": "remove_role",
+          "caller": "principal",
+          "args": { "role": 9, "account": "agent" },
+          "precedence": ["2", "3"],
+          "expect": { "error": "MANDATE_REVOKED", "events": [] }
+        }
+      ]
+    }
+  ]
+}

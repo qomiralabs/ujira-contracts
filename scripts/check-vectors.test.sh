@@ -6,7 +6,8 @@
 # scripts/fixtures/vectors/ and checks the exit code, and that the output
 # names the problem, so a case cannot pass by failing for some other reason.
 # The fixtures run against the repository's own spec, except the coverage
-# cases, which use the small spec in scripts/fixtures/vectors/spec/.
+# cases, which use the small spec in scripts/fixtures/vectors/spec/, and the
+# precedence cases, which use the one in scripts/fixtures/vectors/precedence/.
 #
 # Needs check-jsonschema at the pinned version, found the same way
 # check-vectors.sh finds it: CHECK_JSONSCHEMA, or check-jsonschema on PATH.
@@ -228,6 +229,57 @@ check "require-all and areas together" 2 "cannot be combined" -- --require-all -
 # a new rule or a removed vector that opens a gap fails here. The counts are
 # left out because new rules change them.
 check "require-all on the real spec covers every rule" 0 "MANDATE rule(s) in the spec has a passing and a failing vector" "every check passed" -- --require-all
+
+# Precedence, against the small spec in precedence/spec: pause has three
+# adjacent pairs, all needing a pin; remove_role has five, of which the last
+# three are exempt because those checks can never fail together.
+pfx="$fx/precedence"
+pre=(--spec "$pfx/spec")
+check "precedence passes when every pair is pinned" 0 \
+  "precedence: 5 of 8 adjacent pair(s) in 2 check order(s) have a precedence vector; 3 exempt" "every check passed" -- \
+  --precedence "${pre[@]}" "$pfx/complete.json"
+check "missing precedence pair" 1 \
+  "pause checks 3 and 4 (MANDATE-REVOKE-002, then MANDATE-PAUSE-002) have no precedence vector" -- \
+  --precedence "${pre[@]}" "$pfx/missing.json"
+check "a missing pair is not reported without --precedence" 0 "every check passed" -- "${pre[@]}" "$pfx/missing.json"
+check "precedence on a spec with no check orders" 2 "no check orders in" -- --precedence --spec "$fx/spec" "$fx/coverage/complete.json"
+check "precedence pin on an exempt pair" 1 "remove_role checks 4 and 5 can never fail together" -- "${pre[@]}" "$pfx/exempt-pin.json"
+check "precedence pin on a call that succeeds" 1 "a precedence pin needs a call that is refused" -- "${pre[@]}" "$pfx/pin-on-success.json"
+check "precedence pin on a function with no check order" 1 "resume has no check order in the spec" -- "${pre[@]}" "$pfx/no-order.json"
+sed 's/"precedence": \["3", "4"\]/"precedence": ["2", "4"]/' "$pfx/pause-revoked.json" >"$work/prec-gap.json"
+check "precedence pin on checks that are not adjacent" 1 "pause checks 2 and 4 are not adjacent; a pin names a check and the one right after it" -- "${pre[@]}" "$work/prec-gap.json"
+sed 's/"precedence": \["3", "4"\]/"precedence": ["4", "5"]/' "$pfx/pause-revoked.json" >"$work/prec-no-step.json"
+check "precedence pin on a check the order lacks" 1 "pause has no check 5" -- "${pre[@]}" "$work/prec-no-step.json"
+sed 's/"precedence": \["3", "4"\]/"precedence": ["3", "4", "5"]/' "$pfx/pause-revoked.json" >"$work/prec-three.json"
+check "precedence pin naming three checks" 1 "precedence: ['3', '4', '5'] is too long" -- "${pre[@]}" "$work/prec-three.json"
+sed 's/, "MANDATE-PAUSE-002"\]/]/' "$pfx/pause-revoked.json" >"$work/prec-uncited.json"
+check "precedence pin without its rules cited" 1 "pins pause checks 3 and 4, so it must cite MANDATE-PAUSE-002" -- "${pre[@]}" "$work/prec-uncited.json"
+sed '/"precedence"/,$ s/"error": "MANDATE_REVOKED"/"error": "ALREADY_PAUSED"/' "$pfx/pause-revoked.json" >"$work/prec-later-error.json"
+check "precedence pin expecting the later check's error" 1 \
+  "expects ALREADY_PAUSED, but the earlier of the pinned checks, pause check 3 (MANDATE-REVOKE-002), returns MANDATE_REVOKED" -- \
+  "${pre[@]}" "$work/prec-later-error.json"
+sed 's/, "per_chain": { "stellar": { "host_auth_failure": true } }//' "$pfx/pause-auth.json" >"$work/prec-no-auth.json"
+check "caller authorization pin without host_auth_failure" 1 \
+  "pause check 1 (MANDATE-ROLE-019) fails host authorization on Stellar; expect per_chain stellar host_auth_failure" -- \
+  "${pre[@]}" "$work/prec-no-auth.json"
+sed '/"precedence"/,$ s/"error": "MANDATE_REVOKED", "events": \[\]/"error": "MANDATE_REVOKED", "events": [], "per_chain": { "stellar": { "host_abort": "Crypto.InvalidInput" } }/' \
+  "$pfx/pause-revoked.json" >"$work/prec-host-override.json"
+check "precedence pin whose earlier check never fails in the host" 1 \
+  "expects a Stellar host failure, but pause check 3 (MANDATE-REVOKE-002) is a mandate error on every chain" -- \
+  "${pre[@]}" "$work/prec-host-override.json"
+mkdir -p "$work/stale-spec"
+cp "$pfx/spec/errors.json" "$pfx/spec/EVENTS.md" "$work/stale-spec/"
+sed 's/^6\. Removing one recovery approver keeps the threshold reachable (MANDATE-RECOVERYSET-002)\./6. Removing one approver keeps the gate working (MANDATE-APPROVAL-006)./' \
+  "$pfx/spec/MANDATE.md" >"$work/stale-spec/MANDATE.md"
+check "stale precedence exemption" 1 \
+  "the precedence exemption for remove_role checks 5 and 6 (MANDATE-APPROVAL-008, MANDATE-RECOVERYSET-002) no longer matches the spec" -- \
+  --precedence --spec "$work/stale-spec" "$pfx/complete.json"
+# Every adjacent pair of every check order in the real spec is pinned or
+# exempt, and every MANDATE rule keeps a passing and a failing vector, as CI
+# runs it. The counts are left out because new checks change them.
+check "require-all and precedence on the real spec" 0 \
+  "MANDATE rule(s) in the spec has a passing and a failing vector" "adjacent pair(s) in" "have a precedence vector" "every check passed" -- \
+  --require-all --precedence
 
 # Parity with the attestation fixture: one parity_<case> vector per case,
 # apart from the exempt cases, and no parity_ vector for a case it lacks.

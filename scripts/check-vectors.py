@@ -42,7 +42,14 @@
 #     restricted to Celo, or restricted to Stellar and expecting
 #     TRANSFER_FAILED;
 #   - mandate calls and attest steps come after the mandate exists, and time
-#     never moves back.
+#     never moves back;
+#   - a call that pins the precedence of two checks ("precedence": ["3", "4"])
+#     names a check of its function's check order in MANDATE.md and the one
+#     right after it, cites both checks' rules, is refused, and is refused the
+#     way the earlier check refuses: with one of its errors, with the Stellar
+#     host failure its rule names, or for a per-item check with an item's own
+#     error rather than the later check's. A pin on a pair PRECEDENCE_EXEMPT
+#     names is refused.
 #
 # Coverage (--require-all, or --areas for some areas): every MANDATE rule that
 # is not retired has at least one passing and one failing vector. A vector is
@@ -55,9 +62,16 @@
 # vector named parity_<case>, except the cases PARITY_EXEMPT names with the
 # reason, and every parity_ vector names a case of the fixture.
 #
+# Precedence (--precedence): every adjacent pair of checks in every check
+# order of MANDATE.md is pinned by at least one call in the files checked,
+# except the pairs PRECEDENCE_EXEMPT names with the reason, and every exempt
+# pair still matches the spec. When several checks fail at once the earliest
+# decides the error, and a pin per adjacent pair is what keeps two contracts
+# from each passing every single-rule vector while disagreeing on real input.
+#
 # Standard library only.
 #
-# Usage: check-vectors.py --spec DIR [--require-all | --areas A,B,...] [--fixture FILE] FILE...
+# Usage: check-vectors.py --spec DIR [--require-all | --areas A,B,...] [--fixture FILE] [--precedence] FILE...
 # Exit codes: 0 every check passes, 1 problems named on stderr, 2 bad usage or
 # a spec file that cannot be read.
 
@@ -107,6 +121,61 @@ PARITY_EXEMPT = {
     "zero_signature": "no tamper kind replaces the whole signature",
     "identity_r_zero_s": "no tamper kind replaces the whole signature",
     "small_order_attester_key": "no tamper kind writes the identity point and a zero S as the signature",
+}
+
+# With --precedence, each adjacent pair of checks needs a pinned call, except
+# these pairs, which no input can make fail together. Each is keyed by the
+# operation and its two check labels, and names the two rules it was written
+# against, so a renumbered or rewritten check order makes the entry stale
+# instead of silently exempting another pair.
+#
+# The attester key holds no role (MANDATE-ROLE-018) on every path that sets the
+# attester or adds the principal, the fee address or a role member, so an
+# account that already conflicts with a role never has the attester's key.
+ATTESTER_KEY_HELD = (
+    "an account that conflicts is the principal, the fee address or a role member, and the attester's key "
+    "never matches any of those, since every path that sets either refuses the overlap"
+)
+PRECEDENCE_EXEMPT = {
+    ("request_payout", "16", "17"): (
+        "MANDATE-RECIPIENT-003",
+        "MANDATE-RECIPIENT-004",
+        "check 16 applies only in ALLOWLIST mode and check 17 only in ATTESTED and BOTH",
+    ),
+    ("request_payout", "19", "20"): (
+        "MANDATE-RECIPIENT-006",
+        "MANDATE-RECIPIENT-007",
+        "an expired attestation has valid_until at or before now, so its window is never too long",
+    ),
+    ("add_role", "4", "5"): (
+        "MANDATE-ROLE-017",
+        "MANDATE-ROLE-009",
+        "the zero address is never the principal, the fee address or a role member, so adding it breaks no separation",
+    ),
+    ("add_role", "5", "6"): ("MANDATE-ROLE-009", "MANDATE-ROLE-018", ATTESTER_KEY_HELD),
+    ("remove_role", "3", "4"): (
+        "MANDATE-ROLE-016",
+        "MANDATE-APPROVAL-006",
+        "check 4 applies only to an approver that is in the set, which is when check 3 passes",
+    ),
+    ("remove_role", "4", "5"): (
+        "MANDATE-APPROVAL-006",
+        "MANDATE-APPROVAL-008",
+        "check 4 removes one approver among several and check 5 the only one",
+    ),
+    ("remove_role", "5", "6"): (
+        "MANDATE-APPROVAL-008",
+        "MANDATE-RECOVERYSET-002",
+        "check 5 applies to role 2 and check 6 to role 5",
+    ),
+    ("propose_principal", "2", "3"): (
+        "MANDATE-ROLE-017",
+        "MANDATE-PRINCIPAL-001",
+        "the zero address holds no role and is not the fee address",
+    ),
+    ("propose_principal", "3", "4"): ("MANDATE-PRINCIPAL-001", "MANDATE-ROLE-018", ATTESTER_KEY_HELD),
+    ("accept_principal", "3", "4"): ("MANDATE-PRINCIPAL-006", "MANDATE-ROLE-018", ATTESTER_KEY_HELD),
+    ("recovery_rotate_agent", "5", "6"): ("MANDATE-RECOVERYSET-006", "MANDATE-ROLE-018", ATTESTER_KEY_HELD),
 }
 
 # Functions that take a caller argument, which the call authorizes first.
@@ -216,6 +285,52 @@ def load_spec(spec_dir):
     return rules, retired, errors, events
 
 
+def load_orders(spec_dir, errors):
+    """Returns (orders, outcomes). orders maps each operation to its numbered
+    checks in order, as (label, rule ID) pairs, from the check order blocks of
+    MANDATE.md. outcomes maps each rule to what its Error line says it can
+    return: the error names, whether Stellar fails it in the host instead
+    (authorization or a trap), and whether it hands off to per-item checks.
+    check-spec-ids.sh --check-order proves the blocks are well formed, so
+    this only reads them."""
+    orders, outcomes = {}, {}
+    fence, current, rule = False, None, None
+    for line in read_text(os.path.join(spec_dir, "MANDATE.md")).split("\n"):
+        if line.startswith("```"):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        heading = re.match(r"^#### ((?:MANDATE|CHAINOPS)-[A-Z]+-[0-9]{3}) ", line)
+        if heading:
+            rule = heading.group(1)
+            continue
+        if line.startswith("#"):
+            rule = None
+        if rule and line.startswith("- Error:"):
+            text = line[len("- Error:"):].strip()
+            outcomes[rule] = {
+                "names": [n for n in re.findall(r"`([A-Z][A-Z0-9_]*)`", text) if n in errors],
+                "host_auth": "host authorization failure" in text,
+                "host_abort": "host trap" in text,
+                "per_item": text.startswith("per item"),
+            }
+        opened = re.match(r"^<!-- check-order: ([a-z_]+) -->$", line)
+        if opened:
+            current = opened.group(1)
+            orders[current] = []
+            continue
+        if line == "<!-- /check-order -->":
+            current = None
+            continue
+        if current is not None:
+            step = re.match(r"^([0-9]+[a-z]?)\. ", line)
+            cited = re.findall(r"MANDATE-[A-Z]+-[0-9]{3}", line)
+            if step and cited:
+                orders[current].append((step.group(1), cited[0]))
+    return orders, outcomes
+
+
 def load_vectors(path):
     """Parses one file, reporting repeated keys and numbers that are not integers."""
     found = []
@@ -296,9 +411,12 @@ def event_names(expect):
 
 
 class Vector:
-    def __init__(self, path, index, data, spec, seen_ids):
+    def __init__(self, path, index, data, spec, seen_ids, orders):
         self.data = data
         self.rules, self.retired, self.errors, self.events = spec
+        self.orders, self.outcomes = orders
+        # Every (operation, earlier check, later check) this vector pins.
+        self.pins = []
         vid = data.get("id")
         self.id = vid if isinstance(vid, str) else "#%d" % (index + 1)
         self.where = "%s: vector %s" % (path, self.id)
@@ -501,6 +619,8 @@ class Vector:
         self.check_expect(expect, n)
         used = self.attestations_used(fn, args, n, attestations)
         self.check_overrides(step, fn, expect, used, n)
+        if "precedence" in step:
+            self.check_precedence(step.get("precedence"), fn, expect, n)
         token = args.get("token")
         if fn == "recover_token" and token in self.movers:
             stellar_transfer_failed = self.runs_on == {"stellar"} and expect.get("error") == "TRANSFER_FAILED"
@@ -650,6 +770,68 @@ class Vector:
         if not isinstance(signed_by, str) or signed_by == step.get("caller"):
             self.problem("expects a host_auth_failure, but the call is signed by its own caller; set signed_by to another actor", n)
 
+    def check_precedence(self, pin, fn, expect, n):
+        """A pin says this call fails two adjacent checks of its function's
+        check order and that the earlier one decides the outcome."""
+        if not (isinstance(pin, list) and len(pin) == 2 and all(isinstance(p, str) for p in pin)):
+            self.problem("precedence must name two checks, such as [\"3\", \"4\"]", n)
+            return
+        first, then = pin
+        if "error" not in expect:
+            self.problem("a precedence pin needs a call that is refused, with the error of the earlier check", n)
+            return
+        if fn not in self.orders:
+            self.problem("pins checks of %s, but %s has no check order in the spec" % (fn, fn), n)
+            return
+        labels = [label for label, _ in self.orders[fn]]
+        rule_at = dict(self.orders[fn])
+        for label in pin:
+            if label not in rule_at:
+                self.problem("pins %s check %s, but %s has no check %s" % (fn, label, fn, label), n)
+                return
+        if labels.index(then) != labels.index(first) + 1:
+            self.problem(
+                "pins %s checks %s and %s, but %s checks %s and %s are not adjacent; "
+                "a pin names a check and the one right after it" % (fn, first, then, fn, first, then),
+                n,
+            )
+            return
+        exempt = PRECEDENCE_EXEMPT.get((fn, first, then))
+        if exempt is not None and exempt[:2] == (rule_at[first], rule_at[then]):
+            self.problem("%s checks %s and %s can never fail together (%s), so no call can pin them" % (fn, first, then, exempt[2]), n)
+            return
+        for rid in (rule_at[first], rule_at[then]):
+            if rid not in self.cited:
+                self.problem("pins %s checks %s and %s, so it must cite %s" % (fn, first, then, rid), n)
+        outcome = self.outcomes.get(rule_at[first], {})
+        later = self.outcomes.get(rule_at[then], {})
+        where = "%s check %s (%s)" % (fn, first, rule_at[first])
+        error = expect.get("error")
+        names = outcome.get("names") or []
+        if names and error not in names:
+            self.problem(
+                "expects %s, but the earlier of the pinned checks, %s, returns %s" % (error, where, " or ".join(names)),
+                n,
+            )
+        if outcome.get("per_item") and error in (later.get("names") or []):
+            self.problem(
+                "expects %s, the error of %s check %s, but %s hands off to an item's own checks, whose error comes first"
+                % (error, fn, then, where),
+                n,
+            )
+        stellar = expect.get("per_chain", {}).get("stellar") if isinstance(expect.get("per_chain"), dict) else None
+        host = outcome.get("host_auth") or outcome.get("host_abort")
+        if "stellar" in self.runs_on:
+            if outcome.get("host_auth") and not (isinstance(stellar, dict) and "host_auth_failure" in stellar):
+                self.problem("%s fails host authorization on Stellar; expect per_chain stellar host_auth_failure" % where, n)
+            elif outcome.get("host_abort") and not (isinstance(stellar, dict) and "host_abort" in stellar):
+                self.problem("%s traps in the Stellar host; expect per_chain stellar host_abort" % where, n)
+            elif not host and isinstance(stellar, dict):
+                self.problem("expects a Stellar host failure, but %s is a mandate error on every chain" % where, n)
+        elif host and not names:
+            self.problem("%s fails only in the Stellar host, so the vector must run on stellar" % where, n)
+        self.pins.append((fn, first, then, error in names and error in (later.get("names") or [])))
+
 
 def rule_area(rid):
     return rid.split("-")[1]
@@ -699,8 +881,48 @@ def parity_gaps(fixture_path, vectors):
     return cases, gaps
 
 
+def precedence_gaps(spec_dir, orders, vectors):
+    """Returns (pairs, exempt, pinned, same_error, gaps): every adjacent pair
+    of every check order needs a pinned call, unless PRECEDENCE_EXEMPT names
+    it, and every exemption for an operation the spec has must still match
+    its two checks. same_error counts the pinned pairs whose two checks share
+    the error that was pinned, where only the code path shows the order."""
+    if not any(orders.values()):
+        fail_usage("--precedence needs check orders, and there are no check orders in %s" % os.path.join(spec_dir, "MANDATE.md"))
+    pinned, shared = set(), set()
+    for vector in vectors:
+        for fn, first, then, same in vector.pins:
+            pinned.add((fn, first, then))
+            if same:
+                shared.add((fn, first, then))
+    pairs, exempt, gaps = 0, [], []
+    for (fn, first, then), (rule_a, rule_b, _) in sorted(PRECEDENCE_EXEMPT.items()):
+        if fn not in orders:
+            continue
+        steps = orders[fn]
+        if not any(steps[i] == (first, rule_a) and steps[i + 1] == (then, rule_b) for i in range(len(steps) - 1)):
+            gaps.append(
+                "the precedence exemption for %s checks %s and %s (%s, %s) no longer matches the spec; "
+                "update or drop it in PRECEDENCE_EXEMPT in scripts/check-vectors.py" % (fn, first, then, rule_a, rule_b)
+            )
+    for fn in sorted(orders):
+        steps = orders[fn]
+        for (first, rule_a), (then, rule_b) in zip(steps, steps[1:]):
+            pairs += 1
+            entry = PRECEDENCE_EXEMPT.get((fn, first, then))
+            if entry is not None and entry[:2] == (rule_a, rule_b):
+                exempt.append("%s %s-%s" % (fn, first, then))
+            elif (fn, first, then) not in pinned:
+                gaps.append(
+                    "%s checks %s and %s (%s, then %s) have no precedence vector: no call fails both and gets the "
+                    "outcome of check %s" % (fn, first, then, rule_a, rule_b, first)
+                )
+    return pairs, exempt, len(pinned), len(shared), gaps
+
+
 def main(argv):
     spec_dir, require_all, areas, files, fixture = None, False, None, [], None
+    precedence = False
     args = iter(argv[1:])
     for arg in args:
         if arg == "--spec":
@@ -711,6 +933,8 @@ def main(argv):
                 fail_usage("--fixture needs the attestation parity fixture file")
         elif arg == "--require-all":
             require_all = True
+        elif arg == "--precedence":
+            precedence = True
         elif arg == "--areas":
             value = next(args, None) or ""
             areas = sorted({a for a in value.split(",") if a})
@@ -721,11 +945,12 @@ def main(argv):
         else:
             files.append(arg)
     if spec_dir is None or not files:
-        fail_usage("usage: check-vectors.py --spec DIR [--require-all | --areas A,B] [--fixture FILE] FILE...")
+        fail_usage("usage: check-vectors.py --spec DIR [--require-all | --areas A,B] [--fixture FILE] [--precedence] FILE...")
     if require_all and areas is not None:
         fail_usage("--require-all and --areas cannot be combined")
 
     spec = load_spec(spec_dir)
+    orders = load_orders(spec_dir, spec[2])
     seen_ids = {}
     vectors = []
     for path in files:
@@ -740,7 +965,7 @@ def main(argv):
         items = data.get("vectors")
         for index, item in enumerate(items if isinstance(items, list) else []):
             if isinstance(item, dict):
-                vector = Vector(path, index, item, spec, seen_ids)
+                vector = Vector(path, index, item, spec, seen_ids, orders)
                 vector.check()
                 vectors.append(vector)
 
@@ -754,6 +979,12 @@ def main(argv):
         cases, gaps = parity_gaps(fixture, vectors)
         for gap in gaps:
             report("parity", gap)
+    ordered = None
+    if precedence:
+        pairs, exempt, pinned, shared, gaps = precedence_gaps(spec_dir, orders[0], vectors)
+        ordered = (pairs, exempt, pinned, shared)
+        for gap in gaps:
+            report("precedence", gap)
     if problems:
         print("check-vectors: %d problem(s)" % problems, file=sys.stderr)
         return 1
@@ -778,6 +1009,16 @@ def main(argv):
         print(
             "parity: %d of %d case(s) in %s have a %s vector; %d exempt: %s"
             % (len(cases) - len(exempt), len(cases), fixture, PARITY_PREFIX + "<case>", len(exempt), ", ".join(exempt) or "none")
+        )
+    if ordered is not None:
+        pairs, exempt, pinned, shared = ordered
+        print(
+            "precedence: %d of %d adjacent pair(s) in %d check order(s) have a precedence vector; %d exempt: %s"
+            % (pairs - len(exempt), pairs, sum(1 for o in orders[0].values() if o), len(exempt), ", ".join(exempt) or "none")
+        )
+        print(
+            "precedence: in %d of the %d pinned pair(s) both checks return the error the pin expects, "
+            "so the vector shows that error, not which check produced it" % (shared, pinned)
         )
     return 0
 

@@ -221,7 +221,7 @@
     },
     {
       "id": "principal_accept_without_proposal_refused",
-      "rules": ["MANDATE-PRINCIPAL-003", "MANDATE-PRINCIPAL-005"],
+      "rules": ["MANDATE-PRINCIPAL-003", "MANDATE-PRINCIPAL-005", "MANDATE-PRINCIPAL-002"],
       "description": "accept_principal with no proposal is UNAUTHORIZED on every chain, before and after a proposal is cancelled.",
       "setup": {
         "now": "1767225600",
@@ -257,6 +257,7 @@
           "step": "call",
           "fn": "accept_principal",
           "caller": "new_principal",
+          "precedence": ["1", "2"],
           "expect": { "error": "UNAUTHORIZED", "events": [] }
         },
         {

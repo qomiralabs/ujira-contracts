@@ -417,7 +417,7 @@
     },
     {
       "id": "create_refuses_an_unsupported_asset",
-      "rules": ["MANDATE-ASSET-001", "MANDATE-CONFIG-004"],
+      "rules": ["MANDATE-ASSET-001", "MANDATE-CONFIG-004", "MANDATE-CONFIG-002"],
       "description": "Creating a mandate in a token the factory does not support is refused before any other check, and the same salt then works.",
       "setup": { "now": "1767225600" },
       "steps": [
@@ -485,6 +485,7 @@
             },
             "salt": "#salt"
           },
+          "precedence": ["2", "3"],
           "expect": { "error": "ASSET_NOT_SUPPORTED", "events": [] }
         },
         {
