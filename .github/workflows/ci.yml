@@ -460,10 +460,9 @@ jobs:
       # The mandate is built in parts, so this runs the vectors whose every
       # call the mandate already has. Each part that adds operations adds its
       # calls to MANDATE_CALLS, and the filter goes once every call exists.
-      # Until soroban/contracts/factory exists, creation goes through the
-      # runner's reference factory, which validates a configuration with the
-      # mandate's own shared function before it deploys, as the real factory
-      # must.
+      # Creation goes through the production factory in
+      # soroban/contracts/factory; the reference factory is only a fallback
+      # for a tree without it.
       - name: Run the shared vectors
         env:
           MANDATE_CALLS: create,version,config,state,payout,daily_used,is_allowed,request_payout,request_payouts,approve,reject,cancel,cancel_batch

@@ -38,11 +38,13 @@ Exit codes: 0 every selected vector that applies to the chain ran and passed; 1 
 
 The driver is the `vector-runner` crate in `soroban/vector-runner`. It registers the compiled factory and mandate wasm, never a native test contract, because the host reports some errors differently through a native contract than a network does. By default it reads `soroban/target/wasm32v1-none/release/ujira_factory.wasm` and `ujira_mandate.wasm`, as `scripts/soroban-build.sh` leaves them; `--factory-wasm` and `--mandate-wasm` point it elsewhere.
 
-Until the production factory exists, CI creates mandates through the test-only reference factory in `soroban/vector-runner/contracts/reference-factory`, which validates a configuration with the mandate's own shared validation (`soroban/crates/mandate-config`) before it deploys, as the real factory must, and runs only the vectors whose every call the mandate already implements:
+CI creates mandates through the production factory in `soroban/contracts/factory`, and while the mandate is built in parts it runs only the vectors whose every call the mandate already implements:
 
 ```sh
-tests/run --chain stellar --factory-wasm soroban/vector-runner/fixtures/vector_runner_reference_factory.wasm --only-calls create,version,config,state,payout,daily_used,is_allowed
+tests/run --chain stellar --only-calls create,version,config,state,payout,daily_used,is_allowed
 ```
+
+The test-only reference factory in `soroban/vector-runner/contracts/reference-factory` stays for the runner's self tests, which prove the runner without any production contract.
 
 For each vector it:
 
@@ -99,4 +101,4 @@ Lists are compared in order, role sets included. The vectors write a role set in
 
 `cargo test -p vector-runner` in `soroban/` proves the runner without the real mandate: comparator cases built from the shared vectors (`extra_event_fails`, `missing_event_fails`, `reordered_events_fail`, `invariant_violation_fails`, `only_calls_selects_matching_vectors`), runs against the test-only reference factory and mandate in `soroban/vector-runner/contracts` (`reference_contract_wrong_return_is_reported`, `token_error_is_never_read_as_a_mandate_error`, `runner_registers_wasm_only`), the token kinds, receiving states and clawback on the test host, and the attest step against every case of `spikes/attestation-parity/fixture.json`. The reference contracts are committed as wasm in `soroban/vector-runner/fixtures`, and `scripts/check-wasm-fixtures.sh` checks they match their source.
 
-The four Stellar only cases in `soroban/vector-runner/chain-specific/stellar.json` need the real contracts and are ignored until they exist: `cargo test -p vector-runner chain_specific -- --ignored`.
+The four Stellar only cases in `soroban/vector-runner/chain-specific/stellar.json` need the real contracts, built first with `scripts/soroban-build.sh`. `chain_create_invalid_config_returns_the_contract_code` runs with the rest of the self tests; the other three are ignored until the mandate calls they use exist: `cargo test -p vector-runner chain_specific -- --ignored`.

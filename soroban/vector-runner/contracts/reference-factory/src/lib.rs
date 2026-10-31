@@ -11,8 +11,9 @@
 //! derived from the principal and the salt, and `mandate_created` comes
 //! before the mandate's own `mandate_initialized`.
 //!
-//! Until the production factory exists, CI also runs the shared creation
-//! vectors through this stand-in against the real mandate wasm.
+//! The runner's self tests use it so the runner is proven without any
+//! production contract. The shared vectors run against the production
+//! factory in `soroban/contracts/factory`.
 
 #![no_std]
 
