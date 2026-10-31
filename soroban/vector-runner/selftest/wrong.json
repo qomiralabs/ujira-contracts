@@ -1,0 +1,130 @@
+{
+  "format": "ujira-mandate-vectors/1",
+  "description": "Self test vectors the reference mandate answers wrongly on purpose. The runner must fail each one and say where.",
+  "vectors": [
+    {
+      "id": "reference_wrong_version",
+      "rules": [
+        "MANDATE-CONFIG-011"
+      ],
+      "description": "version() must be 1; the reference answers 2.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        }
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "state",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "version",
+          "caller": "principal",
+          "expect": {
+            "ok": true,
+            "return": 1,
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "reference_token_error_escapes",
+      "rules": [
+        "MANDATE-PAYOUT-013"
+      ],
+      "description": "A failed withdraw transfer must be TRANSFER_FAILED; the reference lets the token's own code 11 escape.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_ref": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "500",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "1000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "set_receiving",
+          "token": "asset",
+          "account": "principal",
+          "state": "deauthorized"
+        },
+        {
+          "step": "call",
+          "fn": "withdraw",
+          "caller": "principal",
+          "args": {
+            "amount": "100"
+          },
+          "expect": {
+            "error": "TRANSFER_FAILED",
+            "events": []
+          }
+        }
+      ]
+    }
+  ]
+}

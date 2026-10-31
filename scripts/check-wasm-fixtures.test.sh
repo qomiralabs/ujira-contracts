@@ -80,6 +80,10 @@ new_repo differ
 fixture soroban/spikes/probe/fixtures/probe_child.wasm "old bytes"
 STUB_BYTES="new bytes" expect "fixture that drifted" 1 "soroban/spikes/probe/fixtures/probe_child.wasm" "probe-child"
 
+new_repo runner
+fixture soroban/vector-runner/fixtures/probe_token.wasm "old bytes"
+STUB_BYTES="new bytes" expect "vector runner fixture that drifted" 1 "soroban/vector-runner/fixtures/probe_token.wasm" "probe-token"
+
 new_repo build_fails
 fixture soroban/spikes/probe/fixtures/probe_child.wasm "bytes"
 STUB_FAIL=1 STUB_BYTES="bytes" expect "build failure" 2 "stub build failed"

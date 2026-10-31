@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Qomira Labs
+#
+# Compares a trace written by tests/run with the vectors it ran, or two
+# traces with each other step by step. tests/README.md describes both.
+#
+# Usage: tests/compare TRACE [--files a.json,b.json]
+#        tests/compare TRACE_A TRACE_B
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cwd="$PWD"
+cd "$root/soroban"
+exec cargo run --quiet --locked -p vector-runner --bin vector-compare -- --cwd "$cwd" "$@"

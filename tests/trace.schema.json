@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UJIRA mandate vector trace, format ujira-mandate-trace/1",
+  "description": "What one run of the shared vectors did on one chain, written by tests/run and read by tests/compare. Values use the vector format's written forms: actor names, labels or 0x hex for 32-byte values, decimal strings for amounts and times, names for statuses and errors, and { address, tag } for destinations. tests/README.md explains every field.",
+  "type": "object",
+  "properties": {
+    "format": { "const": "ujira-mandate-trace/1" },
+    "chain": { "enum": ["stellar", "celo"] },
+    "contracts": {
+      "description": "The compiled contracts the run registered, or null when they were not built.",
+      "type": ["object", "null"],
+      "properties": {
+        "factory_wasm_sha256": { "$ref": "#/$defs/hex32" },
+        "mandate_wasm_sha256": { "$ref": "#/$defs/hex32" }
+      },
+      "required": ["factory_wasm_sha256", "mandate_wasm_sha256"],
+      "additionalProperties": false
+    },
+    "vectors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/vector" }
+    }
+  },
+  "required": ["format", "chain", "contracts", "vectors"],
+  "additionalProperties": false,
+  "$defs": {
+    "hex32": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "decimal": { "type": "string", "pattern": "^(0|-?[1-9][0-9]*)$" },
+    "text": { "type": "string" },
+    "unrun": {
+      "description": "A vector that did not run: skipped because it does not apply to the chain, or not runnable yet because the contract wasm is not built. Never a pass.",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "file": { "$ref": "#/$defs/text" },
+        "status": { "enum": ["skipped", "not_runnable", "aborted"] },
+        "reason": { "$ref": "#/$defs/text" }
+      },
+      "required": ["id", "file", "status", "reason"],
+      "additionalProperties": false
+    },
+    "ran": {
+      "description": "A vector that ran, completely or until it was aborted.",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "file": { "$ref": "#/$defs/text" },
+        "status": { "enum": ["ran", "aborted"] },
+        "reason": { "$ref": "#/$defs/text" },
+        "actors": {
+          "description": "The address each name stood for in this run.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "setup_state": { "$ref": "#/$defs/state_or_null" },
+        "setup_state_errors": { "$ref": "#/$defs/messages" },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
+      },
+      "required": ["id", "file", "status", "actors", "setup_state", "steps"],
+      "additionalProperties": false,
+      "if": { "properties": { "status": { "const": "aborted" } } },
+      "then": { "required": ["reason"] }
+    },
+    "vector": {
+      "type": "object",
+      "required": ["status"],
+      "if": { "properties": { "status": { "enum": ["skipped", "not_runnable"] } } },
+      "then": { "$ref": "#/$defs/unrun" },
+      "else": {
+        "if": { "required": ["steps"] },
+        "then": { "$ref": "#/$defs/ran" },
+        "else": { "$ref": "#/$defs/unrun" }
+      }
+    },
+    "messages": { "type": "array", "items": { "type": "string" } },
+    "step": {
+      "description": "The vector's step as written, without its expect, plus what happened.",
+      "type": "object",
+      "properties": {
+        "step": { "enum": ["call", "advance_time", "set_time", "transfer", "mint", "attest", "set_receiving", "clawback"] },
+        "index": { "description": "1-based position in the vector.", "type": "integer", "minimum": 1 },
+        "now": { "description": "The ledger time after the step.", "$ref": "#/$defs/decimal" },
+        "result": { "$ref": "#/$defs/result" },
+        "events": {
+          "description": "Every event the mandate and the factory emitted, in order, in canonical form.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/event" }
+        },
+        "token_events": {
+          "description": "Every event a token emitted, in order, by token and name only.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "token": { "enum": ["asset", "other_token"] },
+              "name": { "type": "string" }
+            },
+            "required": ["token", "name"],
+            "additionalProperties": false
+          }
+        },
+        "attestation": {
+          "description": "What an attest step made.",
+          "type": "object",
+          "properties": {
+            "name": { "$ref": "#/$defs/name" },
+            "valid_until": { "$ref": "#/$defs/decimal" },
+            "policy_epoch": { "$ref": "#/$defs/decimal" },
+            "signature": { "type": "string", "pattern": "^0x([0-9a-f]{2})*$" }
+          },
+          "required": ["name", "valid_until", "policy_epoch", "signature"],
+          "additionalProperties": false
+        },
+        "decode_errors": { "$ref": "#/$defs/messages" },
+        "state": { "$ref": "#/$defs/state_or_null" },
+        "state_errors": { "$ref": "#/$defs/messages" }
+      },
+      "required": ["step", "index", "now", "state"],
+      "allOf": [
+        {
+          "if": { "properties": { "step": { "const": "call" } } },
+          "then": { "required": ["fn", "caller", "result", "events", "token_events"] }
+        },
+        {
+          "if": { "properties": { "step": { "const": "transfer" } } },
+          "then": { "required": ["events", "token_events"] }
+        },
+        {
+          "if": { "properties": { "step": { "const": "attest" } } },
+          "then": { "required": ["attestation"] }
+        }
+      ]
+    },
+    "result": {
+      "description": "How a call ended: success with its return value, a mandate or factory error by name, or a host outcome that is no contract's error.",
+      "type": "object",
+      "oneOf": [
+        {
+          "properties": { "ok": { "const": true }, "return": true },
+          "required": ["ok", "return"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "error": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" } },
+          "required": ["error"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "host_auth_failure": { "const": true } },
+          "required": ["host_auth_failure"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "host_abort": { "type": "string" } },
+          "required": ["host_abort"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "host_error": { "type": "string" } },
+          "required": ["host_error"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "host_panic": { "type": "string" } },
+          "required": ["host_panic"],
+          "additionalProperties": false
+        },
+        {
+          "description": "An error code another contract raised that escaped the called contract. It is the other contract's number, never a mandate error.",
+          "properties": {
+            "escaped_error": {
+              "type": "object",
+              "properties": {
+                "from": { "type": "string" },
+                "code": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["from", "code"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["escaped_error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "fields": { "type": "object" }
+      },
+      "required": ["name", "fields"],
+      "additionalProperties": false
+    },
+    "state_or_null": {
+      "description": "null until the mandate exists.",
+      "type": ["object", "null"],
+      "if": { "type": "object" },
+      "then": { "$ref": "#/$defs/state" }
+    },
+    "state": {
+      "description": "The mandate's views, every payout and recipient the vector names, and every holder's balance of both tokens.",
+      "type": "object",
+      "properties": {
+        "mandate": { "type": "object" },
+        "payouts": {
+          "type": "object",
+          "additionalProperties": { "type": ["object", "null"] }
+        },
+        "balances": {
+          "type": "object",
+          "propertyNames": { "enum": ["asset", "other_token"] },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/decimal" }
+          }
+        },
+        "daily": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "day": { "$ref": "#/$defs/decimal" },
+              "used": { "$ref": "#/$defs/decimal" }
+            }
+          }
+        }
+      },
+      "required": ["mandate", "payouts", "balances", "daily"],
+      "additionalProperties": false
+    }
+  }
+}
