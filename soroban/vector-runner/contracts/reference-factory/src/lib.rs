@@ -2,53 +2,26 @@
 // Copyright 2026 Qomira Labs
 
 //! Test only, never deployed. A stand-in for the mandate factory that the
-//! vector runner's self tests drive. It takes the constructor arguments and
-//! answers `create` the way the runner expects the real factory to: the
-//! principal authorizes, an unsupported asset is refused with the shared
-//! code, the mandate lands at the address derived from the principal and the
-//! salt, and `mandate_created` comes before the mandate's own
-//! `mandate_initialized`.
+//! vector runner drives. It takes the constructor arguments and answers
+//! `create` the way the runner expects the real factory to: the principal
+//! authorizes, an unsupported asset is refused with the shared code, the
+//! configuration is validated with the mandate's own shared validation before
+//! anything is deployed, so a refused configuration returns the mandate's
+//! code rather than a generic host error, the mandate lands at the address
+//! derived from the principal and the salt, and `mandate_created` comes
+//! before the mandate's own `mandate_initialized`.
+//!
+//! Until the production factory exists, CI also runs the shared creation
+//! vectors through this stand-in against the real mandate wasm.
 
 #![no_std]
 
+use mandate_config::MandateConfig;
 use mandate_errors::MandateError as Error;
 use soroban_sdk::{
     contract, contractevent, contractimpl, contracttype, panic_with_error, xdr::ToXdr, Address,
     Bytes, BytesN, ContractExecutable, Env, Vec,
 };
-
-/// Same shape as the mandate's, repeated here so each stand-in builds to a
-/// wasm of its own.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Limits {
-    pub total_budget: i128,
-    pub per_payment_cap: i128,
-    pub per_recipient_daily_cap: i128,
-    pub approval_threshold: i128,
-    pub payout_ttl_seconds: u64,
-    pub expires_at: u64,
-}
-
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MandateConfig {
-    pub principal: Address,
-    pub asset: Address,
-    pub recipient_mode: u32,
-    pub tenant_ref: BytesN<32>,
-    pub agents: Vec<Address>,
-    pub approvers: Vec<Address>,
-    pub approvals_required: u32,
-    pub guardians: Vec<Address>,
-    pub executors: Vec<Address>,
-    pub recovery: Vec<Address>,
-    pub recovery_threshold: u32,
-    pub limits: Limits,
-    pub attester: Option<Bytes>,
-    pub country_policy_hash: BytesN<32>,
-    pub max_fee_bps: u32,
-}
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -98,6 +71,9 @@ impl ReferenceFactory {
         }
         let wasm: BytesN<32> = load(&env, &Key::MandateWasm);
         let fee_address: Address = load(&env, &Key::FeeAddress);
+        // Validated before the deploy: a constructor error would reach the
+        // caller only as a generic host error.
+        mandate_config::validate(&env, &config, &fee_address)?;
         // Two principals can pick the same salt, so the principal is part of
         // what the address is derived from.
         let mut seed: Bytes = config.principal.clone().to_xdr(&env);
