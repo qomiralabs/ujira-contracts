@@ -1,0 +1,126 @@
+{
+  "description": "Edge inputs of the fee cap, floor(total * max_fee_bps / 10000), with the exact expected result. Amounts are decimal strings because they do not fit a JSON number exactly.",
+  "rule": "MANDATE-FEE-002",
+  "cases": [
+    {
+      "total": "1",
+      "max_fee_bps": 0,
+      "fee_cap": "0"
+    },
+    {
+      "total": "1",
+      "max_fee_bps": 1,
+      "fee_cap": "0"
+    },
+    {
+      "total": "1",
+      "max_fee_bps": 99,
+      "fee_cap": "0"
+    },
+    {
+      "total": "1",
+      "max_fee_bps": 100,
+      "fee_cap": "0"
+    },
+    {
+      "total": "9999",
+      "max_fee_bps": 0,
+      "fee_cap": "0"
+    },
+    {
+      "total": "9999",
+      "max_fee_bps": 1,
+      "fee_cap": "0"
+    },
+    {
+      "total": "9999",
+      "max_fee_bps": 99,
+      "fee_cap": "98"
+    },
+    {
+      "total": "9999",
+      "max_fee_bps": 100,
+      "fee_cap": "99"
+    },
+    {
+      "total": "10000",
+      "max_fee_bps": 0,
+      "fee_cap": "0"
+    },
+    {
+      "total": "10000",
+      "max_fee_bps": 1,
+      "fee_cap": "1"
+    },
+    {
+      "total": "10000",
+      "max_fee_bps": 99,
+      "fee_cap": "99"
+    },
+    {
+      "total": "10000",
+      "max_fee_bps": 100,
+      "fee_cap": "100"
+    },
+    {
+      "total": "10001",
+      "max_fee_bps": 0,
+      "fee_cap": "0"
+    },
+    {
+      "total": "10001",
+      "max_fee_bps": 1,
+      "fee_cap": "1"
+    },
+    {
+      "total": "10001",
+      "max_fee_bps": 99,
+      "fee_cap": "99"
+    },
+    {
+      "total": "10001",
+      "max_fee_bps": 100,
+      "fee_cap": "100"
+    },
+    {
+      "total": "170141183460469231731687303715884105726",
+      "max_fee_bps": 0,
+      "fee_cap": "0"
+    },
+    {
+      "total": "170141183460469231731687303715884105726",
+      "max_fee_bps": 1,
+      "fee_cap": "17014118346046923173168730371588410"
+    },
+    {
+      "total": "170141183460469231731687303715884105726",
+      "max_fee_bps": 99,
+      "fee_cap": "1684397716258645394143704306787252646"
+    },
+    {
+      "total": "170141183460469231731687303715884105726",
+      "max_fee_bps": 100,
+      "fee_cap": "1701411834604692317316873037158841057"
+    },
+    {
+      "total": "170141183460469231731687303715884105727",
+      "max_fee_bps": 0,
+      "fee_cap": "0"
+    },
+    {
+      "total": "170141183460469231731687303715884105727",
+      "max_fee_bps": 1,
+      "fee_cap": "17014118346046923173168730371588410"
+    },
+    {
+      "total": "170141183460469231731687303715884105727",
+      "max_fee_bps": 99,
+      "fee_cap": "1684397716258645394143704306787252646"
+    },
+    {
+      "total": "170141183460469231731687303715884105727",
+      "max_fee_bps": 100,
+      "fee_cap": "1701411834604692317316873037158841057"
+    }
+  ]
+}

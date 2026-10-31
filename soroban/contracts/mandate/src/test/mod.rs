@@ -17,6 +17,7 @@ mod attestation;
 mod cancel;
 mod constructor;
 mod execute;
+mod fee_cap_property;
 mod interface;
 mod lifecycle;
 mod recovery;
