@@ -38,10 +38,10 @@ Exit codes: 0 every selected vector that applies to the chain ran and passed; 1 
 
 The driver is the `vector-runner` crate in `soroban/vector-runner`. It registers the compiled factory and mandate wasm, never a native test contract, because the host reports some errors differently through a native contract than a network does. By default it reads `soroban/target/wasm32v1-none/release/ujira_factory.wasm` and `ujira_mandate.wasm`, as `scripts/soroban-build.sh` leaves them; `--factory-wasm` and `--mandate-wasm` point it elsewhere.
 
-CI creates mandates through the production factory in `soroban/contracts/factory`, and while the mandate is built in parts it runs only the vectors whose every call the mandate already implements:
+CI creates mandates through the production factory in `soroban/contracts/factory` and runs every vector:
 
 ```sh
-tests/run --chain stellar --only-calls create,version,config,state,payout,daily_used,is_allowed
+tests/run --chain stellar
 ```
 
 The test-only reference factory in `soroban/vector-runner/contracts/reference-factory` stays for the runner's self tests, which prove the runner without any production contract.
@@ -53,6 +53,7 @@ For each vector it:
 - issues `asset` as a Stellar Asset Contract whose issuer can freeze and claw back, and `other_token` as a second Stellar Asset Contract, or as the test token in `soroban/vector-runner/contracts/test-token` for the `moves_settlement` and `returns_value` kinds; every account starts with an authorized trustline for both;
 - registers the factory with the mandate's wasm hash, the supported asset and `fee_address`, and creates the setup's mandate through `create`, signed by the principal;
 - signs every call with the real key of its signer (`signed_by`, or the caller) over the exact invocation, so a call signed by the wrong actor fails host authorization as it would on a network; views carry no authorization;
+- lifts the test host's own invocation limits, because the authorization snapshot the test host records for a large batch can exhaust them after the contract has finished, and instead checks every call against the per-transaction network limits (instructions, memory, disk reads, writes, footprint and event bytes), recording a call over any of them as a `host_error` that starts with `Budget.ExceededLimit`;
 - passes a tagged destination as the muxed `M` address of the account and tag;
 - makes attestations with the version 2 message and the tamper kinds of the vector format, with the label `#name` naming the test key whose seed is the label's bytes;
 - applies `set_receiving` by writing the account's trustline (removing one rebuilds the environment without it, since the test host has no call that deletes an entry), and `clawback` through the asset's `clawback`.
@@ -101,4 +102,4 @@ Lists are compared in order, role sets included. The vectors write a role set in
 
 `cargo test -p vector-runner` in `soroban/` proves the runner without the real mandate: comparator cases built from the shared vectors (`extra_event_fails`, `missing_event_fails`, `reordered_events_fail`, `invariant_violation_fails`, `only_calls_selects_matching_vectors`), runs against the test-only reference factory and mandate in `soroban/vector-runner/contracts` (`reference_contract_wrong_return_is_reported`, `token_error_is_never_read_as_a_mandate_error`, `runner_registers_wasm_only`), the token kinds, receiving states and clawback on the test host, and the attest step against every case of `spikes/attestation-parity/fixture.json`. The reference contracts are committed as wasm in `soroban/vector-runner/fixtures`, and `scripts/check-wasm-fixtures.sh` checks they match their source.
 
-The four Stellar only cases in `soroban/vector-runner/chain-specific/stellar.json` need the real contracts, built first with `scripts/soroban-build.sh`. `chain_create_invalid_config_returns_the_contract_code` runs with the rest of the self tests; the other three are ignored until the mandate calls they use exist: `cargo test -p vector-runner chain_specific -- --ignored`.
+The four Stellar only cases in `soroban/vector-runner/chain-specific/stellar.json` need the real contracts, built first with `scripts/soroban-build.sh`, and run with the rest of the self tests: `cargo test -p vector-runner chain_specific`.

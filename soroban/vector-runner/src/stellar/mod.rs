@@ -214,9 +214,89 @@ pub fn to_address(env: &Env, a: &ScAddress) -> Result<Address> {
         .map_err(|e| format!("cannot use the address {a:?}: {e:?}"))
 }
 
+/// Per-transaction limits of the network, read from `stellar network
+/// settings`; testnet and mainnet agree on every one. A call over any of
+/// them would never land, so the runner reports it as a host error.
+pub struct NetworkLimits;
+impl NetworkLimits {
+    pub const INSTRUCTIONS: i64 = 400_000_000;
+    pub const MEMORY: i64 = 41_943_040;
+    pub const DISK_READ_ENTRIES: u32 = 200;
+    pub const DISK_READ_BYTES: u32 = 200_000;
+    pub const WRITE_ENTRIES: u32 = 200;
+    pub const WRITE_BYTES: u32 = 132_096;
+    pub const FOOTPRINT_ENTRIES: u32 = 400;
+    pub const EVENTS_BYTES: u32 = 16_384;
+}
+
+/// Lifts the test host's own invocation limits. A signed call records an
+/// authorization snapshot that a network never builds, and with a large
+/// batch the snapshot alone runs the host out of budget after the contract
+/// has finished. The network's limits are checked by hand instead, in
+/// `over_network_limit`, against what the call itself used.
+pub fn lift_host_limits(env: &Env) {
+    env.cost_estimate().disable_resource_limits();
+}
+
+/// The first network limit the last invocation went over, if any.
+pub fn over_network_limit(env: &Env) -> Option<String> {
+    let r = env.host().get_last_invocation_resources()?;
+    let checks = [
+        ("instructions", r.instructions, NetworkLimits::INSTRUCTIONS),
+        ("memory", r.mem_bytes, NetworkLimits::MEMORY),
+        (
+            "disk_read_entries",
+            r.disk_read_entries.into(),
+            NetworkLimits::DISK_READ_ENTRIES.into(),
+        ),
+        (
+            "disk_read_bytes",
+            r.disk_read_bytes.into(),
+            NetworkLimits::DISK_READ_BYTES.into(),
+        ),
+        (
+            "write_entries",
+            r.write_entries.into(),
+            NetworkLimits::WRITE_ENTRIES.into(),
+        ),
+        (
+            "write_bytes",
+            r.write_bytes.into(),
+            NetworkLimits::WRITE_BYTES.into(),
+        ),
+        (
+            "footprint_entries",
+            i64::from(r.disk_read_entries) + i64::from(r.memory_read_entries),
+            NetworkLimits::FOOTPRINT_ENTRIES.into(),
+        ),
+        (
+            "contract_events_size_bytes",
+            r.contract_events_size_bytes.into(),
+            NetworkLimits::EVENTS_BYTES.into(),
+        ),
+    ];
+    checks
+        .iter()
+        .find(|(_, used, limit)| used > limit)
+        .map(|(name, used, limit)| format!("Budget.ExceededLimit: {name} {used} of {limit}"))
+}
+
 /// Calls `fn_name` on `target` with whatever authorization the env holds,
 /// and says how it ended.
 pub fn call(env: &Env, target: &ScAddress, fn_name: &str, args: &[ScVal]) -> Result<Outcome> {
+    let outcome = call_unchecked(env, target, fn_name, args)?;
+    if matches!(outcome, Outcome::Panic(_)) {
+        return Ok(outcome);
+    }
+    // A call that needed more than a transaction may use would not land,
+    // whatever the contract answered.
+    Ok(match over_network_limit(env) {
+        Some(text) => Outcome::HostError(text),
+        None => outcome,
+    })
+}
+
+fn call_unchecked(env: &Env, target: &ScAddress, fn_name: &str, args: &[ScVal]) -> Result<Outcome> {
     let addr = to_address(env, target)?;
     let mut vals = soroban_sdk::Vec::<Val>::new(env);
     for a in args {
@@ -508,6 +588,7 @@ impl<'a> World<'a> {
         let env = Env::new_with_config(EnvTestConfig {
             capture_snapshot_at_drop: false,
         });
+        lift_host_limits(&env);
         let network_id = sha256(NETWORK_PASSPHRASE.as_bytes());
         env.ledger().with_mut(|li| {
             li.timestamp = now;
@@ -962,6 +1043,7 @@ impl<'a> World<'a> {
         env.set_config(EnvTestConfig {
             capture_snapshot_at_drop: false,
         });
+        lift_host_limits(&env);
         env.ledger().set(info);
         // Native contracts live in the host, not in the ledger, so the mock
         // account contracts of contract actors are registered again.

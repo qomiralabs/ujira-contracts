@@ -1129,6 +1129,7 @@
       "description": "With I128_MAX - 1 spent and 1 committed of an I128_MAX budget, charges of 1 and I128_MAX are BUDGET_EXCEEDED, never an overflow.",
       "setup": {
         "now": "1767225600",
+        "actors": { "bob": { "kind": "contract" } },
         "mandate": {
           "principal": "principal",
           "asset": "asset",

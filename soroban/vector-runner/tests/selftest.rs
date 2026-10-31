@@ -431,9 +431,7 @@ fn token_kinds_and_receiving_on_the_test_host() {
 }
 
 /// The chain-specific acceptance tests need the real factory and mandate,
-/// built first by `scripts/soroban-build.sh`. A case whose mandate calls do
-/// not exist yet is ignored, never passed: run those with
-/// `cargo test -p vector-runner chain_specific -- --ignored`.
+/// built first by `scripts/soroban-build.sh`.
 fn chain_specific(id: &str) {
     let opts = Options {
         chain: String::from("stellar"),
@@ -452,13 +450,11 @@ fn chain_specific(id: &str) {
 }
 
 #[test]
-#[ignore = "needs the mandate and factory wasm, which #31 to #34 build"]
 fn chain_specific_revoke_without_trustline() {
     chain_specific("chain_revoke_without_trustline_moves_nothing");
 }
 
 #[test]
-#[ignore = "needs the mandate and factory wasm, which #31 to #34 build"]
 fn chain_specific_two_leg_execute_second_leg_fails() {
     chain_specific("chain_two_leg_execute_second_leg_fails_leaves_first_unpaid");
 }
@@ -469,7 +465,6 @@ fn chain_specific_create_invalid_config_returns_contract_code() {
 }
 
 #[test]
-#[ignore = "needs the mandate and factory wasm, which #31 to #34 build"]
 fn chain_specific_archived_payout_record_exists() {
     chain_specific("chain_archived_payout_record_returns_payout_id_exists");
 }

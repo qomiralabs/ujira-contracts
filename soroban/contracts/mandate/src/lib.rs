@@ -20,14 +20,23 @@
 //! - `payout`: requests, approvals, rejections and cancels.
 //! - `execute`: paying approved payouts, alone or in an atomic batch.
 //! - `attest`: recipient attestations and the message the attester signs.
+//! - `lifecycle`: pause, resume, revoke, withdraw, sweep and token recovery.
+//! - `admin`: limits, roles, the allowlist, the attestation policy, the
+//!   principal transfer and the fee cap.
+//! - `recovery`: the recovery set's votes to revoke or rotate an agent.
+//!
+//! The last three each declare their own entry points next to their logic.
 
 #![no_std]
 
+pub mod admin;
 pub mod attest;
 pub mod derived;
 pub mod events;
 pub mod execute;
+pub mod lifecycle;
 pub mod payout;
+pub mod recovery;
 pub mod storage;
 pub mod types;
 

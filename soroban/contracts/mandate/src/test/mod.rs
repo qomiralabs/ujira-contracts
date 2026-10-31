@@ -11,11 +11,15 @@
 
 extern crate std;
 
+mod admin;
 mod approval;
 mod attestation;
 mod cancel;
 mod constructor;
 mod execute;
+mod interface;
+mod lifecycle;
+mod recovery;
 mod request;
 mod storage_ttl;
 mod views;

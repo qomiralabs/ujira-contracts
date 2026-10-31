@@ -70,7 +70,7 @@ pub(crate) fn ensure_active(env: &Env, now: u64) -> Result<(), MandateError> {
     Ok(())
 }
 
-fn ensure_not_revoked(env: &Env) -> Result<(), MandateError> {
+pub(crate) fn ensure_not_revoked(env: &Env) -> Result<(), MandateError> {
     if storage::flags(env)?.revoked {
         return Err(MandateError::MandateRevoked);
     }

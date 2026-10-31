@@ -356,6 +356,7 @@
       "description": "A total of 10^38 + 9999 at 100 bps, where total times bps would overflow i128, has a cap of 10^36 + 99, and a fee at that cap is paid.",
       "setup": {
         "now": "1767225600",
+        "actors": { "bob": { "kind": "contract" }, "fee_address": { "kind": "contract" } },
         "mandate": {
           "principal": "principal",
           "asset": "asset",
@@ -3727,6 +3728,7 @@
       "description": "A total of I128_MAX minus 1 with a fee of 1 charges exactly I128_MAX, is approved and paid, and spent reaches I128_MAX.",
       "setup": {
         "now": "1767225600",
+        "actors": { "bob": { "kind": "contract" } },
         "mandate": {
           "principal": "principal",
           "asset": "asset",
