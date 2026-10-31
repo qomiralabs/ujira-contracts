@@ -1,0 +1,6 @@
+[
+  { "name": "UNAUTHORIZED", "code": 10, "summary": "The caller does not hold a role this call allows" },
+  { "name": "MANDATE_REVOKED", "code": 20, "summary": "The mandate is revoked" },
+  { "name": "ALREADY_PAUSED", "code": 23, "summary": "Pause while paused" },
+  { "name": "CONFIG_INVALID", "code": 34, "summary": "A configuration value or change is not allowed" }
+]

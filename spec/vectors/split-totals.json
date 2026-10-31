@@ -867,7 +867,7 @@
     },
     {
       "id": "split_duplicate_destination_refused",
-      "rules": ["MANDATE-SPLIT-005"],
+      "rules": ["MANDATE-SPLIT-005", "MANDATE-SPLIT-006"],
       "description": "Two legs to bob with no tag are LEGS_INVALID, adjacent or not and before the sum check; bob and exchange are allowed.",
       "setup": {
         "now": "1767225600",
@@ -968,6 +968,7 @@
               "attestations": []
             }
           },
+          "precedence": ["14", "15"],
           "expect": { "error": "LEGS_INVALID", "events": [] }
         },
         {

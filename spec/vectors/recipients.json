@@ -1091,6 +1091,7 @@
               "attestations": ["a1"]
             }
           },
+          "precedence": ["18", "19"],
           "expect": { "error": "RECIPIENT_NOT_ALLOWED", "events": [] }
         },
         {
@@ -1483,6 +1484,7 @@
           "fn": "execute",
           "caller": "agent",
           "args": { "payout_id": "#p1" },
+          "precedence": ["12", "13"],
           "expect": { "error": "RECIPIENT_NOT_ALLOWED", "events": [] }
         },
         {

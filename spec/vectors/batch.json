@@ -1086,7 +1086,7 @@
     },
     {
       "id": "batch_request_call_checks_come_first",
-      "rules": ["MANDATE-BATCH-001", "MANDATE-BATCH-002"],
+      "rules": ["MANDATE-BATCH-001", "MANDATE-BATCH-002", "MANDATE-PAUSE-001"],
       "description": "The caller, pause and length checks refuse the whole request batch before any item runs, so no item emits anything.",
       "setup": {
         "now": "1767225600",
@@ -1152,6 +1152,7 @@
           "fn": "request_payouts",
           "caller": "agent",
           "args": { "reqs": [] },
+          "precedence": ["5", "6"],
           "expect": { "error": "MANDATE_PAUSED", "events": [] }
         },
         {
@@ -2421,6 +2422,7 @@
           "fn": "cancel_batch",
           "caller": "principal",
           "args": { "ids": [] },
+          "precedence": ["2", "3"],
           "expect": { "error": "MANDATE_REVOKED", "events": [] }
         },
         {
@@ -6116,6 +6118,7 @@
           "fn": "execute_batch",
           "caller": "agent",
           "args": { "ids": ["#p1", "#p2", "#p3", "#p4", "#p5", "#p6", "#p7", "#p8", "#p9", "#p10"] },
+          "precedence": ["7", "8"],
           "expect": { "error": "PAYOUT_WRONG_STATUS", "events": [] }
         },
         {
@@ -6146,7 +6149,7 @@
     },
     {
       "id": "batch_execute_call_checks_come_first",
-      "rules": ["MANDATE-BATCH-004", "MANDATE-BATCH-005"],
+      "rules": ["MANDATE-BATCH-004", "MANDATE-BATCH-005", "MANDATE-PAUSE-001"],
       "description": "The caller, pause and length checks refuse the whole execute batch before any item runs.",
       "setup": {
         "now": "1767225600",
@@ -6236,6 +6239,7 @@
           "fn": "execute_batch",
           "caller": "agent",
           "args": { "ids": [] },
+          "precedence": ["5", "6"],
           "expect": { "error": "MANDATE_PAUSED", "events": [] }
         },
         {

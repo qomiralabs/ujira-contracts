@@ -2413,7 +2413,7 @@
     },
     {
       "id": "config_allowlist_in_attested_mode_refused",
-      "rules": ["MANDATE-CONFIG-001", "MANDATE-RECIPIENT-016"],
+      "rules": ["MANDATE-CONFIG-001", "MANDATE-RECIPIENT-016", "MANDATE-BATCH-007"],
       "description": "An ATTESTED mandate keeps its mode: allow and disallow are WRONG_RECIPIENT_MODE, checked before the entry count.",
       "setup": {
         "now": "1767225600",
@@ -2470,6 +2470,7 @@
               { "recipient_ref": "#rcpt11", "destination": { "address": "payee11", "tag": null } }
             ]
           },
+          "precedence": ["3", "4"],
           "expect": { "error": "WRONG_RECIPIENT_MODE", "events": [] }
         },
         {

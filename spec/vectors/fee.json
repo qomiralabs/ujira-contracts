@@ -129,7 +129,7 @@
     },
     {
       "id": "fee_one_unit_over_cap_refused",
-      "rules": ["MANDATE-FEE-001", "MANDATE-FEE-002", "MANDATE-FEE-003"],
+      "rules": ["MANDATE-FEE-001", "MANDATE-FEE-002", "MANDATE-FEE-003", "MANDATE-PAYMENT-001"],
       "description": "A fee one unit over its cap is FEE_EXCEEDS_CAP for small and huge totals, before the per payment cap, and the same IDs pass at the cap.",
       "setup": {
         "now": "1767225600",
@@ -218,6 +218,7 @@
               "attestations": []
             }
           },
+          "precedence": ["24", "25"],
           "expect": { "error": "FEE_EXCEEDS_CAP", "events": [] }
         },
         {
@@ -3205,6 +3206,7 @@
           "fn": "execute",
           "caller": "agent",
           "args": { "payout_id": "#p1" },
+          "precedence": ["10", "11"],
           "expect": { "error": "FEE_EXCEEDS_CAP", "events": [] }
         },
         {
@@ -3577,6 +3579,7 @@
           "fn": "lower_fee_cap",
           "caller": "principal",
           "args": { "new_bps": 100 },
+          "precedence": ["2", "3"],
           "expect": { "error": "MANDATE_REVOKED", "events": [] }
         }
       ]

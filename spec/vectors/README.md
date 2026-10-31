@@ -181,6 +181,17 @@ A request, `req` or each entry of `reqs`, is `{ payout_id, recipient_ref, total,
 
 `create` makes the vector's mandate when the setup has none, and a vector has one mandate; every other function needs it. On Stellar a constructor failure reaches the caller of `create` only as the generic host error `Error(Context, InvalidAction)`. Seeing it means the factory skipped a check it must make before deploying, so the format has no way to expect it.
 
+### Precedence
+
+A refused call may carry `"precedence": ["3", "4"]`: it fails checks 3 and 4 of its function's check order in `spec/MANDATE.md` at once, so the earlier check must decide the outcome. Two contracts can each pass every vector that breaks one rule and still disagree when several break together, and these calls pin which one wins. The two labels are a check and the one right after it, the vector cites both checks' rules, and the call is refused the way the earlier check refuses:
+
+- with one of the errors on the earlier rule's Error line;
+- with `"per_chain": { "stellar": { "host_auth_failure": true } }` when that rule fails host authorization on Stellar, such as `MANDATE-ROLE-019` or `MANDATE-ROLE-015`, and with `host_abort` when it is the signature check, `MANDATE-RECIPIENT-012`; on the other chain, where `MANDATE-ROLE-019` cannot fail, the signer is the caller and the next check decides;
+- with no per-chain override when the earlier rule is a mandate error on every chain;
+- for a check that hands off to per-item checks, such as `execute_batch` check 7, with the item's own error, never the later check's.
+
+`spec/vectors/precedence.json` holds a call for most pairs. A pair that an earlier vector already pinned, such as the fee cap before the per-payment cap, carries its `precedence` where it is. Where both checks return the same error, as most role conflicts at `create` do, the call shows that error and not which check produced it; the checker counts those pairs.
+
 ### Attestations
 
 The test key `signer` signs an attestation for one leg: the version 2 message of `spec/ENCODING.md` over the network the mandate runs on, the mandate's address, `recipient_ref`, the mandate's country policy hash, `policy_epoch` (by default the mandate's current one), `valid_until` and `destination`. The attestation carries `valid_until`, `policy_epoch` and the signature, under its `name`. The runner's attest step must produce, byte for byte, the fields, messages and signatures of the reference signer in `spikes/attestation-parity/generator/` for every case of `spikes/attestation-parity/fixture.json`.
@@ -240,11 +251,20 @@ Every call has one `expect`:
 - vector IDs are unique across files, no number has a fraction, and no object repeats a key;
 - every input that only one chain can express is in a vector restricted to that chain, and only accounts take tags or change whether they can receive;
 - requests name only attestations made earlier, the secp256k1 tamper kinds are refused, and the per-chain overrides appear only where the rules above allow them;
-- calls come after the mandate exists, and time never moves back.
+- calls come after the mandate exists, and time never moves back;
+- every `precedence` call names two adjacent checks of its function's check order and is refused as the Precedence section says.
 
 Coverage is checked on request. `--require-all` needs every `MANDATE` rule that is not retired to have at least one passing and one failing vector, and `--areas A,B` needs the same of the rules in the named areas only, so each vector set can prove its own coverage. A vector is failing when any call in it is refused on some chain: an error, a per-chain override, a `payout_request_rejected` event or a batch item with a non-zero code. Every other vector is passing. `CHAINOPS` rules bind the off-chain services and never count as uncovered.
 
 Parity with the attestation fixture is checked with `--fixture spikes/attestation-parity/fixture.json`, as CI does: every case of the fixture needs a vector named `parity_` and the case name that runs the same case through the mandate, and every `parity_` vector must name a case. Six cases are exempt because an attest step cannot build them, and the check prints them: `valid_policy_epoch_u64_max` (no call sequence raises the policy epoch that far), `wrong_policy_epoch_signed` (an attest step signs the epoch it carries), and `flipped_s_bit`, `zero_signature`, `identity_r_zero_s` and `small_order_attester_key` (no tamper kind writes those signature bytes). The contract passes every 64-byte signature to the host unchanged, so those four test the host's verifier, and the attest step itself is still compared with every case of the fixture.
+
+Precedence is checked with `--precedence`: every adjacent pair of checks in every check order of `spec/MANDATE.md` needs a `precedence` call in the files checked. Eleven pairs are exempt because no input can make both checks fail, and the check prints them; each exemption names the two rules it was written for, so a renumbered or rewritten order fails until the exemption is updated:
+
+- `request_payout` 16 and 17: check 16 applies only in `ALLOWLIST` mode and check 17 only in `ATTESTED` and `BOTH`;
+- `request_payout` 19 and 20: an expired attestation has `valid_until` at or before `now`, so its window is never too long;
+- `add_role` 4 and 5, and `propose_principal` 2 and 3: the zero address is never the principal, the fee address or a role member;
+- `remove_role` 3 and 4, 4 and 5, and 5 and 6: check 4 applies only to an approver in the set, to one among several, where check 5 applies to the only one, and check 6 to role 5;
+- `add_role` 5 and 6, `propose_principal` 3 and 4, `accept_principal` 3 and 4, and `recovery_rotate_agent` 5 and 6: an account that conflicts is the principal, the fee address or a role member, and the attester's key never matches any of those (`MANDATE-ROLE-018` holds on every path that sets either).
 
 check-jsonschema is pinned, with a hash for every dependency, in `scripts/check-vectors.requirements.txt`, and the check refuses any other version. To run the check and its self test locally:
 
@@ -256,7 +276,7 @@ scripts/check-vectors.sh
 scripts/check-vectors.test.sh
 ```
 
-The `vectors` job in CI runs both, with the same pinned version.
+The `vectors` job in CI runs both, with the same pinned version, and runs the check as `scripts/check-vectors.sh --require-all --precedence --fixture spikes/attestation-parity/fixture.json`, so a new rule without its vectors, or a new check without its precedence calls, fails the build.
 
 ## Complete example
 

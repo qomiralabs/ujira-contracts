@@ -217,6 +217,7 @@
           "fn": "recover_token",
           "caller": "principal",
           "args": { "token": "asset", "amount": "0" },
+          "precedence": ["2", "3"],
           "expect": { "error": "WRONG_ASSET", "events": [] }
         },
         {

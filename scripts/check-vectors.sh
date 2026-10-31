@@ -27,6 +27,12 @@
 # the attestation parity fixture FILE (spikes/attestation-parity/fixture.json),
 # apart from the few cases check-vectors.py lists as beyond the attest step.
 #
+# Precedence: --precedence needs, for every adjacent pair of checks in every
+# check order of the spec's MANDATE.md, a call marked "precedence" that fails
+# both and gets the earlier check's outcome, apart from the few pairs
+# check-vectors.py lists as unable to fail together. A marked call is checked
+# with or without the flag.
+#
 # check-jsonschema is pinned, with the hash of every dependency, in
 # scripts/check-vectors.requirements.txt, and the check refuses any other
 # version so a local run and CI validate the same way. Install it once into a
@@ -38,7 +44,7 @@
 #     --only-binary :all: -r scripts/check-vectors.requirements.txt
 #   CHECK_JSONSCHEMA=~/.venvs/check-jsonschema/bin/check-jsonschema scripts/check-vectors.sh
 #
-# Usage: scripts/check-vectors.sh [--require-all | --areas A,B,...] [--fixture FILE] [--spec DIR] [vector file...]
+# Usage: scripts/check-vectors.sh [--require-all | --areas A,B,...] [--fixture FILE] [--precedence] [--spec DIR] [vector file...]
 # Exit codes: 0 every check passes, 1 problems named on stderr, 2 bad usage,
 # a missing or wrong check-jsonschema, or a spec that cannot be read.
 set -euo pipefail
@@ -55,6 +61,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --require-all)
       mode+=(--require-all)
+      ;;
+    --precedence)
+      mode+=(--precedence)
       ;;
     --areas)
       if [ $# -lt 2 ]; then

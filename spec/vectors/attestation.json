@@ -2480,6 +2480,7 @@
               "attestations": ["a1"]
             }
           },
+          "precedence": ["22", "23"],
           "expect": { "error": "POLICY_CHANGED", "events": [] }
         }
       ]
@@ -2561,6 +2562,7 @@
               "attestations": ["a1"]
             }
           },
+          "precedence": ["21", "22"],
           "expect": { "error": "ATTESTATION_INVALID", "events": [] }
         }
       ]
