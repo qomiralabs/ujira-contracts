@@ -7,20 +7,24 @@
 //! recipients only inside the limits the principal set. Funds only ever
 //! leave to destinations bound to a recipient, or back to the principal.
 //!
-//! This part is the foundation every operation reads: the constructor that
-//! validates and stores the configuration, the storage layout and its TTL
-//! rules, and the views. The contract is never upgradeable; there is no call
-//! that replaces its code.
+//! The constructor validates and stores the configuration; agents request
+//! payouts, approvers approve or reject them, and they can be cancelled.
+//! The contract is never upgradeable; there is no call that replaces its
+//! code.
 //!
 //! - `types`: the values the mandate takes and answers with.
 //! - `storage`: where each value lives and for how long.
 //! - `derived`: balance, expiry and free funds, computed on read.
 //! - `events`: the event shapes.
+//! - `payout`: requests, approvals, rejections and cancels.
+//! - `attest`: recipient attestations and the message the attester signs.
 
 #![no_std]
 
+pub mod attest;
 pub mod derived;
 pub mod events;
+pub mod payout;
 pub mod storage;
 pub mod types;
 
@@ -30,7 +34,7 @@ pub use mandate_errors::MandateError;
 use events::MandateInitialized;
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, MuxedAddress, Vec};
 use storage::{Agent, Fixed, Flags, Policy, Roles, Totals};
-use types::{ConfigView, DailyUsage, PayoutEntry, StateView};
+use types::{ConfigView, DailyUsage, ItemResult, PayoutEntry, PayoutRequest, StateView};
 
 #[contract]
 pub struct UjiraMandate;
@@ -133,6 +137,57 @@ impl UjiraMandate {
         }
         .publish(&env);
         Ok(())
+    }
+
+    /// Requests one payout as the agent `caller`. Returns the status the
+    /// payout starts in: PENDING when its charge reaches the approval
+    /// threshold, APPROVED otherwise.
+    pub fn request_payout(
+        env: Env,
+        caller: Address,
+        req: PayoutRequest,
+    ) -> Result<u32, MandateError> {
+        storage::extend_instance(&env);
+        payout::request_payout(&env, &caller, &req)
+    }
+
+    /// Requests up to ten payouts, each on its own: one result per item, in
+    /// order, with code 0 for success.
+    pub fn request_payouts(
+        env: Env,
+        caller: Address,
+        reqs: Vec<PayoutRequest>,
+    ) -> Result<Vec<ItemResult>, MandateError> {
+        storage::extend_instance(&env);
+        payout::request_payouts(&env, &caller, &reqs)
+    }
+
+    /// Adds the approver `caller`'s approval and returns the status after it.
+    pub fn approve(env: Env, caller: Address, payout_id: BytesN<32>) -> Result<u32, MandateError> {
+        storage::extend_instance(&env);
+        payout::approve(&env, &caller, &payout_id)
+    }
+
+    /// Vetoes a pending payout, as an approver or the principal.
+    pub fn reject(env: Env, caller: Address, payout_id: BytesN<32>) -> Result<(), MandateError> {
+        storage::extend_instance(&env);
+        payout::reject(&env, &caller, &payout_id)
+    }
+
+    /// Cancels an open payout and releases what it reserved.
+    pub fn cancel(env: Env, caller: Address, payout_id: BytesN<32>) -> Result<(), MandateError> {
+        storage::extend_instance(&env);
+        payout::cancel(&env, &caller, &payout_id)
+    }
+
+    /// Cancels up to ten payouts, each on its own.
+    pub fn cancel_batch(
+        env: Env,
+        caller: Address,
+        ids: Vec<BytesN<32>>,
+    ) -> Result<Vec<ItemResult>, MandateError> {
+        storage::extend_instance(&env);
+        payout::cancel_batch(&env, &caller, &ids)
     }
 
     pub fn version(env: Env) -> u32 {

@@ -11,16 +11,22 @@
 
 extern crate std;
 
+mod approval;
+mod attestation;
+mod cancel;
 mod constructor;
+mod request;
 mod storage_ttl;
 mod views;
 
+use crate::storage;
+use crate::types::{Leg, PayoutEntry, PayoutRecord, PayoutRequest, Tombstone};
 use crate::{Limits, MandateConfig, MandateError, UjiraMandateClient};
 use soroban_sdk::{
-    testutils::{Address as _, EnvTestConfig, Ledger as _},
+    testutils::{Address as _, EnvTestConfig, Events as _, Ledger as _},
     token::StellarAssetClient,
-    xdr::{ContractEventBody, ContractEventType, FromXdr, ScError, ScVal},
-    Address, Bytes, BytesN, Env, Vec,
+    xdr::{self, ContractEventBody, ContractEventType, FromXdr, ScError, ScVal},
+    Address, Bytes, BytesN, Env, MuxedAddress, Vec,
 };
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -260,4 +266,134 @@ pub fn account(env: &Env, seed: u8) -> Address {
 /// The ed25519 key of an account made by `account`.
 pub fn key_of(env: &Env, seed: u8) -> Bytes {
     Bytes::from_array(env, &[seed; 32])
+}
+
+/// The recipient most tests pay, and the wallet bound to it.
+pub const BOB: u8 = 0xb0;
+pub const BOB_WALLET: u8 = 50;
+
+/// What the mandate base configuration holds before any request.
+pub const FUNDED: i128 = 10_000;
+
+/// A destination: the account `seed`, with or without a tag.
+pub fn dest(env: &Env, seed: u8, tag: Option<u64>) -> MuxedAddress {
+    let base = account(env, seed);
+    match tag {
+        None => MuxedAddress::from(base),
+        Some(id) => <MuxedAddress as soroban_sdk::testutils::MuxedAddress>::new(&base, id),
+    }
+}
+
+/// The mandate error a refused call returned. Anything else, a success or
+/// a host failure, fails the test.
+pub fn code<T: core::fmt::Debug, C: core::fmt::Debug, I: core::fmt::Debug>(
+    r: Result<Result<T, C>, Result<MandateError, I>>,
+) -> MandateError {
+    match r {
+        Err(Ok(e)) => e,
+        other => panic!("expected a mandate error, got {other:?}"),
+    }
+}
+
+impl Fx {
+    pub fn bob(&self) -> BytesN<32> {
+        self.b32(BOB)
+    }
+
+    pub fn bob_wallet(&self) -> MuxedAddress {
+        dest(&self.env, BOB_WALLET, None)
+    }
+
+    /// Binds a destination to a recipient straight in storage. The
+    /// allowlist calls come later; until then this writes exactly the entry
+    /// they will.
+    pub fn allow(&self, m: &Address, recipient_ref: &BytesN<32>, destination: &MuxedAddress) {
+        self.env.as_contract(m, || {
+            storage::set_allowed(&self.env, recipient_ref, destination)
+        });
+    }
+
+    /// The base mandate, funded and with Bob's wallet allowed.
+    pub fn ready(&self) -> UjiraMandateClient<'_> {
+        self.ready_with(&self.config())
+    }
+
+    pub fn ready_with(&self, config: &MandateConfig) -> UjiraMandateClient<'_> {
+        let id = self.create(config).unwrap();
+        self.mint(&id, FUNDED);
+        self.allow(&id, &self.bob(), &self.bob_wallet());
+        UjiraMandateClient::new(&self.env, &id)
+    }
+
+    /// A one-leg request to Bob's wallet, due ten minutes from now.
+    pub fn req(&self, id: u8, total: i128) -> PayoutRequest {
+        PayoutRequest {
+            payout_id: self.b32(id),
+            recipient_ref: self.bob(),
+            total,
+            fee: 0,
+            legs: Vec::from_array(
+                &self.env,
+                [Leg {
+                    destination: self.bob_wallet(),
+                    amount: total,
+                }],
+            ),
+            deadline: self.env.ledger().timestamp() + 600,
+            task_ref: self.b32(0x7a),
+            attestations: Vec::new(&self.env),
+        }
+    }
+
+    pub fn record(&self, m: &UjiraMandateClient, id: u8) -> PayoutRecord {
+        match m.payout(&self.b32(id)) {
+            Some(PayoutEntry::Record(r)) => r,
+            other => panic!("expected a record for {id}, got {other:?}"),
+        }
+    }
+
+    pub fn tombstone(&self, m: &UjiraMandateClient, id: u8) -> Tombstone {
+        match m.payout(&self.b32(id)) {
+            Some(PayoutEntry::Tombstone(t)) => t,
+            other => panic!("expected a tombstone for {id}, got {other:?}"),
+        }
+    }
+
+    /// Edits the stored roles, as the role calls and recovery will.
+    pub fn edit_roles(&self, m: &Address, edit: impl FnOnce(&mut storage::Roles)) {
+        self.env.as_contract(m, || {
+            let mut roles = storage::roles(&self.env).unwrap();
+            edit(&mut roles);
+            storage::set_roles(&self.env, &roles);
+        });
+    }
+
+    pub fn edit_flags(&self, m: &Address, edit: impl FnOnce(&mut storage::Flags)) {
+        self.env.as_contract(m, || {
+            let mut flags = storage::flags(&self.env).unwrap();
+            edit(&mut flags);
+            storage::set_flags(&self.env, &flags);
+        });
+    }
+
+    /// The mandate's own events from the last call.
+    pub fn events(&self, m: &Address) -> std::vec::Vec<xdr::ContractEvent> {
+        self.env
+            .events()
+            .all()
+            .filter_by_contract(m)
+            .events()
+            .to_vec()
+    }
+
+    pub fn set_time(&self, now: u64) {
+        self.env.ledger().with_mut(|li| li.timestamp = now);
+    }
+}
+
+/// Takes an agent out of the stored roles, as `remove_role` will, leaving
+/// the others in their order.
+pub fn drop_agent(roles: &mut storage::Roles, who: &Address) {
+    let i = roles.agents.iter().position(|a| a.account == *who).unwrap();
+    roles.agents.remove(u32::try_from(i).unwrap());
 }
