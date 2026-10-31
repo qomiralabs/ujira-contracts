@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
+    # The exploit suite lives beside the contracts it attacks, at the top of
+    # the repository, and is a test-only crate.
+    "../exploits",
     "contracts/factory",
     "contracts/mandate",
     "contracts/placeholder",
@@ -30,6 +33,9 @@ publish = false
 soroban-sdk = "=29.0.1"
 mandate-errors = { path = "crates/mandate-errors" }
 mandate-config = { path = "crates/mandate-config" }
+# Property tests only, never in a contract. Without its default features it
+# pulls no process forking and no temp files.
+proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
 
 [profile.release]
 opt-level = "z"
