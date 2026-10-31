@@ -1,0 +1,27 @@
+{
+  "network": "testnet",
+  "network_passphrase": "Test SDF Network ; September 2015",
+  "factory": "CAAVOGDGGM7JOLDS3CIQNPGSJOYFI54CJSAQQEFQKW7CES5UYIAZOYUQ",
+  "factory_wasm_hash": "a19ae223028544464b79ff006c52ced61e004e71f02426d8bee66be578df3a36",
+  "mandate_wasm_hash": "be92ba1343f49dd8e623ad3f11e7ff91b540826b97377a4b573e96ec94b86ca0",
+  "spec_version": 1,
+  "supported_assets": [
+    {
+      "code": "USDC",
+      "issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      "contract": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+    },
+    {
+      "code": "UJTEST",
+      "issuer": "GAJTP2DHOIZLPL7BAU4UDGPWKKWNR7EYZL6YQIOBBEUM23YWNTX6UGJA",
+      "contract": "CAHEYQS6NA6U33P2OWSAPOVOBL626LOTATVUJ2W7HUCQX6EF34WSGC67",
+      "test_only": true
+    }
+  ],
+  "fee_address": "GBG3EN6ZUFOJ3P7JM2ASPDZIOFYD66SMVEOJ5L4LMIP2JHFB344FBRRN",
+  "deployer": "GDQKNFDGVOVPAGQOVTRWHBULBG3VGFTS6HF6BG7IVRBTZVJFMINIGT7K",
+  "commit": "e306910efd995f2f522cf9cd46ff6c872a168819",
+  "soroban_tree": "e5326c0cd63b4cba365a2c098c9fd86ea6c0f421",
+  "deploy_transaction": "04618a0db23574fcddea5f1e76f198af1964984ef8ed18a57cef0a7e11c6a002",
+  "deployed_at": "2026-10-31T20:30:50Z"
+}

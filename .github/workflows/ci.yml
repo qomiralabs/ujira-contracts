@@ -128,6 +128,12 @@ jobs:
       - name: Test the spec ID check
         run: scripts/check-spec-ids.test.sh
 
+      # Deployment records are committed, so they may hold public ids only.
+      # The self test proves the check refuses secret shaped values, other
+      # networks and malformed ids, then checks every deployments/*.json.
+      - name: Check the deployment records
+        run: scripts/testnet/check-deployment.test.sh
+
       # The worked attestation example in spec/ENCODING.md is recomputed from its
       # inputs, and the address bytes match the ones the Stellar SDK produced.
       - name: Test the attestation message example
