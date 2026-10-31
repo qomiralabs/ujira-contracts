@@ -1,7 +1,7 @@
 [package]
 name = "vector-runner-reference-factory"
 version = "0.0.0"
-description = "Test only: a stand-in factory the vector runner's self tests run against. Never deployed."
+description = "Test only: a stand-in factory the vector runner runs against until the production factory exists. Never deployed."
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
@@ -13,3 +13,4 @@ doctest = false
 [dependencies]
 soroban-sdk = { workspace = true }
 mandate-errors = { workspace = true }
+mandate-config = { workspace = true }

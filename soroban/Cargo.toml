@@ -1,7 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
+    "contracts/mandate",
     "contracts/placeholder",
+    "crates/mandate-config",
     "crates/mandate-errors",
     "spikes/attestation-parity",
     "spikes/batch-limits",
@@ -16,7 +18,7 @@ members = [
 # Only production contracts build by default. The spikes are measurement code,
 # one of them a deliberately hostile token, and must never land in a release
 # folder by accident. CI lints and tests them with --workspace.
-default-members = ["contracts/placeholder"]
+default-members = ["contracts/mandate", "contracts/placeholder"]
 
 [workspace.package]
 edition = "2021"
@@ -26,6 +28,7 @@ publish = false
 [workspace.dependencies]
 soroban-sdk = "=29.0.1"
 mandate-errors = { path = "crates/mandate-errors" }
+mandate-config = { path = "crates/mandate-config" }
 
 [profile.release]
 opt-level = "z"

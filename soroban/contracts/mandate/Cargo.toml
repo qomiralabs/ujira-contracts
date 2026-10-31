@@ -1,0 +1,19 @@
+[package]
+name = "ujira-mandate"
+version = "0.0.0"
+description = "The UJIRA mandate: holds a principal's settlement asset and lets agents pay recipients only inside the principal's rules."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+mandate-errors = { workspace = true }
+mandate-config = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
