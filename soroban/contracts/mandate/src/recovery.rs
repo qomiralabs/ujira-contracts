@@ -138,7 +138,7 @@ fn cast(
         env.storage().persistent().set(&b.key, &b.voters);
     }
     RecoveryVoteAdded {
-        tenant_ref: storage::fixed(env)?.tenant_ref,
+        tenant_tag: storage::fixed(env)?.tenant_tag,
         kind,
         old: old.cloned(),
         new: new.cloned(),
@@ -158,7 +158,7 @@ fn executed(
     by: &Address,
 ) -> Result<(), MandateError> {
     RecoveryExecuted {
-        tenant_ref: storage::fixed(env)?.tenant_ref,
+        tenant_tag: storage::fixed(env)?.tenant_tag,
         kind,
         old: old.cloned(),
         new: new.cloned(),
@@ -228,16 +228,16 @@ pub fn recovery_rotate_agent(
     }
     bump_recovery_epoch(&mut roles)?;
     storage::set_roles(env, &roles);
-    let tenant_ref = storage::fixed(env)?.tenant_ref;
+    let tenant_tag = storage::fixed(env)?.tenant_tag;
     RoleRemoved {
-        tenant_ref: tenant_ref.clone(),
+        tenant_tag: tenant_tag.clone(),
         role: ROLE_AGENT,
         account: old.clone(),
     }
     .publish(env);
     if let Some(n) = new {
         RoleAdded {
-            tenant_ref,
+            tenant_tag,
             role: ROLE_AGENT,
             account: n.clone(),
         }

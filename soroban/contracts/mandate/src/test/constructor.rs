@@ -511,7 +511,7 @@ fn constructor_stores_the_configuration_and_emits_mandate_initialized() {
     let config = fx.config();
     let id = fx.create(&config).unwrap();
     let event = MandateInitialized {
-        tenant_ref: config.tenant_ref.clone(),
+        tenant_tag: config.tenant_tag.clone(),
         principal: config.principal.clone(),
         asset: config.asset.clone(),
         recipient_mode: config.recipient_mode,
@@ -540,7 +540,7 @@ fn expected_view(c: &MandateConfig, fee_address: &Address) -> ConfigView {
         principal: c.principal.clone(),
         asset: c.asset.clone(),
         recipient_mode: c.recipient_mode,
-        tenant_ref: c.tenant_ref.clone(),
+        tenant_tag: c.tenant_tag.clone(),
         agents: c.agents.clone(),
         approvers: c.approvers.clone(),
         approvals_required: c.approvals_required,

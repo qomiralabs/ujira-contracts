@@ -149,7 +149,7 @@ pub struct ConfigView {
     pub principal: Address,
     pub asset: Address,
     pub recipient_mode: u32,
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub agents: Vec<Address>,
     pub approvers: Vec<Address>,
     pub approvals_required: u32,

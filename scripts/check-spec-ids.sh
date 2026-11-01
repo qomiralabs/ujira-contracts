@@ -134,7 +134,7 @@ fi
 
 # The areas the spec must cover. Keep in step with the spec's own list.
 mandate_areas="CONFIG ROLE AMOUNT FUND ASSET DUST PAYOUT BATCH BUDGET PAYMENT DAILY RECIPIENT SPLIT APPROVAL EXPIRY PAUSE REVOKE WITHDRAW SWEEP RECOVER RECOVERYSET PRINCIPAL EVENT FEE"
-chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE"
+chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE INDEX"
 
 # Characters allowed beyond printable ASCII and LF, per file relative to the
 # spec directory. U+2016 (DOUBLE VERTICAL LINE) is the byte concatenation
@@ -485,6 +485,11 @@ def check_events(spec_text, spec_sections):
         cell = row[3].strip()
         data = [f.strip() for f in cell.split(",") if f.strip()]
         for name in re.findall(r"`([a-z][a-z0-9_]*)`", row[0]):
+            # tenant_ref is the operator's ID for a principal and project.
+            # Published, it would let anyone group every mandate of one
+            # tenant; events carry the per-mandate tenant_tag instead.
+            if key == "tenant_ref" or "tenant_ref" in fields:
+                report("event %s publishes tenant_ref, which links every mandate of one tenant; use the per-mandate tenant_tag" % name)
             if not [f for f in fields if f != key]:
                 if cell != EMPTY_MAP:
                     report("event %s carries only its topic key, so its Data must read %s, not %s" % (name, EMPTY_MAP, cell or "an empty cell"))

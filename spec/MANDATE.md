@@ -16,7 +16,7 @@ Scope: spec version 1 is in force on Stellar only. Rules and text marked Celo or
 - `now` is the ledger timestamp on Stellar and the block timestamp on Celo, in unix seconds, and takes one value per transaction (`MANDATE-EXPIRY-001`).
 - The words must, never and only are normative.
 
-Rule areas: `CONFIG`, `ROLE`, `AMOUNT`, `FUND`, `ASSET`, `DUST`, `PAYOUT`, `BATCH`, `BUDGET`, `PAYMENT`, `DAILY`, `RECIPIENT`, `SPLIT`, `APPROVAL`, `EXPIRY`, `PAUSE`, `REVOKE`, `WITHDRAW`, `SWEEP`, `RECOVER` (token recovery), `RECOVERYSET` (the recovery approver set), `PRINCIPAL`, `EVENT`, `FEE`. Off-chain areas: `XCHAIN`, `DELIVERY`, `SUBMIT`, `CREATE`, `SWEEP`, `FEE`.
+Rule areas: `CONFIG`, `ROLE`, `AMOUNT`, `FUND`, `ASSET`, `DUST`, `PAYOUT`, `BATCH`, `BUDGET`, `PAYMENT`, `DAILY`, `RECIPIENT`, `SPLIT`, `APPROVAL`, `EXPIRY`, `PAUSE`, `REVOKE`, `WITHDRAW`, `SWEEP`, `RECOVER` (token recovery), `RECOVERYSET` (the recovery approver set), `PRINCIPAL`, `EVENT`, `FEE`. Off-chain areas: `XCHAIN`, `DELIVERY`, `SUBMIT`, `CREATE`, `SWEEP`, `FEE`, `INDEX`.
 
 ## Constants
 
@@ -309,7 +309,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-001 Immutable fields
 
 - Precondition: none.
-- Effect: fixed at construction and never changed: `asset` (the single settlement asset, which the factory must support), `recipient_mode` (`1 ALLOWLIST`, `2 ATTESTED`, `3 BOTH`), `tenant_ref` (an opaque 32-byte reference that lets the operator attribute events), `factory` (the creating factory) and `fee_address` (copied from the factory, never supplied by the principal).
+- Effect: fixed at construction and never changed: `asset` (the single settlement asset, which the factory must support), `recipient_mode` (`1 ALLOWLIST`, `2 ATTESTED`, `3 BOTH`), `tenant_tag` (an opaque 32-byte value that lets the operator attribute the mandate's events; it is derived off chain from the operator's `tenant_ref` and the mandate's own address (`spec/ENCODING.md`), so it differs for every mandate and never links two mandates of one principal and project), `factory` (the creating factory) and `fee_address` (copied from the factory, never supplied by the principal).
 - Error: none
 
 #### MANDATE-CONFIG-002 Field domains and cross-field rules
@@ -434,7 +434,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-008 IDs are opaque to the contract
 
 - Precondition: none.
-- Effect: `payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32-byte values derived off chain with domain tags. The contract only stores and compares them. `task_ref` is carried in the request and in `payout_requested` and is never stored.
+- Effect: `payout_id`, `recipient_ref`, `task_ref` and `tenant_tag` are 32-byte values derived off chain with domain tags. The contract only stores and compares them, and never checks how they were derived. `tenant_ref`, the operator's ID for a principal and project, never reaches the chain. `task_ref` is carried in the request and in `payout_requested` and is never stored.
 - Error: none
 
 #### MANDATE-PAYOUT-009 Archived entries are never absent
@@ -1141,8 +1141,8 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 | Event | Fields |
 | --- | --- |
-| `mandate_created` (factory) | mandate, principal, asset, tenant_ref, spec_version, fee_address |
-| `mandate_initialized` | principal, asset, recipient_mode, tenant_ref, agents, approvers, approvals_required, guardians, executors, recovery, recovery_threshold, limits, attester, country_policy_hash, max_fee_bps, fee_address |
+| `mandate_created` (factory) | mandate, principal, asset, tenant_tag, spec_version, fee_address |
+| `mandate_initialized` | principal, asset, recipient_mode, tenant_tag, agents, approvers, approvals_required, guardians, executors, recovery, recovery_threshold, limits, attester, country_policy_hash, max_fee_bps, fee_address |
 | `payout_requested` | payout_id, agent, recipient_ref, total, fee, legs, task_ref, status, expires_at |
 | `payout_request_rejected` | payout_id, agent, code |
 | `payout_approval_added` | payout_id, approver, approvals, required |
@@ -1709,6 +1709,22 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 - Off chain: if the fee address cannot receive, every execute with a non-zero fee reverts. The operator cancels the affected payouts, re-requests them with `fee = 0`, and invoices that fee. Principal funds are never at risk; only liveness is affected until the address is fixed.
 
+#### CHAINOPS-INDEX-001 Mandate events are read only from verified mandates
+
+- Off chain: the indexer accepts a mandate event only from a contract it has registered as a mandate. It registers a contract only when a `mandate_created` event accepted under `CHAINOPS-INDEX-002` names it as `mandate`, whether the operator's own create flow made the mandate or the principal created it directly. The events of every other contract are ignored, whatever their name, topics or data, so a contract that copies the mandate's event shapes can never book a payment that did not happen.
+
+#### CHAINOPS-INDEX-002 mandate_created is read only from a trusted factory
+
+- Off chain: the indexer accepts `mandate_created` only from a contract on its list of trusted factories for that network, and never from a mandate or any other contract. The list is configuration, changed only by a reviewed deploy. A trusted factory validates every configuration and deploys only the reviewed mandate wasm (`MANDATE-CONFIG-004`, `MANDATE-CONFIG-006`), so a registered mandate runs the reviewed rules.
+
+#### CHAINOPS-INDEX-003 The source is the contract id, never a topic or data value
+
+- Off chain: the indexer takes an event's source from the contract id the ledger records for that event, and reads only contract events of successful transactions, never diagnostic events or the events of a failed transaction. It never infers the source from a topic or data value: not from `tenant_tag`, not from `payout_id`, not from an address in the data. A `tenant_tag` only attributes events of a mandate already registered under `CHAINOPS-INDEX-001`, and only after the indexer recomputes it from its own `tenant_ref` and the mandate's address (`spec/ENCODING.md`) and finds it equal; a mandate whose tag differs is flagged and none of its events are booked to a tenant.
+
+#### CHAINOPS-INDEX-004 Every booking key includes the contract id
+
+- Off chain: every booking, idempotency and deduplication key the indexer derives from an event includes the id of the contract that emitted it, for example `(contract_id, payout_id)` for a payout event, so equal IDs from two mandates can never be booked as one payment.
+
 ## Rule index
 
 | ID | Title |
@@ -1900,3 +1916,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `CHAINOPS-FEE-003` | The fee address is a dedicated multisig |
 | `CHAINOPS-FEE-004` | The fee on a refunded part is returned |
 | `CHAINOPS-FEE-005` | A fee address that cannot receive |
+| `CHAINOPS-INDEX-001` | Mandate events are read only from verified mandates |
+| `CHAINOPS-INDEX-002` | mandate_created is read only from a trusted factory |
+| `CHAINOPS-INDEX-003` | The source is the contract id, never a topic or data value |
+| `CHAINOPS-INDEX-004` | Every booking key includes the contract id |

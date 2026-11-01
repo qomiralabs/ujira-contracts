@@ -2,7 +2,7 @@
 // Copyright 2026 Qomira Labs
 
 //! The mandate's events. Each has two topics, its snake_case name and a key:
-//! the payout ID for payout events and the tenant reference for every other
+//! the payout ID for payout events and the tenant tag for every other
 //! one. The data is a map of the remaining fields, so the key is never
 //! repeated there. An `Option` field that is None is left out of the map.
 
@@ -14,7 +14,7 @@ use soroban_sdk::{contractevent, Address, Bytes, BytesN, MuxedAddress, Vec};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MandateInitialized {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub principal: Address,
     pub asset: Address,
     pub recipient_mode: u32,
@@ -113,13 +113,13 @@ pub struct PayoutExecuted {
 }
 
 // Lifecycle, administration and recovery. Every one of these is keyed by
-// the tenant reference.
+// the tenant tag.
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FeeCapLowered {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub max_fee_bps: u32,
 }
 
@@ -127,7 +127,7 @@ pub struct FeeCapLowered {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Paused {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub by: Address,
 }
 
@@ -135,7 +135,7 @@ pub struct Paused {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Resumed {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub by: Address,
 }
 
@@ -145,7 +145,7 @@ pub struct Resumed {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Revoked {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub by: Address,
     pub frozen: i128,
 }
@@ -154,7 +154,7 @@ pub struct Revoked {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Withdrawn {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub to: Address,
     pub amount: i128,
 }
@@ -163,7 +163,7 @@ pub struct Withdrawn {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Swept {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub by: Address,
     pub amount: i128,
 }
@@ -172,7 +172,7 @@ pub struct Swept {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TokenRecovered {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub token: Address,
     pub amount: i128,
 }
@@ -182,7 +182,7 @@ pub struct TokenRecovered {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LimitsUpdated {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub total_budget: i128,
     pub per_payment_cap: i128,
     pub per_recipient_daily_cap: i128,
@@ -195,7 +195,7 @@ pub struct LimitsUpdated {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RoleAdded {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub role: u32,
     pub account: Address,
 }
@@ -204,7 +204,7 @@ pub struct RoleAdded {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RoleRemoved {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub role: u32,
     pub account: Address,
 }
@@ -213,7 +213,7 @@ pub struct RoleRemoved {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApprovalsRequiredSet {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub required: u32,
 }
 
@@ -222,7 +222,7 @@ pub struct ApprovalsRequiredSet {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecoveryThresholdSet {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub required: u32,
     pub recovery_epoch: u32,
 }
@@ -233,7 +233,7 @@ pub struct RecoveryThresholdSet {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecoveryVoteAdded {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub kind: u32,
     pub old: Option<Address>,
     pub new: Option<Address>,
@@ -247,7 +247,7 @@ pub struct RecoveryVoteAdded {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecoveryExecuted {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub kind: u32,
     pub old: Option<Address>,
     pub new: Option<Address>,
@@ -258,7 +258,7 @@ pub struct RecoveryExecuted {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecipientAllowed {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub recipient_ref: BytesN<32>,
     pub destination: MuxedAddress,
 }
@@ -267,7 +267,7 @@ pub struct RecipientAllowed {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecipientDisallowed {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub recipient_ref: BytesN<32>,
     pub destination: MuxedAddress,
 }
@@ -276,7 +276,7 @@ pub struct RecipientDisallowed {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttestationPolicySet {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub attester: Bytes,
     pub country_policy_hash: BytesN<32>,
     pub policy_epoch: u64,
@@ -286,7 +286,7 @@ pub struct AttestationPolicySet {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrincipalProposed {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub current: Address,
     pub proposed: Address,
 }
@@ -295,7 +295,7 @@ pub struct PrincipalProposed {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrincipalTransferred {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub previous: Address,
     pub current: Address,
 }
@@ -304,7 +304,7 @@ pub struct PrincipalTransferred {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrincipalProposalCancelled {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub current: Address,
     pub proposed: Address,
 }

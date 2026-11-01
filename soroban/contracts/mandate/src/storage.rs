@@ -71,7 +71,7 @@ pub struct Fixed {
     pub factory: Address,
     pub asset: Address,
     pub recipient_mode: u32,
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub fee_address: Address,
 }
 

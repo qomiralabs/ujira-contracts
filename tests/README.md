@@ -72,7 +72,7 @@ Factory:
 Mandate, deployed by the factory:
 
 - `__constructor(factory: Address, fee_address: Address, config: MandateConfig) -> Result<(), MandateError>`, called by the factory's deploy.
-- `MandateConfig { principal, asset, recipient_mode: u32, tenant_ref, agents, approvers, approvals_required: u32, guardians, executors, recovery, recovery_threshold: u32, limits: Limits, attester: Option<Bytes>, country_policy_hash, max_fee_bps: u32 }`
+- `MandateConfig { principal, asset, recipient_mode: u32, tenant_tag, agents, approvers, approvals_required: u32, guardians, executors, recovery, recovery_threshold: u32, limits: Limits, attester: Option<Bytes>, country_policy_hash, max_fee_bps: u32 }`
 - `Limits { total_budget: i128, per_payment_cap: i128, per_recipient_daily_cap: i128, approval_threshold: i128, payout_ttl_seconds: u64, expires_at: u64 }`
 - `PayoutRequest { payout_id, recipient_ref, total: i128, fee: i128, legs: Vec<Leg>, deadline: u64, task_ref, attestations: Vec<Attestation> }`
 - `Leg { destination: MuxedAddress, amount: i128 }`, `Attestation { valid_until: u64, policy_epoch: u64, signature: Bytes }`, `AllowEntry { recipient_ref, destination: MuxedAddress }`

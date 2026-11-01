@@ -12,7 +12,7 @@
           "principal": "principal",
           "asset": "asset",
           "recipient_mode": "ALLOWLIST",
-          "tenant_ref": "#tenant",
+          "tenant_tag": "#tenant",
           "agents": ["agent"],
           "approvers": [],
           "approvals_required": 0,

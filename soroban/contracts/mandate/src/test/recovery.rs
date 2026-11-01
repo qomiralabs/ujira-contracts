@@ -132,7 +132,7 @@ fn recovery_revoke_runs_at_the_threshold_like_the_principals_revoke() {
     assert_eq!(
         fx.events(&m.address),
         [RecoveryVoteAdded {
-            tenant_ref: tenant.clone(),
+            tenant_tag: tenant.clone(),
             kind: KIND_REVOKE,
             old: None,
             new: None,
@@ -152,7 +152,7 @@ fn recovery_revoke_runs_at_the_threshold_like_the_principals_revoke() {
         fx.events(&m.address),
         [
             RecoveryVoteAdded {
-                tenant_ref: tenant.clone(),
+                tenant_tag: tenant.clone(),
                 kind: KIND_REVOKE,
                 old: None,
                 new: None,
@@ -162,13 +162,13 @@ fn recovery_revoke_runs_at_the_threshold_like_the_principals_revoke() {
             }
             .to_xdr(&fx.env, &m.address),
             Revoked {
-                tenant_ref: tenant.clone(),
+                tenant_tag: tenant.clone(),
                 by: r2.clone(),
                 frozen: FUNDED,
             }
             .to_xdr(&fx.env, &m.address),
             RecoveryExecuted {
-                tenant_ref: tenant,
+                tenant_tag: tenant,
                 kind: KIND_REVOKE,
                 old: None,
                 new: None,
@@ -203,7 +203,7 @@ fn rotation_events_follow_the_principals_path() {
         fx.events(&m.address),
         [
             RecoveryVoteAdded {
-                tenant_ref: tenant.clone(),
+                tenant_tag: tenant.clone(),
                 kind: KIND_ROTATE_AGENT,
                 old: Some(fx.agent.clone()),
                 new: Some(a3.clone()),
@@ -213,19 +213,19 @@ fn rotation_events_follow_the_principals_path() {
             }
             .to_xdr(&fx.env, &m.address),
             RoleRemoved {
-                tenant_ref: tenant.clone(),
+                tenant_tag: tenant.clone(),
                 role: ROLE_AGENT,
                 account: fx.agent.clone(),
             }
             .to_xdr(&fx.env, &m.address),
             RoleAdded {
-                tenant_ref: tenant.clone(),
+                tenant_tag: tenant.clone(),
                 role: ROLE_AGENT,
                 account: a3.clone(),
             }
             .to_xdr(&fx.env, &m.address),
             RecoveryExecuted {
-                tenant_ref: tenant,
+                tenant_tag: tenant,
                 kind: KIND_ROTATE_AGENT,
                 old: Some(fx.agent.clone()),
                 new: Some(a3.clone()),

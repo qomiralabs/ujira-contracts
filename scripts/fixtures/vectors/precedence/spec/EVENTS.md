@@ -2,5 +2,5 @@
 
 | Event | Fields | Topic key | Data |
 | --- | --- | --- | --- |
-| `paused`, `resumed` | by | tenant_ref | by |
-| `revoked` | by, frozen | tenant_ref | by, frozen |
+| `paused`, `resumed` | by | tenant_tag | by |
+| `revoked` | by, frozen | tenant_tag | by, frozen |
