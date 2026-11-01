@@ -224,6 +224,38 @@ fn daily_used_counts_only_today() {
 }
 
 #[test]
+fn daily_used_on_a_stale_day_names_today() {
+    let fx = Fx::new();
+    let m = fx.mandate();
+    let bob = fx.b32(0xb0);
+    let stored = NOW / DAY;
+    fx.env.as_contract(&m.address, || {
+        storage::set_daily(
+            &fx.env,
+            &bob,
+            &DailyUsage {
+                day: stored,
+                used: 500,
+            },
+        );
+    });
+    // Days later the stored entry is still there, but the view reports
+    // today with nothing used, never the stale day or its total.
+    fx.env.ledger().set_timestamp((stored + 3) * DAY + 7);
+    assert_eq!(
+        m.daily_used(&bob),
+        DailyUsage {
+            day: stored + 3,
+            used: 0
+        }
+    );
+    let kept = fx
+        .env
+        .as_contract(&m.address, || storage::daily(&fx.env, &bob));
+    assert_eq!(kept.map(|d| d.day), Some(stored));
+}
+
+#[test]
 fn is_allowed_matches_the_recipient_address_and_tag() {
     let fx = Fx::new();
     let m = fx.mandate();
