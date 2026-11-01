@@ -45,7 +45,7 @@ fn pause_by_each_allowed_role_and_resume_by_the_principal() {
         assert_eq!(
             fx.events(&m.address),
             [Paused {
-                tenant_ref: tenant.clone(),
+                tenant_tag: tenant.clone(),
                 by: who.clone(),
             }
             .to_xdr(&fx.env, &m.address)]
@@ -56,7 +56,7 @@ fn pause_by_each_allowed_role_and_resume_by_the_principal() {
         assert_eq!(
             fx.events(&m.address),
             [Resumed {
-                tenant_ref: tenant.clone(),
+                tenant_tag: tenant.clone(),
                 by: fx.principal.clone(),
             }
             .to_xdr(&fx.env, &m.address)]
@@ -150,7 +150,7 @@ fn revoke_makes_no_token_call_and_returns_frozen() {
     assert_eq!(
         fx.events(&id),
         [Revoked {
-            tenant_ref: fx.b32(0x7e),
+            tenant_tag: fx.b32(0x7e),
             by: fx.principal.clone(),
             frozen: FUNDED,
         }
@@ -226,7 +226,7 @@ fn withdraw_is_capped_at_free_while_active() {
     assert_eq!(
         fx.events(&m.address),
         [Withdrawn {
-            tenant_ref: fx.b32(0x7e),
+            tenant_tag: fx.b32(0x7e),
             to: principal.clone(),
             amount: free,
         }
@@ -272,7 +272,7 @@ fn sweep_guards_in_order_and_pays_only_the_principal() {
     assert_eq!(
         fx.events(&m.address),
         [Swept {
-            tenant_ref: fx.b32(0x7e),
+            tenant_tag: fx.b32(0x7e),
             by: stranger.clone(),
             amount: FUNDED,
         }
@@ -328,7 +328,7 @@ fn recover_token_returns_other_tokens_only() {
     assert_eq!(
         fx.events(&m.address),
         [TokenRecovered {
-            tenant_ref: fx.b32(0x7e),
+            tenant_tag: fx.b32(0x7e),
             token: other.clone(),
             amount: 50,
         }

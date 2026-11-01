@@ -14,7 +14,7 @@ passed=0
 failures=0
 
 mandate_areas="CONFIG ROLE AMOUNT FUND ASSET DUST PAYOUT BATCH BUDGET PAYMENT DAILY RECIPIENT SPLIT APPROVAL EXPIRY PAUSE REVOKE WITHDRAW SWEEP RECOVER RECOVERYSET PRINCIPAL EVENT FEE"
-chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE"
+chainops_areas="XCHAIN DELIVERY SUBMIT CREATE SWEEP FEE INDEX"
 
 # Writes a minimal valid spec with one rule per area to $1. Extra text from
 # $2 is appended before the rule index, and $3 is appended to the index.
@@ -124,7 +124,7 @@ expect() {
 
 f="$work/valid.md"
 valid_spec "$f"
-expect "valid spec passes" 0 "$f" "" "30 rule ID(s) defined" "area MANDATE-FEE: 1 rule(s)" "area CHAINOPS-SWEEP: 1 rule(s), off chain, excluded from vector coverage"
+expect "valid spec passes" 0 "$f" "" "31 rule ID(s) defined" "area MANDATE-FEE: 1 rule(s)" "area CHAINOPS-SWEEP: 1 rule(s), off chain, excluded from vector coverage"
 expect "valid spec passes check order" 0 "$f" "--check-order" "check orders: 1 block(s) for 1 operation(s)"
 
 f="$work/dup.md"
@@ -609,11 +609,11 @@ printf '{ "name": "caf%s" }\n' "$(printf '\303\251')" >"$work/subfolder/vectors/
 expect "non-ascii character in a subfolder file" 1 "$work/subfolder/MANDATE.md" "" "vectors/fee/cap.json:1:15 has U+00E9 LATIN SMALL LETTER E WITH ACUTE"
 
 charset_case allowed "Concatenation is written a $(printf '\342\200\226') b."
-expect "allowlisted double vertical line in MANDATE.md passes" 0 "$work/allowed/MANDATE.md" "--check-order" "30 rule ID(s) defined"
+expect "allowlisted double vertical line in MANDATE.md passes" 0 "$work/allowed/MANDATE.md" "--check-order" "31 rule ID(s) defined"
 
 charset_case allowed-encoding ""
 printf 'fields = a %s b\n' "$(printf '\342\200\226')" >"$work/allowed-encoding/ENCODING.md"
-expect "allowlisted double vertical line in ENCODING.md passes" 0 "$work/allowed-encoding/MANDATE.md" "" "30 rule ID(s) defined"
+expect "allowlisted double vertical line in ENCODING.md passes" 0 "$work/allowed-encoding/MANDATE.md" "" "31 rule ID(s) defined"
 
 charset_case allowed-elsewhere ""
 printf 'a %s b\n' "$(printf '\342\200\226')" >"$work/allowed-elsewhere/README.md"
@@ -648,7 +648,7 @@ expect "control character in a file name" 1 "$work/control-name/MANDATE.md" "" "
 charset_case untracked-ds-store ""
 make_repo "$work/untracked-ds-store"
 printf '\000\001Bud1\377' >"$work/untracked-ds-store/.DS_Store"
-expect "untracked .DS_Store is ignored" 0 "$work/untracked-ds-store/MANDATE.md" "--check-order" "30 rule ID(s) defined"
+expect "untracked .DS_Store is ignored" 0 "$work/untracked-ds-store/MANDATE.md" "--check-order" "31 rule ID(s) defined"
 
 charset_case untracked-spec ""
 make_repo "$work/untracked-spec"
@@ -726,7 +726,7 @@ charset_case plain-attributes ""
 git -C "$work/plain-attributes" -c init.defaultBranch=main init -q
 printf '*.md -text\n' >"$work/plain-attributes/.git/info/attributes"
 git -C "$work/plain-attributes" add -A
-expect "attributes that convert nothing pass" 0 "$work/plain-attributes/MANDATE.md" "--check-order" "30 rule ID(s) defined"
+expect "attributes that convert nothing pass" 0 "$work/plain-attributes/MANDATE.md" "--check-order" "31 rule ID(s) defined"
 
 # Inherited git variables must not point the check at another repository.
 charset_case inherited-git-dir "See $(printf '\320\234')ANDATE-ROLE-001."
@@ -764,7 +764,7 @@ retired_rule="#### MANDATE-ROLE-002 Retired: an old check
 retired_row="| \`MANDATE-ROLE-002\` | Retired: an old check |"
 
 retired_case retired-ok "$retired_rule" "$retired_row" "MANDATE-ROLE-002"
-expect "retired rule only in the index" 0 "$work/retired-ok/MANDATE.md" "--check-order" "31 rule ID(s) defined"
+expect "retired rule only in the index" 0 "$work/retired-ok/MANDATE.md" "--check-order" "32 rule ID(s) defined"
 
 retired_case retired-unlisted "$retired_rule" "$retired_row" ""
 expect "retired rule missing from the list" 1 "$work/retired-unlisted/MANDATE.md" "" "MANDATE-ROLE-002 is retired but not listed in retired-ids.txt"
@@ -951,7 +951,7 @@ tables_case tables-event-fields "### Event list
 
 | Event | Fields | Topic key | Data |
 | --- | --- | --- | --- |
-| \`paused\` | by, at | tenant_ref | by, at |"
+| \`paused\` | by, at | tenant_tag | by, at |"
 expect "event fields differ" 1 "$work/tables-event-fields/MANDATE.md" "" "event paused has fields by in MANDATE.md but by, at in EVENTS.md"
 
 event_list_row="### Event list
@@ -1012,6 +1012,38 @@ tables_case tables-none-with-fields "$event_list_row" "$good_errors" "$good_cons
 | --- | --- | --- | --- |
 | \`payout_approved\` | payout_id, by | payout_id | none |"
 expect "data none on an event with data fields is refused" 1 "$work/tables-none-with-fields/MANDATE.md" "" "event payout_approved has data none, but its fields without the topic key are by"
+
+# tenant_ref links every mandate of one tenant, so no event may publish it,
+# as its topic key or as a field.
+paused_row="### Event list
+
+| Event | Fields |
+| --- | --- |
+| \`paused\` | by |"
+tables_case tables-tenant-ref-topic "$paused_row" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`paused\` | by | tenant_ref | by |"
+expect "tenant_ref as a topic key is refused" 1 "$work/tables-tenant-ref-topic/MANDATE.md" "" "event paused publishes tenant_ref, which links every mandate of one tenant; use the per-mandate tenant_tag"
+
+tables_case tables-tenant-ref-field "### Event list
+
+| Event | Fields |
+| --- | --- |
+| \`paused\` | by, tenant_ref |" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`paused\` | by, tenant_ref | tenant_tag | by, tenant_ref |"
+expect "tenant_ref as an event field is refused" 1 "$work/tables-tenant-ref-field/MANDATE.md" "" "event paused publishes tenant_ref"
+
+tables_case tables-tenant-tag-topic "$paused_row" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`paused\` | by | tenant_tag | by |"
+expect "tenant_tag as a topic key passes" 0 "$work/tables-tenant-tag-topic/MANDATE.md" "" "error table, constants and events agree"
 
 tables_case tables-constant-value "## Constants
 

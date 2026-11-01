@@ -32,6 +32,13 @@ for key in fields sha256 message; do
 done
 if printf '%s\n' "$out" | grep -qx 'length  47'; then ok "example message is 47 bytes"; else fail "example message is not 47 bytes"; fi
 
+# The worked tenant_tag, recomputed from its inputs, row by row.
+out=$("$script" --tenant-tag-example)
+for key in tenant_ref mandate_xdr tenant_tag; do
+  value=$(printf '%s\n' "$out" | awk -v k="$key" '$1 == k { print $2 }')
+  if [ -n "$value" ] && grep -qF "| \`$key\` | \`$value\` |" "$encoding"; then ok "tenant tag example $key matches ENCODING.md"; else fail "tenant tag example $key $value is not in ENCODING.md"; fi
+done
+
 # Address::to_xdr bytes as the Stellar SDK produced them for the fixture.
 check_xdr() {
   local name=$1 strkey=$2 want=$3 got

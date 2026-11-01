@@ -105,7 +105,7 @@ A vector runs on every chain, `stellar` and `celo`, unless `applies_to` lists fe
 
 The runner applies the setup in this order, none of it may fail, and none of its events are expected anywhere: it sets the time to `now`, creates the mandate through the factory as its principal with `salt`, allows the allowlist entries as the principal (an `ATTESTED` mandate has no allowlist), then makes the mints and the transfers in order.
 
-A configuration has every one of these fields: `principal`, `asset`, `recipient_mode`, `tenant_ref`, `agents`, `approvers`, `approvals_required`, `guardians`, `executors`, `recovery`, `recovery_threshold`, `limits`, `attester`, `country_policy_hash` and `max_fee_bps`. `limits` has `total_budget`, `per_payment_cap`, `per_recipient_daily_cap`, `approval_threshold`, `payout_ttl_seconds` and `expires_at`. The fee address comes from the factory and is never part of it.
+A configuration has every one of these fields: `principal`, `asset`, `recipient_mode`, `tenant_tag`, `agents`, `approvers`, `approvals_required`, `guardians`, `executors`, `recovery`, `recovery_threshold`, `limits`, `attester`, `country_policy_hash` and `max_fee_bps`. `limits` has `total_budget`, `per_payment_cap`, `per_recipient_daily_cap`, `approval_threshold`, `payout_ttl_seconds` and `expires_at`. The fee address comes from the factory and is never part of it.
 
 Test tokens:
 
@@ -297,7 +297,7 @@ A guardian pauses the mandate. While it is paused, a request is refused with `MA
           "principal": "principal",
           "asset": "asset",
           "recipient_mode": "ALLOWLIST",
-          "tenant_ref": "#tenant",
+          "tenant_tag": "#tenant",
           "agents": ["agent"],
           "approvers": [],
           "approvals_required": 0,

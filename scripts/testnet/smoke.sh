@@ -65,7 +65,8 @@ unit=10000000
 fund=$((1000 * unit))
 amount=$((50 * unit))
 now=$(testnet_now)
-tenant_ref=$(testnet_hex32)
+# A test mandate has no tenant, so random bytes stand in for its tag.
+tenant_tag=$(testnet_hex32)
 salt=$(testnet_hex32)
 config=$(
   cat <<JSON
@@ -73,7 +74,7 @@ config=$(
   "principal": "$principal",
   "asset": "$asset",
   "recipient_mode": 1,
-  "tenant_ref": "$tenant_ref",
+  "tenant_tag": "$tenant_tag",
   "agents": ["$agent"],
   "approvers": ["$approver"],
   "approvals_required": 1,

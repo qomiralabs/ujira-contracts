@@ -13,7 +13,7 @@
           "principal": "principal",
           "asset": "asset",
           "recipient_mode": "ATTESTED",
-          "tenant_ref": "#tenant",
+          "tenant_tag": "#tenant",
           "agents": [
             "agent"
           ],

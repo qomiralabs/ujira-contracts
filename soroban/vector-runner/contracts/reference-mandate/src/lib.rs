@@ -44,7 +44,7 @@ pub struct MandateConfig {
     pub principal: Address,
     pub asset: Address,
     pub recipient_mode: u32,
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub agents: Vec<Address>,
     pub approvers: Vec<Address>,
     pub approvals_required: u32,
@@ -66,7 +66,7 @@ pub struct ConfigView {
     pub principal: Address,
     pub asset: Address,
     pub recipient_mode: u32,
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub agents: Vec<Address>,
     pub approvers: Vec<Address>,
     pub approvals_required: u32,
@@ -110,7 +110,7 @@ enum Key {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MandateInitialized {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub principal: Address,
     pub asset: Address,
     pub recipient_mode: u32,
@@ -132,7 +132,7 @@ pub struct MandateInitialized {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Paused {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub by: Address,
 }
 
@@ -140,7 +140,7 @@ pub struct Paused {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Resumed {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub by: Address,
 }
 
@@ -148,7 +148,7 @@ pub struct Resumed {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Withdrawn {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub to: Address,
     pub amount: i128,
 }
@@ -164,7 +164,7 @@ impl ReferenceMandate {
         store.set(&Key::FeeAddress, &fee_address);
         store.set(&Key::Paused, &false);
         MandateInitialized {
-            tenant_ref: config.tenant_ref,
+            tenant_tag: config.tenant_tag,
             principal: config.principal,
             asset: config.asset,
             recipient_mode: config.recipient_mode,
@@ -218,7 +218,7 @@ impl ReferenceMandate {
             principal: cfg.principal,
             asset: cfg.asset,
             recipient_mode: cfg.recipient_mode,
-            tenant_ref: cfg.tenant_ref,
+            tenant_tag: cfg.tenant_tag,
             agents: cfg.agents,
             approvers: cfg.approvers,
             approvals_required: cfg.approvals_required,
@@ -252,7 +252,7 @@ impl ReferenceMandate {
         }
         env.storage().instance().set(&Key::Paused, &true);
         Paused {
-            tenant_ref: cfg.tenant_ref,
+            tenant_tag: cfg.tenant_tag,
             by: caller,
         }
         .publish(&env);
@@ -267,7 +267,7 @@ impl ReferenceMandate {
         }
         env.storage().instance().set(&Key::Paused, &false);
         Resumed {
-            tenant_ref: cfg.tenant_ref,
+            tenant_tag: cfg.tenant_tag,
             by: cfg.principal,
         }
         .publish(&env);
@@ -288,7 +288,7 @@ impl ReferenceMandate {
             &amount,
         );
         Withdrawn {
-            tenant_ref: cfg.tenant_ref,
+            tenant_tag: cfg.tenant_tag,
             to: cfg.principal,
             amount,
         }

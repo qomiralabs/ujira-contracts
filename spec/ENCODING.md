@@ -10,7 +10,7 @@ The check reads figures, not claims. It compares every number here with the layo
 
 ## IDs
 
-`payout_id`, `recipient_ref`, `task_ref` and `tenant_ref` are 32 bytes. The contract only stores and compares them (`MANDATE-PAYOUT-008`); they are derived off chain. `leg_key` is 33 bytes, the `payout_id` and 1 byte of leg index; it is used only off chain, for delivery steps after settlement.
+`payout_id`, `recipient_ref`, `task_ref`, `tenant_ref` and `tenant_tag` are 32 bytes. They are derived off chain; the contract only stores and compares `payout_id`, `recipient_ref`, `task_ref` and `tenant_tag` (`MANDATE-PAYOUT-008`), and `tenant_ref` never reaches the chain. `leg_key` is 33 bytes, the `payout_id` and 1 byte of leg index; it is used only off chain, for delivery steps after settlement.
 
 ```
 payout_id     = SHA-256("ujira/payout/v1"    ‖ principal_uuid[16] ‖ project_uuid[16]
@@ -18,6 +18,7 @@ payout_id     = SHA-256("ujira/payout/v1"    ‖ principal_uuid[16] ‖ project_
 recipient_ref = SHA-256("ujira/recipient/v1" ‖ principal_uuid[16] ‖ recipient_uuid[16])
 task_ref      = SHA-256("ujira/task/v1"      ‖ project_uuid[16] ‖ task_id_utf8)
 tenant_ref    = SHA-256("ujira/tenant/v1"    ‖ principal_uuid[16] ‖ project_uuid[16])
+tenant_tag    = SHA-256("ujira/tenant-tag/v1" ‖ tenant_ref[32] ‖ mandate_xdr)
 leg_key       = payout_id[32] ‖ u8(leg_index)
 ```
 
@@ -25,6 +26,21 @@ leg_key       = payout_id[32] ‖ u8(leg_index)
 - `attempt` starts at 0; a new attempt for the same idempotency key needs the previous attempt provably dead (`CHAINOPS-XCHAIN-001`).
 - `task_id_utf8` is the last field, so it needs no length prefix.
 - `recipient_ref` is salted by principal, so one person has unrelated refs under different principals.
+- `tenant_ref` is the operator's ID for a principal and project and stays off chain. The mandate's configuration and its events carry `tenant_tag` instead, which binds that ID to one mandate: `mandate_xdr` is the mandate's own address as `Address::to_xdr` bytes (see Addresses). The mandate's address is known before it is deployed (`MANDATE-CONFIG-006`), so the tag is computed before `create`. Two mandates of one principal and project get unrelated tags, so the ledger does not link them, and only a holder of `tenant_ref` can recompute a tag and attribute the mandate (`CHAINOPS-INDEX-003`).
+- `mandate_xdr` is the last field, so it needs no length prefix.
+
+### Worked tenant_tag
+
+The mandate is the one of the attestation example below. `scripts/attestation-message.py --tenant-tag-example` recomputes both values from these inputs, and `scripts/attestation-message.test.sh` checks that it prints exactly the values here.
+
+| Input or output | Value |
+| --- | --- |
+| `principal_uuid` | `0b2f3c1e-6a4d-4e8b-9c71-5d2a8f3e4b10` |
+| `project_uuid` | `7c9e2a41-3b8f-4d6c-a1e5-92f04b7d8c33` |
+| `tenant_ref` | `b9f99412a39e190d3fd7c4401d98c5d8c94acae7612d698335ed637039fe6dee` |
+| Mandate | `CDUKSTCG3XKTPTHMNRJZIW23J3T5DKHASDPQ3CIRKQ4YJH3PDOFFULZA` |
+| `mandate_xdr` | `0000001200000001e8a94c46ddd537ccec6c53945b5b4ee7d1a8e090df0d89115439849f6f1b8a5a` |
+| `tenant_tag` | `2fff3250f540e461e527ed738e3436117a83261d8c9d9ea10f6262dff8c6e447` |
 
 ## Addresses
 

@@ -36,7 +36,7 @@ enum Key {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MandateCreated {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub mandate: Address,
     pub principal: Address,
     pub asset: Address,
@@ -86,7 +86,7 @@ impl ReferenceFactory {
         // Emitted before the deploy, so it comes ahead of the mandate's own
         // creation event.
         MandateCreated {
-            tenant_ref: config.tenant_ref.clone(),
+            tenant_tag: config.tenant_tag.clone(),
             mandate: mandate.clone(),
             principal: config.principal.clone(),
             asset: config.asset.clone(),

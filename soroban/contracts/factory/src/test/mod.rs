@@ -310,7 +310,7 @@ impl Fx {
             principal: self.principal.clone(),
             asset: self.asset.clone(),
             recipient_mode: MODE_ALLOWLIST,
-            tenant_ref: self.b32(0x7e),
+            tenant_tag: self.b32(0x7e),
             agents: self.list(&[&self.agent]),
             approvers: self.list(&[&self.approver]),
             approvals_required: 1,

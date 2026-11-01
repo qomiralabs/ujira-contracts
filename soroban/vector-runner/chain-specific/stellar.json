@@ -19,7 +19,7 @@
           "principal": "principal",
           "asset": "asset",
           "recipient_mode": "ALLOWLIST",
-          "tenant_ref": "#tenant",
+          "tenant_tag": "#tenant",
           "agents": [
             "agent"
           ],
@@ -166,7 +166,7 @@
           "principal": "principal",
           "asset": "asset",
           "recipient_mode": "ALLOWLIST",
-          "tenant_ref": "#tenant",
+          "tenant_tag": "#tenant",
           "agents": [
             "agent"
           ],
@@ -350,7 +350,7 @@
               "principal": "principal",
               "asset": "asset",
               "recipient_mode": "ALLOWLIST",
-              "tenant_ref": "#tenant",
+              "tenant_tag": "#tenant",
               "agents": [
                 "agent"
               ],
@@ -390,7 +390,7 @@
               "principal": "principal",
               "asset": "asset",
               "recipient_mode": "ALLOWLIST",
-              "tenant_ref": "#tenant",
+              "tenant_tag": "#tenant",
               "agents": [
                 "agent"
               ],
@@ -426,7 +426,7 @@
                   "mandate": "mandate",
                   "principal": "principal",
                   "asset": "asset",
-                  "tenant_ref": "#tenant",
+                  "tenant_tag": "#tenant",
                   "spec_version": 1,
                   "fee_address": "fee_address"
                 }
@@ -437,7 +437,7 @@
                   "principal": "principal",
                   "asset": "asset",
                   "recipient_mode": "ALLOWLIST",
-                  "tenant_ref": "#tenant",
+                  "tenant_tag": "#tenant",
                   "agents": [
                     "agent"
                   ],
@@ -481,7 +481,7 @@
           "principal": "principal",
           "asset": "asset",
           "recipient_mode": "ALLOWLIST",
-          "tenant_ref": "#tenant",
+          "tenant_tag": "#tenant",
           "agents": [
             "agent"
           ],

@@ -19,7 +19,7 @@ pub const BYTES32_KEYS: [&str; 6] = [
     "payout_id",
     "recipient_ref",
     "task_ref",
-    "tenant_ref",
+    "tenant_tag",
     "country_policy_hash",
     "salt",
 ];

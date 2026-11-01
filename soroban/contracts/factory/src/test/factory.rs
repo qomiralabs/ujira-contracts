@@ -497,13 +497,13 @@ fn duplicate_salt_fails_and_leaves_the_first_mandate_alone() {
     // whole call is undone, its event included.
     let mut again = fx.config();
     again.limits.total_budget = 20_000;
-    again.tenant_ref = fx.b32(0x11);
+    again.tenant_tag = fx.b32(0x11);
     assert_eq!(create(&fx, &again, &s), Err(Refusal::Host));
     assert_eq!(fx.env.events().all().events().len(), 0);
 
     let view = UjiraMandateClient::new(&fx.env, &first).config();
     assert_eq!(view.limits.total_budget, 10_000);
-    assert_eq!(view.tenant_ref, fx.b32(0x7e));
+    assert_eq!(view.tenant_tag, fx.b32(0x7e));
 }
 
 #[test]
@@ -528,7 +528,7 @@ fn emits_mandate_created() {
 
     // Exactly two events: the factory's, then the mandate's own.
     let created = MandateCreated {
-        tenant_ref: config.tenant_ref.clone(),
+        tenant_tag: config.tenant_tag.clone(),
         mandate: mandate.clone(),
         principal: config.principal.clone(),
         asset: config.asset.clone(),
@@ -536,7 +536,7 @@ fn emits_mandate_created() {
         fee_address: fx.fee_address.clone(),
     };
     let initialized = MandateInitialized {
-        tenant_ref: config.tenant_ref.clone(),
+        tenant_tag: config.tenant_tag.clone(),
         principal: config.principal.clone(),
         asset: config.asset.clone(),
         recipient_mode: config.recipient_mode,
@@ -563,7 +563,7 @@ fn emits_mandate_created() {
     );
 
     // The wire shape, read without the event type: two topics, the name and
-    // the tenant reference, and a map of the other five fields.
+    // the tenant tag, and a map of the other five fields.
     let ContractEventBody::V0(body) = &events.events()[0].body;
     assert_eq!(
         body.topics.to_vec(),

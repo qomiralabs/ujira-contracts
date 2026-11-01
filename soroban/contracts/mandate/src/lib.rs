@@ -77,7 +77,7 @@ impl UjiraMandate {
                 factory,
                 asset: config.asset.clone(),
                 recipient_mode: config.recipient_mode,
-                tenant_ref: config.tenant_ref.clone(),
+                tenant_tag: config.tenant_tag.clone(),
                 fee_address: fee_address.clone(),
             },
         );
@@ -130,7 +130,7 @@ impl UjiraMandate {
         storage::extend_instance(&env);
 
         MandateInitialized {
-            tenant_ref: config.tenant_ref,
+            tenant_tag: config.tenant_tag,
             principal: config.principal,
             asset: config.asset,
             recipient_mode: config.recipient_mode,
@@ -236,7 +236,7 @@ impl UjiraMandate {
             principal: storage::principal(&env)?,
             asset: fixed.asset,
             recipient_mode: fixed.recipient_mode,
-            tenant_ref: fixed.tenant_ref,
+            tenant_tag: fixed.tenant_tag,
             agents: roles.agent_addresses(&env),
             approvers: roles.approvers,
             approvals_required: roles.approvals_required,
