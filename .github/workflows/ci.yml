@@ -24,6 +24,9 @@ env:
   STELLAR_CLI_SHA256: c1680deee94301d33ada7a17f98411e642a4248c727afbd2e43050d345746462
   CARGO_DENY_VERSION: 0.20.2
   CARGO_DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+  # The x86_64 musl release tarball of rustsec/rustsec tag cargo-audit/v0.22.2.
+  CARGO_AUDIT_VERSION: 0.22.2
+  CARGO_AUDIT_SHA256: 7fb9497f8594b389e5fce5ef9b92db08432996895b2e0c5a0167a69ed445c428
   NODE_VERSION: 24.21.0
   # gitleaks is MIT licensed. Bump the version and its hash together, and
   # only to a release at least 14 days old.
@@ -326,6 +329,17 @@ jobs:
           "${RUNNER_TEMP}/bin/cargo-deny" --version | grep -qx "cargo-deny ${CARGO_DENY_VERSION}" \
             || { echo "cargo-deny is not ${CARGO_DENY_VERSION}" >&2; exit 1; }
 
+      - name: Install cargo-audit
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          name="cargo-audit-x86_64-unknown-linux-musl-v${CARGO_AUDIT_VERSION}"
+          curl -fsSLo cargo-audit.tgz "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv${CARGO_AUDIT_VERSION}/${name}.tgz"
+          echo "${CARGO_AUDIT_SHA256}  cargo-audit.tgz" | sha256sum --check --strict
+          tar -xzf cargo-audit.tgz -C "${RUNNER_TEMP}/bin" --strip-components=1 "${name}/cargo-audit"
+          rm cargo-audit.tgz
+          "${RUNNER_TEMP}/bin/cargo-audit" --version | grep -qx "cargo-audit ${CARGO_AUDIT_VERSION}" \
+            || { echo "cargo-audit is not ${CARGO_AUDIT_VERSION}" >&2; exit 1; }
+
       - name: cargo fmt
         run: cargo fmt --all -- --check
 
@@ -333,6 +347,39 @@ jobs:
       # and soroban/deny.toml.
       - name: cargo deny
         run: cargo deny --locked check advisories licenses sources
+
+      # A second advisory check with its own database fetch and its own
+      # matching, so an advisory cargo deny misses, or a database it cannot
+      # fetch, still fails the build. Warnings are denied to match deny.toml,
+      # which fails on unmaintained, unsound and yanked crates too.
+      #
+      # The ignores must be exactly the ones in deny.toml, for the same
+      # reasons, and the step fails if the two lists ever differ:
+      # - RUSTSEC-2024-0436, paste: unmaintained, not vulnerable. A compile
+      #   time proc macro that ark-ff pulls in through soroban-env-host, with
+      #   no maintained replacement upstream yet.
+      # - RUSTSEC-2026-0387, crypto-bigint 0.5.5: timing variability. It comes
+      #   through elliptic-curve 0.13 from soroban-env-host, which soroban-sdk
+      #   pulls only with testutils, the native test host, so it has no path
+      #   into the wasm32v1-none contract build. The fix needs elliptic-curve
+      #   0.14, which no stable soroban-env-host uses yet.
+      # Drop both, here and in deny.toml, once soroban-env-host moves past
+      # elliptic-curve 0.13 and off paste.
+      - name: cargo audit
+        run: |
+          ignores="RUSTSEC-2024-0436 RUSTSEC-2026-0387"
+          want=$(printf '%s\n' $ignores | sort)
+          have=$(sed -n 's/^ *{ *id *= *"\(RUSTSEC-[0-9]*-[0-9]*\)".*/\1/p' deny.toml | sort)
+          if [ "$want" != "$have" ]; then
+            printf 'cargo audit ignores:\n%s\ndeny.toml ignores:\n%s\n' "$want" "$have" >&2
+            echo "the cargo audit ignores differ from deny.toml" >&2
+            exit 1
+          fi
+          args=()
+          for id in $ignores; do
+            args+=(--ignore "$id")
+          done
+          cargo audit --file Cargo.lock --deny warnings "${args[@]}"
 
       - name: cargo clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
