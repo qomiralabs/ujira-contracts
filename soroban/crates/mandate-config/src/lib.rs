@@ -234,6 +234,18 @@ pub fn account_key_is(env: &Env, account: &Address, key: &Bytes) -> bool {
         && xdr.slice(12..ACCOUNT_XDR_BYTES) == *key
 }
 
+/// An account or contract address whose 32-byte key or hash is all zeros.
+/// Stellar has no zero address, but these two are valid addresses that
+/// nobody holds the key to, so whatever is sent there is gone for good. Both
+/// encode as an XDR `ScVal` address that ends with those 32 bytes.
+pub fn is_zero_address(env: &Env, address: &Address) -> bool {
+    let xdr = address.clone().to_xdr(env);
+    match xdr.len().checked_sub(32) {
+        Some(start) => xdr.slice(start..).iter().all(|b| b == 0),
+        None => false,
+    }
+}
+
 /// Every role set within its bound.
 fn check_bounds(config: &MandateConfig) -> Result<(), MandateError> {
     let within = config.agents.len() <= MAX_AGENTS

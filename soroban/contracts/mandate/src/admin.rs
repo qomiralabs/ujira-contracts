@@ -30,7 +30,7 @@ use crate::events::{
     RecipientDisallowed, RecoveryThresholdSet, RoleAdded, RoleRemoved,
 };
 use crate::lifecycle::authorized_principal;
-use crate::payout::{ensure_not_revoked, MAX_BATCH};
+use crate::payout::{ensure_not_revoked, is_unpayable, MAX_BATCH};
 use crate::storage::{self, Agent, Policy, Roles};
 use crate::types::{
     AllowEntry, ROLE_AGENT, ROLE_APPROVER, ROLE_EXECUTOR, ROLE_GUARDIAN, ROLE_RECOVERY,
@@ -498,10 +498,13 @@ fn same_entry(a: &AllowEntry, b: &AllowEntry) -> bool {
 }
 
 /// The checks both allowlist calls share, in their order: the mode, the
-/// batch length, then the fee address on any entry. Stellar has no zero
-/// address and a muxed address cannot mark a tag absent while carrying a
-/// value, so those two entry rules have nothing to check here. Returns the
-/// fixed configuration for the effects.
+/// batch length, then any entry that names an unpayable address or the fee
+/// address. A muxed address cannot mark a tag absent while carrying a value,
+/// so the tag form rule has nothing to check here. Returns the fixed
+/// configuration for the effects.
+///
+/// Disallow refuses the same entries even though none can be on the list,
+/// so both calls give one answer for one entry.
 fn check_entries(env: &Env, entries: &Vec<AllowEntry>) -> Result<storage::Fixed, MandateError> {
     let fixed = storage::fixed(env)?;
     if fixed.recipient_mode == MODE_ATTESTED {
@@ -510,10 +513,10 @@ fn check_entries(env: &Env, entries: &Vec<AllowEntry>) -> Result<storage::Fixed,
     if entries.is_empty() || entries.len() > MAX_BATCH {
         return Err(MandateError::BatchInvalid);
     }
-    if entries
-        .iter()
-        .any(|e| e.destination.address() == fixed.fee_address)
-    {
+    if entries.iter().any(|e| {
+        let a = e.destination.address();
+        is_unpayable(env, &fixed, &a) || a == fixed.fee_address
+    }) {
         return Err(MandateError::ConfigInvalid);
     }
     Ok(fixed)

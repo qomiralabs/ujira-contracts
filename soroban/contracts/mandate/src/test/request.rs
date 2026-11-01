@@ -6,7 +6,7 @@
 
 extern crate std;
 
-use super::{code, dest, Fx, BOB_WALLET, DAY, FUNDED, MIN_PERSISTENT_TTL, NOW};
+use super::{code, dest, unpayable, Fx, BOB_WALLET, DAY, FUNDED, MIN_PERSISTENT_TTL, NOW};
 use crate::events::{PayoutRequestRejected, PayoutRequested};
 use crate::payout::fee_cap;
 use crate::storage::{
@@ -247,6 +247,43 @@ fn request_leg_rules() {
         <MuxedAddress as soroban_sdk::testutils::MuxedAddress>::new(&fx.fee_address, 9);
     req.legs = legs(&fx, &[(tagged_fee, 100)]);
     assert_eq!(refused(&fx, &m, &req), MandateError::LegsInvalid);
+}
+
+/// A leg to an address nobody can spend from would burn the money, or for
+/// the mandate itself spend budget and fee while paying no one. Refused
+/// alone, beside a good leg, and for an account under any tag.
+#[test]
+fn request_legs_to_unpayable_addresses_refused() {
+    let fx = Fx::new();
+    let m = fx.ready();
+    let mut req = fx.req(1, 100);
+    for a in unpayable(&fx, &m.address) {
+        req.legs = legs(&fx, &[(MuxedAddress::from(a.clone()), 100)]);
+        assert_eq!(refused(&fx, &m, &req), MandateError::LegsInvalid, "{a:?}");
+        req.legs = legs(
+            &fx,
+            &[(fx.bob_wallet(), 60), (MuxedAddress::from(a.clone()), 40)],
+        );
+        assert_eq!(refused(&fx, &m, &req), MandateError::LegsInvalid, "{a:?}");
+    }
+    let zero_tagged =
+        <MuxedAddress as soroban_sdk::testutils::MuxedAddress>::new(&fx.account(0), 5);
+    req.legs = legs(&fx, &[(zero_tagged, 100)]);
+    assert_eq!(refused(&fx, &m, &req), MandateError::LegsInvalid);
+    // Ahead of the fee address check, as the check order puts it; both
+    // give the same code, so this pins only that neither slips through.
+    req.legs = legs(
+        &fx,
+        &[
+            (MuxedAddress::from(fx.asset.clone()), 50),
+            (MuxedAddress::from(fx.fee_address.clone()), 50),
+        ],
+    );
+    assert_eq!(refused(&fx, &m, &req), MandateError::LegsInvalid);
+    assert!(fx.events(&m.address).is_empty());
+    assert_eq!(m.payout(&fx.b32(1)), None);
+    // A good leg still goes through.
+    assert_eq!(m.request_payout(&fx.agent, &fx.req(1, 100)), STATUS_APPROVED);
 }
 
 #[test]

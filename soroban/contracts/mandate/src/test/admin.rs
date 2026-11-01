@@ -7,7 +7,7 @@
 
 extern crate std;
 
-use super::{code, dest, key_of, Fx, DAY, FUNDED, NOW};
+use super::{code, dest, key_of, unpayable, Fx, DAY, FUNDED, NOW};
 use crate::events::{
     ApprovalsRequiredSet, AttestationPolicySet, FeeCapLowered, LimitsUpdated,
     PrincipalProposalCancelled, PrincipalProposed, PrincipalTransferred, RecipientAllowed,
@@ -446,6 +446,51 @@ fn entries(fx: &Fx, items: &[AllowEntry]) -> Vec<AllowEntry> {
         out.push_back(e.clone());
     }
     out
+}
+
+/// Binding a recipient to an address nobody can spend from is refused on
+/// allow and on disallow, beside a good entry too, so no such entry can
+/// ever be on the list for a payout to use.
+#[test]
+fn allowlist_entries_to_unpayable_addresses_refused() {
+    let fx = Fx::new();
+    let m = fx.mandate();
+    let good = entry(&fx, 1, 60, None);
+    // Present, so only the bad entry beside it can refuse a disallow.
+    let listed = entry(&fx, 1, 61, None);
+    m.allow_recipients(&entries(&fx, core::slice::from_ref(&listed)));
+    for a in unpayable(&fx, &m.address) {
+        let bad = AllowEntry {
+            recipient_ref: fx.b32(1),
+            destination: soroban_sdk::MuxedAddress::from(a.clone()),
+        };
+        assert_eq!(
+            code(m.try_allow_recipients(&entries(&fx, &[good.clone(), bad.clone()]))),
+            MandateError::ConfigInvalid,
+            "{a:?}"
+        );
+        assert_eq!(
+            code(m.try_disallow_recipients(&entries(&fx, &[listed.clone(), bad]))),
+            MandateError::ConfigInvalid,
+            "{a:?}"
+        );
+    }
+    let zero_tagged = AllowEntry {
+        recipient_ref: fx.b32(1),
+        destination: <soroban_sdk::MuxedAddress as soroban_sdk::testutils::MuxedAddress>::new(
+            &fx.account(0),
+            5,
+        ),
+    };
+    assert_eq!(
+        code(m.try_allow_recipients(&entries(&fx, &[zero_tagged]))),
+        MandateError::ConfigInvalid
+    );
+    assert!(fx.events(&m.address).is_empty());
+    assert!(m.is_allowed(&listed.recipient_ref, &listed.destination));
+    assert!(!m.is_allowed(&good.recipient_ref, &good.destination));
+    m.allow_recipients(&entries(&fx, &[good.clone()]));
+    assert!(m.is_allowed(&good.recipient_ref, &good.destination));
 }
 
 #[test]
