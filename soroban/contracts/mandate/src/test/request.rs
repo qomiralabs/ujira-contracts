@@ -706,6 +706,40 @@ fn request_record_ttl_never_below_network_minimum() {
 }
 
 #[test]
+fn request_near_the_largest_time_caps_the_expiry() {
+    let fx = Fx::new();
+    let mut config = fx.config();
+    config.limits.payout_ttl_seconds = 3_600;
+    config.limits.expires_at = u64::MAX;
+    let m = fx.ready_with(&config);
+    let at = |id: u8, now: u64| {
+        fx.set_time(now);
+        let mut req = fx.req(id, 100);
+        req.deadline = u64::MAX;
+        assert_eq!(m.request_payout(&fx.agent, &req), STATUS_APPROVED);
+        let r = fx.record(&m, id);
+        assert_eq!(r.created_at, now);
+        r.expires_at
+    };
+    // The sum fits up to the last second, and only past it is capped.
+    assert_eq!(at(1, u64::MAX - 3_601), u64::MAX - 1);
+    assert_eq!(at(2, u64::MAX - 3_600), u64::MAX);
+    assert_eq!(at(3, u64::MAX - 1_800), u64::MAX);
+
+    // A wrapped expiry would have let anyone cancel at once; the capped one
+    // lapses only at the largest time.
+    let stranger = fx.account(40);
+    fx.set_time(u64::MAX - 1);
+    assert_eq!(
+        code(m.try_cancel(&stranger, &fx.b32(3))),
+        MandateError::Unauthorized
+    );
+    fx.set_time(u64::MAX);
+    m.cancel(&stranger, &fx.b32(3));
+    assert_eq!(fx.tombstone(&m, 3).status, STATUS_CANCELLED);
+}
+
+#[test]
 fn request_stores_the_agents_epoch_on_the_payout() {
     let fx = Fx::new();
     let m = fx.ready();

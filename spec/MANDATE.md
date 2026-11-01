@@ -322,6 +322,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
   - `payout_ttl_seconds` in `[PAYOUT_TTL_MIN, PAYOUT_TTL_MAX]`;
   - `expires_at` greater than `now`;
   - `max_fee_bps` in `[0, MAX_FEE_BPS]`;
+  - at creation, no role list (`agents`, `approvers`, `guardians`, `executors`, `recovery`) names the same address twice, because a repeated member would count twice toward `approvals_required` or `recovery_threshold` and one removal would leave it in the role;
   - `country_policy_hash`: 32 bytes, the SHA-256 of the canonical sorted, comma-joined list of ISO 3166-1 alpha-2 codes the principal chose (the contract never sees the list).
 - Effect: refused. This rule covers field domains only; a budget below what is already reserved or spent is `MANDATE-BUDGET-002`. `approvals_required` (`MANDATE-APPROVAL-002`), `recovery_threshold` (`MANDATE-RECOVERYSET-002`) and the attester (`MANDATE-CONFIG-005`) are their own checks, so every check order cites each of them at exactly one step.
 - Error: `CONFIG_INVALID`
@@ -347,7 +348,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-006 Deterministic address and creation events
 
 - Precondition: `create` passed every check.
-- Effect: the mandate is deployed at a deterministic address: on Stellar by the deployer with salt `SHA-256(principal_xdr ‖ salt)`, on Celo by `CREATE2` with salt `keccak256(abi.encode(principal, salt))`. The constructor sets `policy_epoch = 0`, `paused = false`, `revoked = false`, `recovery_epoch = 0` and `agent_epoch = 0`, and stores every agent of the configuration with epoch 0 (`MANDATE-PAYOUT-014`). The factory emits `mandate_created` and the mandate emits `mandate_initialized`.
+- Effect: the mandate is deployed at a deterministic address: on Stellar by the deployer with salt `SHA-256(principal_xdr ‖ salt)`, on Celo by `CREATE2` with salt `keccak256(abi.encode(principal, salt))`. The constructor sets `policy_epoch = 0`, `paused = false`, `revoked = false`, `recovery_epoch = 0` and `agent_epoch = 0`, and stores every agent of the configuration with epoch 0 (`MANDATE-PAYOUT-014`). The factory emits `mandate_created` first, before it deploys, and the mandate's constructor then emits `mandate_initialized`.
 - Error: none
 
 #### MANDATE-CONFIG-007 update_limits
@@ -381,7 +382,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-011 Views
 
 - Precondition: none.
-- Effect: `version()` returns `SPEC_VERSION`; `config()` returns the configuration; `state()` returns `{ spent, pending, committed, balance, free, paused, revoked, expired, policy_epoch }`; `payout(id)` returns the record, the tombstone or nothing; `daily_used(recipient_ref)` returns `{ day, used }` with `used = 0` when the stored day is not today; `is_allowed(recipient_ref, destination)` answers for the destination pair.
+- Effect: `version()` returns `SPEC_VERSION`; `config()` returns the configuration; `state()` returns `{ spent, pending, committed, balance, free, paused, revoked, expired, policy_epoch }`; `payout(id)` returns the record, the tombstone or nothing; `daily_used(recipient_ref)` returns today's usage (`MANDATE-DAILY-004`); `is_allowed(recipient_ref, destination)` answers for the destination pair, and answers false for every pair in `ATTESTED` mode, which has no allowlist.
 - Error: none
 
 ### Payout records
@@ -444,7 +445,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 #### MANDATE-PAYOUT-010 Who may cancel
 
-- Precondition: `cancel` where the caller is not the principal (reason 1), is not the payout's own agent while it is still the same agent under `MANDATE-PAYOUT-014` (reason 2), and neither of these holds for anyone else (reason 3): `now >= payout.expires_at`; or the mandate is expired and `now - expires_at >= SWEEP_GRACE_SECONDS`. A payout whose own time to live lapsed can be cancelled by anyone at once; a cancel that rests only on the mandate's expiry waits out the grace. When the mandate is expired `now >= expires_at`, so the subtraction cannot underflow.
+- Precondition: `cancel` where the caller is not the principal (reason 1), is not the payout's own agent while it is still the same agent under `MANDATE-PAYOUT-014` (reason 2), and neither of these holds for anyone else (reason 3): `now >= payout.expires_at`; or the mandate is expired and `now - expires_at >= SWEEP_GRACE_SECONDS`. A payout whose own time to live lapsed can be cancelled by anyone at once; a cancel that rests only on the mandate's expiry waits out the grace. When the mandate is expired `now >= expires_at`, so the subtraction cannot underflow. While `PAYOUT_TTL_MAX <= SWEEP_GRACE_SECONDS`, as in spec version 1, the grace part never decides a cancel: a payout is requested while the mandate is active, every later `expires_at` is set above a later `now` (`MANDATE-CONFIG-007`), so `created_at < expires_at` always holds, and the payout lapses at most `PAYOUT_TTL_MAX` after `created_at`, before the grace ends. The grace part is kept so that a longer time to live in a later spec version cannot leave a reservation that nobody may cancel.
 - Effect: refused. Authorization is checked after the lookup here because who may cancel depends on the payout. Reason 2 is limited to the payout's own agent so that one agent, for example an operator-held key, can never cancel payouts that people approved for another.
 - Error: `UNAUTHORIZED`
 
@@ -541,13 +542,19 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-EXPIRY-003 Payout time to live
 
 - Precondition: none.
-- Effect: each payout expires at `created_at + payout_ttl_seconds`, using the value in force at request time, unless `MANDATE-EXPIRY-004` sets it earlier.
+- Effect: each payout expires at `created_at + payout_ttl_seconds`, using the value in force at request time and capped at the largest time (`MANDATE-EXPIRY-005`), unless `MANDATE-EXPIRY-004` sets it earlier.
 - Error: none
 
 #### MANDATE-EXPIRY-004 Attested payouts expire with their attestations
 
 - Precondition: a request in mode `ATTESTED` or `BOTH`.
 - Effect: `payout.expires_at = min(now + payout_ttl_seconds, the earliest valid_until among the leg attestations)`. An attestation is valid for at most `MAX_ATTESTATION_VALIDITY`, so an attested payout must be approved and executed while its eligibility statement holds; afterwards it lapses (`MANDATE-PAYOUT-006`), anyone may cancel it, and the agent requests again with fresh attestations. Chosen over storing the earliest `valid_until` and re-checking it at execute, because capping the expiry needs no new field and no new check, and a lapsed payout can be cancelled at once, which releases its reservation instead of leaving it stuck as APPROVED.
+- Error: none
+
+#### MANDATE-EXPIRY-005 Payout expiry is capped at the largest time
+
+- Precondition: a request at a `now` within `payout_ttl_seconds` of the largest `u64`, 18446744073709551615 (`2^64 - 1`), so that `now + payout_ttl_seconds` does not fit in a `u64`.
+- Effect: the request is not refused. Its expiry before `MANDATE-EXPIRY-004` applies is `2^64 - 1` when `payout_ttl_seconds > 2^64 - 1 - now`, and `now + payout_ttl_seconds` otherwise. The sum is never formed where it would overflow, and it never wraps to an earlier time, which would let anyone cancel the payout at once (`MANDATE-PAYOUT-010`). The capped payout lapses at `2^64 - 1`, the same second the mandate is expired at the latest, since `expires_at` is a `u64` too. On Stellar the record TTL caps the same way: `payout.expires_at + RECORD_TTL_MARGIN_SECONDS` counts as `2^64 - 1` where it would overflow (`MANDATE-PAYOUT-016`). No ledger reaches such a time in practice; the rule exists so that every implementation gives the same answer at the edge.
 - Error: none
 
 ## Destinations, legs and recipient binding
@@ -802,6 +809,12 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Effect: refused. Two payouts to one recipient in the same `execute_batch` accumulate against the cap.
 - Error: `DAILY_CAP_EXCEEDED`
 
+#### MANDATE-DAILY-004 Daily usage view on another day
+
+- Precondition: `daily_used(recipient_ref)` where the stored entry's `day` is not today, or the recipient has no entry.
+- Effect: returns `{ day: today, used: 0 }`. The view always names today, never the stale day or its total, and its `used` is exactly the value the daily checks read (`MANDATE-AMOUNT-005`). On the stored day it returns the stored entry. The stored entry is left as it is; it is overwritten by the next execute for that recipient (`MANDATE-DAILY-001`). Time never moves back within a chain, so a stored day is never later than today.
+- Error: none
+
 #### MANDATE-APPROVAL-001 Which payouts need approval
 
 - Precondition: a request passed every check.
@@ -817,13 +830,13 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-APPROVAL-003 Repeated approval
 
 - Precondition: `approve` from an approver already in `payout.approvals` while the live count is still below `approvals_required`.
-- Effect: refused. When the live count already meets the requirement (for example after the principal lowered it), the call proceeds to the transition without adding, so a payout never gets stuck.
+- Effect: refused. When the live count already meets the requirement (for example after the principal lowered it), the call proceeds to the transition without adding, so a payout never gets stuck. Such a call adds no approval and emits no `payout_approval_added`; it emits only `payout_approved`.
 - Error: `ALREADY_APPROVED`
 
 #### MANDATE-APPROVAL-004 M of N approval
 
 - Precondition: `approve` passed every check.
-- Effect: add the caller to `payout.approvals` and emit `payout_approval_added { payout_id, approver, approvals, required }`. The live count is the number of addresses in `payout.approvals` that are current approvers. When it is at least `approvals_required`, the payout becomes APPROVED, `pending -= charged`, `committed += charged`, and `payout_approved { payout_id }` is emitted.
+- Effect: add the caller to `payout.approvals` and emit `payout_approval_added { payout_id, approver, approvals, required }`, unless the call is a repeated approval that proceeds under `MANDATE-APPROVAL-003`, which adds nothing and emits no `payout_approval_added`. The live count is the number of addresses in `payout.approvals` that are current approvers. When it is at least `approvals_required`, the payout becomes APPROVED, `pending -= charged`, `committed += charged`, and `payout_approved { payout_id }` is emitted.
 - Error: none
 
 #### MANDATE-APPROVAL-005 A single rejection is a veto
@@ -867,7 +880,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-BATCH-002 Request batch runs per item
 
 - Precondition: `request_payouts` passed the caller, active and length checks.
-- Effect: each item in order runs the `request_payout` checks from the payout ID check onward against the state left by earlier items. A failing item writes nothing, emits `payout_request_rejected { payout_id, agent, code }`, and the batch continues; a duplicate ID later in the same batch fails with `PAYOUT_ID_EXISTS`. The call returns one `ItemResult { payout_id, code, status }` per item, with code 0 for success. The one exception is `MANDATE-RECIPIENT-012`: an invalid attestation signature aborts the whole call.
+- Effect: each item in order runs the `request_payout` checks from the payout ID check onward against the state left by earlier items. A failing item writes nothing, emits `payout_request_rejected { payout_id, agent, code }`, and the batch continues; a duplicate ID later in the same batch fails with `PAYOUT_ID_EXISTS`. The call returns one `ItemResult { payout_id, code, status }` per item, with code 0 and the new status for success, and the item's error code with `status` absent for a failure, `PAYOUT_ID_EXISTS` included, even though a payout with that ID exists. The one exception is `MANDATE-RECIPIENT-012`: an invalid attestation signature aborts the whole call.
 - Error: per item (items report their own codes)
 
 #### MANDATE-BATCH-003 Cancel batch
@@ -1773,6 +1786,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-EXPIRY-002` | Expired mandates refuse new work |
 | `MANDATE-EXPIRY-003` | Payout time to live |
 | `MANDATE-EXPIRY-004` | Attested payouts expire with their attestations |
+| `MANDATE-EXPIRY-005` | Payout expiry is capped at the largest time |
 | `MANDATE-RECIPIENT-001` | A destination is an address and an optional tag |
 | `MANDATE-RECIPIENT-002` | Destination form on each chain |
 | `MANDATE-RECIPIENT-003` | Allowlist mode takes no attestations |
@@ -1814,6 +1828,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-DAILY-001` | Daily usage per recipient |
 | `MANDATE-DAILY-002` | Daily cap at request |
 | `MANDATE-DAILY-003` | Daily cap at execute |
+| `MANDATE-DAILY-004` | Daily usage view on another day |
 | `MANDATE-APPROVAL-001` | Which payouts need approval |
 | `MANDATE-APPROVAL-002` | Approvals required |
 | `MANDATE-APPROVAL-003` | Repeated approval |

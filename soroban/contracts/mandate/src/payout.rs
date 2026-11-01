@@ -269,7 +269,10 @@ fn request_item(env: &Env, agent: &Agent, req: &PayoutRequest) -> Result<u32, Ma
         totals.committed = invariant(totals.committed.checked_add(charge))?;
         STATUS_APPROVED
     };
-    let mut expires_at = invariant(now.checked_add(limits.payout_ttl_seconds))?;
+    // Within one time to live of the largest time the sum cannot be stored.
+    // It is capped rather than refused: the mandate is still active, and a
+    // wrapped value would read as already lapsed and let anyone cancel.
+    let mut expires_at = now.saturating_add(limits.payout_ttl_seconds);
     // An attested payout cannot outlive the statement that it may be paid.
     if let Some(v) = earliest_valid_until {
         expires_at = expires_at.min(v);

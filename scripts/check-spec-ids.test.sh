@@ -109,7 +109,9 @@ expect() {
     return
   fi
   for needle in "$@"; do
-    if ! printf '%s\n' "$out" | grep -qF -- "$needle"; then
+    # A here-string, not a pipe: grep -q stops reading at the first match,
+    # and under pipefail the writer's SIGPIPE would fail a case that passed.
+    if ! grep -qF -- "$needle" <<<"$out"; then
       echo "FAIL: $name: output does not mention '$needle'"
       printf '%s\n' "$out" | sed 's/^/    /'
       failures=$((failures + 1))
@@ -977,6 +979,39 @@ tables_case tables-data-mismatch "$event_list_row" "$good_errors" "$good_constan
 | --- | --- | --- | --- |
 | \`payout_approved\` | payout_id, by | payout_id | approver |"
 expect "event data not the fields without the topic key" 1 "$work/tables-data-mismatch/MANDATE.md" "" "event payout_approved has data approver, but its fields without the topic key are by"
+
+# An event whose only field is its topic key still carries data on chain:
+# an empty map. The table must say so, never "none" or an empty cell.
+topic_only_row="### Event list
+
+| Event | Fields |
+| --- | --- |
+| \`payout_approved\` | payout_id |"
+topic_only_events() {
+  printf "# Events\n\n| Event | Fields | Topic key | Data |\n| --- | --- | --- | --- |\n| \`payout_approved\` | payout_id | payout_id | %s |" "$1"
+}
+tables_case tables-topic-only-none "$topic_only_row" "$good_errors" "$good_constants" "$(topic_only_events none)"
+expect "topic-only event with data none is refused" 1 "$work/tables-topic-only-none/MANDATE.md" "" "event payout_approved carries only its topic key, so its Data must read an empty map, not none"
+
+tables_case tables-topic-only-blank "$topic_only_row" "$good_errors" "$good_constants" "$(topic_only_events '')"
+expect "topic-only event with an empty data cell is refused" 1 "$work/tables-topic-only-blank/MANDATE.md" "" "event payout_approved carries only its topic key, so its Data must read an empty map, not an empty cell"
+
+tables_case tables-topic-only-map "$topic_only_row" "$good_errors" "$good_constants" "$(topic_only_events 'an empty map')"
+expect "topic-only event with an empty map passes" 0 "$work/tables-topic-only-map/MANDATE.md" "" "error table, constants and events agree"
+
+tables_case tables-empty-map-with-fields "$event_list_row" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`payout_approved\` | payout_id, by | payout_id | an empty map |"
+expect "an empty map on an event with data fields is refused" 1 "$work/tables-empty-map-with-fields/MANDATE.md" "" "event payout_approved has data an empty map, but its fields without the topic key are by"
+
+tables_case tables-none-with-fields "$event_list_row" "$good_errors" "$good_constants" "# Events
+
+| Event | Fields | Topic key | Data |
+| --- | --- | --- | --- |
+| \`payout_approved\` | payout_id, by | payout_id | none |"
+expect "data none on an event with data fields is refused" 1 "$work/tables-none-with-fields/MANDATE.md" "" "event payout_approved has data none, but its fields without the topic key are by"
 
 tables_case tables-constant-value "## Constants
 
