@@ -63,7 +63,11 @@ pub struct MandateConfig {
     pub principal: Address,
     pub asset: Address,
     pub recipient_mode: u32,
-    pub tenant_ref: BytesN<32>,
+    /// Lets the operator attribute this mandate's events. It is computed off
+    /// chain from the operator's tenant ID and this mandate's address, so it
+    /// differs per mandate and the ledger never links two mandates of one
+    /// tenant. The contract cannot check it and only stores and emits it.
+    pub tenant_tag: BytesN<32>,
     pub agents: Vec<Address>,
     pub approvers: Vec<Address>,
     pub approvals_required: u32,

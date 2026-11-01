@@ -49,7 +49,7 @@ pub fn mode_code(name: &str) -> Option<u32> {
 pub struct EventSpec {
     /// The canonical fields, in the table's order.
     pub fields: Vec<String>,
-    /// The field carried as the second topic: `payout_id` or `tenant_ref`.
+    /// The field carried as the second topic: `payout_id` or `tenant_tag`.
     pub key: String,
 }
 
@@ -112,7 +112,7 @@ impl Spec {
                 .filter(|f| !f.is_empty())
                 .collect();
             let key = cells[2].to_string();
-            if key != "payout_id" && key != "tenant_ref" {
+            if key != "payout_id" && key != "tenant_tag" {
                 return Err(format!("EVENTS.md row with topic key {key:?}: {line}"));
             }
             for name in backticked(cells[0]) {
@@ -194,13 +194,13 @@ mod test {
         assert_eq!(spec.error_code("AGENT_REMOVED"), Some(65));
         let paused = spec.event("paused").unwrap();
         assert_eq!(paused.fields, ["by"]);
-        assert_eq!(paused.key, "tenant_ref");
+        assert_eq!(paused.key, "tenant_tag");
         // A shared row names two events.
         assert_eq!(spec.event("resumed"), Some(paused));
         let requested = spec.event("payout_requested").unwrap();
         assert_eq!(requested.key, "payout_id");
         assert_eq!(requested.fields[0], "payout_id");
         let created = spec.event("mandate_created").unwrap();
-        assert!(created.fields.contains(&String::from("tenant_ref")));
+        assert!(created.fields.contains(&String::from("tenant_tag")));
     }
 }

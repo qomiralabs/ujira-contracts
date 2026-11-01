@@ -13,6 +13,8 @@
 #   scripts/attestation-message.py --example
 #       print the field bytes, their SHA-256 and the 47-byte message of the
 #       worked example in spec/ENCODING.md
+#   scripts/attestation-message.py --tenant-tag-example
+#       recompute the worked tenant_ref and tenant_tag in spec/ENCODING.md
 #   scripts/attestation-message.py --xdr <strkey>
 #       print the Address::to_xdr bytes of a G, C or M address (an M address
 #       gives its base G address and its id)
@@ -63,6 +65,14 @@ EXAMPLE = {
     "attester_public_key": "421adb50c10fe73fb1fc0d4211a16911a188bb001eaf0391b479316026141d48",
     "signature": "043dcca5e9a6dfd41320f9ecf7b4778bf00ff706ac26d865f4c1ff6366a49e04"
                  "97e63ef43e2a0e6404218231d10d11aa030f954d9eb799ff92f0328e1cae2208",
+}
+
+
+# The worked tenant_tag example: two UUIDs give the tenant_ref, which is
+# bound to the attestation example's mandate.
+TENANT_EXAMPLE = {
+    "principal_uuid": "0b2f3c1e-6a4d-4e8b-9c71-5d2a8f3e4b10",
+    "project_uuid": "7c9e2a41-3b8f-4d6c-a1e5-92f04b7d8c33",
 }
 
 
@@ -152,6 +162,18 @@ def fields(inputs):
     ])
 
 
+def tenant_ref(principal_uuid, project_uuid):
+    return hashlib.sha256(b"ujira/tenant/v1" + uuid.UUID(principal_uuid).bytes
+                          + uuid.UUID(project_uuid).bytes).digest()
+
+
+def tenant_tag(ref, mandate):
+    """The per-mandate tag: the tenant_ref bound to the mandate's address, so
+    two mandates of one tenant never share a value on chain."""
+    mandate_xdr, _ = address_xdr(mandate)
+    return hashlib.sha256(b"ujira/tenant-tag/v1" + fixed(ref.hex(), "tenant_ref") + mandate_xdr).digest()
+
+
 def message(field_bytes):
     return PREFIX + hashlib.sha256(field_bytes).digest()
 
@@ -202,7 +224,7 @@ def derivations():
 DOC_CHECKS = [
     ("the integer widths", r"integers of (\d+), (\d+), (\d+) and (\d+) bytes",
      ("u8", "u16be", "u32be", "u64be")),
-    ("the ID length", r"`tenant_ref` are (\d+) bytes", ("sha256",)),
+    ("the ID length", r"`tenant_tag` are (\d+) bytes", ("sha256",)),
     ("the leg_key length", r"`leg_key` is (\d+) bytes", ("leg_key",)),
     ("the leg index width", r"the `payout_id` and (\d+) bytes? of leg index", ("u8",)),
     ("the address length prefix width", r"each after a (\d+)[- ]bytes? length prefix", ("u8",)),
@@ -231,6 +253,7 @@ BRACKET_WIDTHS = {
     "payout_id": "sha256",
     "network_id": "sha256",
     "recipient_ref": "sha256",
+    "tenant_ref": "sha256",
     "country_policy_hash": "sha256",
     "ed25519_key": "ed25519_key",
     "contract_id": "contract_id",
@@ -348,6 +371,12 @@ def main(argv):
         print("message " + m.hex())
         print("length  %d" % len(m))
         return 0
+    if argv == ["--tenant-tag-example"]:
+        ref = tenant_ref(TENANT_EXAMPLE["principal_uuid"], TENANT_EXAMPLE["project_uuid"])
+        print("tenant_ref  " + ref.hex())
+        print("mandate_xdr " + address_xdr(EXAMPLE["mandate"])[0].hex())
+        print("tenant_tag  " + tenant_tag(ref, EXAMPLE["mandate"]).hex())
+        return 0
     if len(argv) == 2 and argv[0] == "--xdr":
         xdr, tag = address_xdr(argv[1])
         print(xdr.hex() + ("" if tag is None else " tag %d" % tag))
@@ -362,7 +391,7 @@ def main(argv):
         return check_doc(argv[1])
     if len(argv) == 2 and argv[0] == "--check-constants":
         return check_constants(argv[1])
-    print("usage: attestation-message.py --example | --xdr <strkey> | --derive"
+    print("usage: attestation-message.py --example | --tenant-tag-example | --xdr <strkey> | --derive"
           " | --check-doc <file> | --check-constants <file>", file=sys.stderr)
     return 2
 

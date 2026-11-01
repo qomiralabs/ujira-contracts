@@ -1175,8 +1175,8 @@ impl<'a> World<'a> {
                 ),
             ),
             (
-                "tenant_ref",
-                bytes(&bytes32(str_of(&c["tenant_ref"], "tenant_ref")?)?)?,
+                "tenant_tag",
+                bytes(&bytes32(str_of(&c["tenant_tag"], "tenant_tag")?)?)?,
             ),
             ("agents", self.addresses(&c["agents"])?),
             ("approvers", self.addresses(&c["approvers"])?),

@@ -266,8 +266,7 @@ fn request_legs_to_unpayable_addresses_refused() {
         );
         assert_eq!(refused(&fx, &m, &req), MandateError::LegsInvalid, "{a:?}");
     }
-    let zero_tagged =
-        <MuxedAddress as soroban_sdk::testutils::MuxedAddress>::new(&fx.account(0), 5);
+    let zero_tagged = <MuxedAddress as soroban_sdk::testutils::MuxedAddress>::new(fx.account(0), 5);
     req.legs = legs(&fx, &[(zero_tagged, 100)]);
     assert_eq!(refused(&fx, &m, &req), MandateError::LegsInvalid);
     // Ahead of the fee address check, as the check order puts it; both
@@ -283,7 +282,10 @@ fn request_legs_to_unpayable_addresses_refused() {
     assert!(fx.events(&m.address).is_empty());
     assert_eq!(m.payout(&fx.b32(1)), None);
     // A good leg still goes through.
-    assert_eq!(m.request_payout(&fx.agent, &fx.req(1, 100)), STATUS_APPROVED);
+    assert_eq!(
+        m.request_payout(&fx.agent, &fx.req(1, 100)),
+        STATUS_APPROVED
+    );
 }
 
 #[test]

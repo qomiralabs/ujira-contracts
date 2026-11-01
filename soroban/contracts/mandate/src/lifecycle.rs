@@ -93,7 +93,7 @@ pub fn pause(env: &Env, caller: &Address) -> Result<(), MandateError> {
     flags.paused = true;
     storage::set_flags(env, &flags);
     Paused {
-        tenant_ref: storage::fixed(env)?.tenant_ref,
+        tenant_tag: storage::fixed(env)?.tenant_tag,
         by: caller.clone(),
     }
     .publish(env);
@@ -110,7 +110,7 @@ pub fn resume(env: &Env) -> Result<(), MandateError> {
     flags.paused = false;
     storage::set_flags(env, &flags);
     Resumed {
-        tenant_ref: storage::fixed(env)?.tenant_ref,
+        tenant_tag: storage::fixed(env)?.tenant_tag,
         by: principal,
     }
     .publish(env);
@@ -145,7 +145,7 @@ pub(crate) fn revoke_effects(env: &Env, by: &Address) -> Result<i128, MandateErr
     );
     let frozen = derived::balance(env, &fixed.asset);
     Revoked {
-        tenant_ref: fixed.tenant_ref,
+        tenant_tag: fixed.tenant_tag,
         by: by.clone(),
         frozen,
     }
@@ -171,7 +171,7 @@ pub fn withdraw(env: &Env, amount: i128) -> Result<(), MandateError> {
     }
     transfer_out(env, &fixed.asset, &principal, amount)?;
     Withdrawn {
-        tenant_ref: fixed.tenant_ref,
+        tenant_tag: fixed.tenant_tag,
         to: principal,
         amount,
     }
@@ -214,7 +214,7 @@ pub fn sweep(env: &Env, caller: &Address) -> Result<i128, MandateError> {
     }
     transfer_out(env, &fixed.asset, &principal, balance)?;
     Swept {
-        tenant_ref: fixed.tenant_ref,
+        tenant_tag: fixed.tenant_tag,
         by: caller.clone(),
         amount: balance,
     }
@@ -242,7 +242,7 @@ pub fn recover_token(env: &Env, token: &Address, amount: i128) -> Result<(), Man
         return Err(MandateError::WrongAsset);
     }
     TokenRecovered {
-        tenant_ref: fixed.tenant_ref,
+        tenant_tag: fixed.tenant_tag,
         token: token.clone(),
         amount,
     }

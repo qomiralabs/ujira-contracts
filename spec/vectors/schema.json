@@ -181,7 +181,7 @@
         "principal": { "$ref": "#/$defs/actor" },
         "asset": { "$ref": "#/$defs/token" },
         "recipient_mode": { "$ref": "#/$defs/recipient_mode" },
-        "tenant_ref": { "$ref": "#/$defs/bytes32" },
+        "tenant_tag": { "$ref": "#/$defs/bytes32" },
         "agents": { "$ref": "#/$defs/actors" },
         "approvers": { "$ref": "#/$defs/actors" },
         "approvals_required": { "$ref": "#/$defs/u32" },
@@ -198,7 +198,7 @@
         "principal",
         "asset",
         "recipient_mode",
-        "tenant_ref",
+        "tenant_tag",
         "agents",
         "approvers",
         "approvals_required",
@@ -313,7 +313,7 @@
           "description": "Actors that are contracts. An actor not listed here is an account. Of the reserved names only fee_address may be listed.",
           "type": "object",
           "propertyNames": {
-            "allOf": [{ "$ref": "#/$defs/actor" }, { "not": { "enum": ["mandate", "asset", "other_token", "zero"] } }]
+            "allOf": [{ "$ref": "#/$defs/actor" }, { "not": { "enum": ["mandate", "asset", "other_token", "zero", "zero_account", "zero_contract"] } }]
           },
           "additionalProperties": {
             "type": "object",
@@ -395,7 +395,7 @@
         "token": { "$ref": "#/$defs/token" },
         "old": { "$ref": "#/$defs/actor_or_null" },
         "new": { "$ref": "#/$defs/actor_or_null" },
-        "tenant_ref": { "$ref": "#/$defs/bytes32" },
+        "tenant_tag": { "$ref": "#/$defs/bytes32" },
         "payout_id": { "$ref": "#/$defs/bytes32" },
         "recipient_ref": { "$ref": "#/$defs/bytes32" },
         "task_ref": { "$ref": "#/$defs/bytes32" },

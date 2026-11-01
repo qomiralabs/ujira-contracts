@@ -48,13 +48,13 @@ enum Key {
     FeeAddress,
 }
 
-/// Announces a new mandate. The topic key is the tenant reference, as for
+/// Announces a new mandate. The topic key is the tenant tag, as for
 /// every mandate event that is not about a payout.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MandateCreated {
     #[topic]
-    pub tenant_ref: BytesN<32>,
+    pub tenant_tag: BytesN<32>,
     pub mandate: Address,
     pub principal: Address,
     pub asset: Address,
@@ -131,7 +131,7 @@ impl UjiraFactory {
         // mandate_initialized. If the deploy fails the whole call fails, and
         // the event goes with it.
         MandateCreated {
-            tenant_ref: config.tenant_ref.clone(),
+            tenant_tag: config.tenant_tag.clone(),
             mandate: mandate.clone(),
             principal: config.principal.clone(),
             asset: config.asset.clone(),

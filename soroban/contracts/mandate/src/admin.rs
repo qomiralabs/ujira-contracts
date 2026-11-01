@@ -125,8 +125,8 @@ impl UjiraMandate {
     }
 }
 
-fn tenant_ref(env: &Env) -> Result<BytesN<32>, MandateError> {
-    Ok(storage::fixed(env)?.tenant_ref)
+fn tenant_tag(env: &Env) -> Result<BytesN<32>, MandateError> {
+    Ok(storage::fixed(env)?.tenant_tag)
 }
 
 // Limits.
@@ -169,7 +169,7 @@ pub fn update_limits(env: &Env, limits: &Limits) -> Result<(), MandateError> {
 
     storage::set_limits(env, limits);
     LimitsUpdated {
-        tenant_ref: tenant_ref(env)?,
+        tenant_tag: tenant_tag(env)?,
         total_budget: limits.total_budget,
         per_payment_cap: limits.per_payment_cap,
         per_recipient_daily_cap: limits.per_recipient_daily_cap,
@@ -335,21 +335,21 @@ pub fn add_role(env: &Env, role: u32, account: &Address) -> Result<(), MandateEr
     storage::set_roles(env, &roles);
 
     RoleAdded {
-        tenant_ref: fixed.tenant_ref.clone(),
+        tenant_tag: fixed.tenant_tag.clone(),
         role,
         account: account.clone(),
     }
     .publish(env);
     if approvals_set {
         ApprovalsRequiredSet {
-            tenant_ref: fixed.tenant_ref.clone(),
+            tenant_tag: fixed.tenant_tag.clone(),
             required: roles.approvals_required,
         }
         .publish(env);
     }
     if threshold_set {
         RecoveryThresholdSet {
-            tenant_ref: fixed.tenant_ref,
+            tenant_tag: fixed.tenant_tag,
             required: roles.recovery_threshold,
             recovery_epoch: roles.recovery_epoch,
         }
@@ -432,23 +432,23 @@ pub fn remove_role(env: &Env, role: u32, account: &Address) -> Result<(), Mandat
     }
     storage::set_roles(env, &roles);
 
-    let tenant_ref = tenant_ref(env)?;
+    let tenant_tag = tenant_tag(env)?;
     RoleRemoved {
-        tenant_ref: tenant_ref.clone(),
+        tenant_tag: tenant_tag.clone(),
         role,
         account: account.clone(),
     }
     .publish(env);
     if approvals_set {
         ApprovalsRequiredSet {
-            tenant_ref: tenant_ref.clone(),
+            tenant_tag: tenant_tag.clone(),
             required: 0,
         }
         .publish(env);
     }
     if threshold_set {
         RecoveryThresholdSet {
-            tenant_ref,
+            tenant_tag,
             required: 0,
             recovery_epoch: roles.recovery_epoch,
         }
@@ -465,7 +465,7 @@ pub fn set_approvals_required(env: &Env, n: u32) -> Result<(), MandateError> {
     roles.approvals_required = n;
     storage::set_roles(env, &roles);
     ApprovalsRequiredSet {
-        tenant_ref: tenant_ref(env)?,
+        tenant_tag: tenant_tag(env)?,
         required: n,
     }
     .publish(env);
@@ -481,7 +481,7 @@ pub fn set_recovery_threshold(env: &Env, n: u32) -> Result<(), MandateError> {
     bump_recovery_epoch(&mut roles)?;
     storage::set_roles(env, &roles);
     RecoveryThresholdSet {
-        tenant_ref: tenant_ref(env)?,
+        tenant_tag: tenant_tag(env)?,
         required: n,
         recovery_epoch: roles.recovery_epoch,
     }
@@ -542,7 +542,7 @@ pub fn allow_recipients(env: &Env, entries: &Vec<AllowEntry>) -> Result<(), Mand
     for e in entries.iter() {
         storage::set_allowed(env, &e.recipient_ref, &e.destination);
         RecipientAllowed {
-            tenant_ref: fixed.tenant_ref.clone(),
+            tenant_tag: fixed.tenant_tag.clone(),
             recipient_ref: e.recipient_ref,
             destination: e.destination,
         }
@@ -565,7 +565,7 @@ pub fn disallow_recipients(env: &Env, entries: &Vec<AllowEntry>) -> Result<(), M
     for e in entries.iter() {
         storage::remove_allowed(env, &e.recipient_ref, &e.destination);
         RecipientDisallowed {
-            tenant_ref: fixed.tenant_ref.clone(),
+            tenant_tag: fixed.tenant_tag.clone(),
             recipient_ref: e.recipient_ref,
             destination: e.destination,
         }
@@ -625,7 +625,7 @@ pub fn set_attestation_policy(
         .ok_or(MandateError::InternalInvariant)?;
     storage::set_policy(env, &policy);
     AttestationPolicySet {
-        tenant_ref: fixed.tenant_ref,
+        tenant_tag: fixed.tenant_tag,
         attester: attester.clone(),
         country_policy_hash: country_policy_hash.clone(),
         policy_epoch: policy.policy_epoch,
@@ -658,7 +658,7 @@ pub fn propose_principal(env: &Env, proposed: &Address) -> Result<(), MandateErr
     }
     storage::set_proposed_principal(env, Some(proposed));
     PrincipalProposed {
-        tenant_ref: fixed.tenant_ref,
+        tenant_tag: fixed.tenant_tag,
         current: principal,
         proposed: proposed.clone(),
     }
@@ -682,7 +682,7 @@ pub fn accept_principal(env: &Env) -> Result<(), MandateError> {
     storage::set_principal(env, &proposed);
     storage::set_proposed_principal(env, None);
     PrincipalTransferred {
-        tenant_ref: tenant_ref(env)?,
+        tenant_tag: tenant_tag(env)?,
         previous,
         current: proposed,
     }
@@ -695,7 +695,7 @@ pub fn cancel_principal_proposal(env: &Env) -> Result<(), MandateError> {
     let proposed = storage::proposed_principal(env).ok_or(MandateError::ConfigInvalid)?;
     storage::set_proposed_principal(env, None);
     PrincipalProposalCancelled {
-        tenant_ref: tenant_ref(env)?,
+        tenant_tag: tenant_tag(env)?,
         current: principal,
         proposed,
     }
@@ -717,7 +717,7 @@ pub fn lower_fee_cap(env: &Env, new_bps: u32) -> Result<(), MandateError> {
     policy.max_fee_bps = new_bps;
     storage::set_policy(env, &policy);
     FeeCapLowered {
-        tenant_ref: tenant_ref(env)?,
+        tenant_tag: tenant_tag(env)?,
         max_fee_bps: new_bps,
     }
     .publish(env);

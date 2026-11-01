@@ -77,7 +77,7 @@ config=$(
   "principal": "$principal",
   "asset": "$asset",
   "recipient_mode": 1,
-  "tenant_ref": "$(testnet_hex32)",
+  "tenant_tag": "$(testnet_hex32)",
   "agents": [],
   "approvers": [],
   "approvals_required": 0,

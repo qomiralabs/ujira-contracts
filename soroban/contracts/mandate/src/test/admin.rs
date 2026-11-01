@@ -173,13 +173,13 @@ fn first_and_last_approver_move_the_gate() {
         fx.events(&m.address),
         [
             RoleAdded {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 role: ROLE_APPROVER,
                 account: fx.approver.clone(),
             }
             .to_xdr(&fx.env, &m.address),
             ApprovalsRequiredSet {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 required: 1,
             }
             .to_xdr(&fx.env, &m.address),
@@ -218,13 +218,13 @@ fn first_and_last_approver_move_the_gate() {
         fx.events(&m.address),
         [
             RoleRemoved {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 role: ROLE_APPROVER,
                 account: fx.approver.clone(),
             }
             .to_xdr(&fx.env, &m.address),
             ApprovalsRequiredSet {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 required: 0,
             }
             .to_xdr(&fx.env, &m.address),
@@ -251,13 +251,13 @@ fn recovery_threshold_follows_the_set() {
         fx.events(&m.address),
         [
             RoleAdded {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 role: ROLE_RECOVERY,
                 account: fx.recovery.clone(),
             }
             .to_xdr(&fx.env, &m.address),
             RecoveryThresholdSet {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 required: 1,
                 recovery_epoch: 1,
             }
@@ -280,7 +280,7 @@ fn recovery_threshold_follows_the_set() {
     assert_eq!(
         fx.events(&m.address),
         [RecoveryThresholdSet {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             required: 2,
             recovery_epoch: 3,
         }
@@ -299,13 +299,13 @@ fn recovery_threshold_follows_the_set() {
         fx.events(&m.address),
         [
             RoleRemoved {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 role: ROLE_RECOVERY,
                 account: fx.recovery.clone(),
             }
             .to_xdr(&fx.env, &m.address),
             RecoveryThresholdSet {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 required: 0,
                 recovery_epoch: 6,
             }
@@ -373,7 +373,7 @@ fn update_limits_checks_in_order() {
     assert_eq!(
         fx.events(&m.address),
         [LimitsUpdated {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             total_budget: 500,
             per_payment_cap: 499,
             per_recipient_daily_cap: limits.per_recipient_daily_cap,
@@ -478,7 +478,7 @@ fn allowlist_entries_to_unpayable_addresses_refused() {
     let zero_tagged = AllowEntry {
         recipient_ref: fx.b32(1),
         destination: <soroban_sdk::MuxedAddress as soroban_sdk::testutils::MuxedAddress>::new(
-            &fx.account(0),
+            fx.account(0),
             5,
         ),
     };
@@ -489,7 +489,7 @@ fn allowlist_entries_to_unpayable_addresses_refused() {
     assert!(fx.events(&m.address).is_empty());
     assert!(m.is_allowed(&listed.recipient_ref, &listed.destination));
     assert!(!m.is_allowed(&good.recipient_ref, &good.destination));
-    m.allow_recipients(&entries(&fx, &[good.clone()]));
+    m.allow_recipients(&entries(&fx, core::slice::from_ref(&good)));
     assert!(m.is_allowed(&good.recipient_ref, &good.destination));
 }
 
@@ -534,7 +534,7 @@ fn allowlist_entries_checked_and_applied_atomically() {
         .iter()
         .map(|e| {
             RecipientAllowed {
-                tenant_ref: tenant(&fx),
+                tenant_tag: tenant(&fx),
                 recipient_ref: e.recipient_ref.clone(),
                 destination: e.destination.clone(),
             }
@@ -564,7 +564,7 @@ fn allowlist_entries_checked_and_applied_atomically() {
     assert_eq!(
         fx.events(&m.address),
         [RecipientDisallowed {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             recipient_ref: b.recipient_ref.clone(),
             destination: b.destination.clone(),
         }
@@ -631,7 +631,7 @@ fn attestation_policy_changes_bump_the_epoch() {
     assert_eq!(
         fx.events(&id),
         [AttestationPolicySet {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             attester: key.clone(),
             country_policy_hash: fx.b32(1),
             policy_epoch: 1,
@@ -673,7 +673,7 @@ fn principal_moves_in_two_steps() {
     assert_eq!(
         fx.events(&m.address),
         [PrincipalProposed {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             current: fx.principal.clone(),
             proposed: heir.clone(),
         }
@@ -683,7 +683,7 @@ fn principal_moves_in_two_steps() {
     assert_eq!(
         fx.events(&m.address),
         [PrincipalProposalCancelled {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             current: fx.principal.clone(),
             proposed: heir.clone(),
         }
@@ -702,7 +702,7 @@ fn principal_moves_in_two_steps() {
     assert_eq!(
         fx.events(&m.address),
         [PrincipalTransferred {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             previous: fx.principal.clone(),
             current: heir.clone(),
         }
@@ -726,7 +726,7 @@ fn fee_cap_only_goes_down() {
     assert_eq!(
         fx.events(&m.address),
         [FeeCapLowered {
-            tenant_ref: tenant(&fx),
+            tenant_tag: tenant(&fx),
             max_fee_bps: 10,
         }
         .to_xdr(&fx.env, &m.address)]
