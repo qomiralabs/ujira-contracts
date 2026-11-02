@@ -4,7 +4,7 @@
 //! The constructor's checks, in the order they run: a failing and a passing
 //! case for every rule, then the order between rules, then the effects.
 
-use super::{key_of, CreateError, Fx, NOW};
+use super::{key_of, zero_contract, CreateError, Fx, NOW};
 use crate::events::MandateInitialized;
 use crate::types::ConfigView;
 use crate::{MandateConfig, MandateError, UjiraMandateClient};
@@ -319,6 +319,35 @@ fn constructor_refuses_the_fee_address_as_principal_or_in_any_role() {
     });
     refused(ROLE_CONFLICT, |fx, c| {
         c.recovery.push_back(fx.fee_address.clone());
+    });
+}
+
+/// An address nobody can act from would count toward a threshold it can
+/// never help meet, so it is refused everywhere a role is named, whichever
+/// of the two all-zero forms it takes.
+#[test]
+fn constructor_refuses_zero_addresses_as_principal_or_in_any_role() {
+    refused(CONFIG_INVALID, |fx, c| c.principal = fx.account(0));
+    refused(CONFIG_INVALID, |fx, c| c.principal = zero_contract(&fx.env));
+    refused(CONFIG_INVALID, |fx, c| c.agents.push_back(fx.account(0)));
+    refused(CONFIG_INVALID, |fx, c| {
+        c.agents.push_back(zero_contract(&fx.env));
+    });
+    refused(CONFIG_INVALID, |fx, c| c.approvers.push_back(fx.account(0)));
+    refused(CONFIG_INVALID, |fx, c| {
+        c.approvers.push_back(zero_contract(&fx.env));
+    });
+    refused(CONFIG_INVALID, |fx, c| c.guardians.push_back(fx.account(0)));
+    refused(CONFIG_INVALID, |fx, c| {
+        c.guardians.push_back(zero_contract(&fx.env));
+    });
+    refused(CONFIG_INVALID, |fx, c| c.executors.push_back(fx.account(0)));
+    refused(CONFIG_INVALID, |fx, c| {
+        c.executors.push_back(zero_contract(&fx.env));
+    });
+    refused(CONFIG_INVALID, |fx, c| c.recovery.push_back(fx.account(0)));
+    refused(CONFIG_INVALID, |fx, c| {
+        c.recovery.push_back(zero_contract(&fx.env));
     });
 }
 

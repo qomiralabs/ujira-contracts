@@ -198,7 +198,7 @@ pub fn recovery_rotate_agent(
         .and_then(|i| u32::try_from(i).ok())
         .ok_or(MandateError::ConfigInvalid)?;
     if let Some(n) = new {
-        if roles.agent(n).is_some() {
+        if roles.agent(n).is_some() || mandate_config::is_zero_address(env, n) {
             return Err(MandateError::ConfigInvalid);
         }
         // The new agent meets the same separation as one the principal
