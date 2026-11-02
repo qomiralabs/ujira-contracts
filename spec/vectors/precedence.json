@@ -7505,6 +7505,288 @@
           }
         }
       ]
+    },
+    {
+      "id": "precedence_create_4_5_stellar",
+      "rules": [
+        "MANDATE-CONFIG-005",
+        "MANDATE-ROLE-017"
+      ],
+      "description": "An attester in ALLOWLIST mode and an all-zero guardian: the attester check comes before the zero address check.",
+      "applies_to": [
+        "stellar"
+      ],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600"
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "create",
+          "caller": "principal",
+          "args": {
+            "config": {
+              "principal": "principal",
+              "asset": "asset",
+              "recipient_mode": "ALLOWLIST",
+              "tenant_tag": "#tenant",
+              "agents": [
+                "agent"
+              ],
+              "approvers": [],
+              "approvals_required": 0,
+              "guardians": [
+                "zero_account"
+              ],
+              "executors": [],
+              "recovery": [],
+              "recovery_threshold": 0,
+              "limits": {
+                "total_budget": "10000",
+                "per_payment_cap": "1000",
+                "per_recipient_daily_cap": "1000",
+                "approval_threshold": "1001",
+                "payout_ttl_seconds": "86400",
+                "expires_at": "1798761600"
+              },
+              "attester": "#attester",
+              "country_policy_hash": "#no_countries",
+              "max_fee_bps": 0
+            },
+            "salt": "#salt"
+          },
+          "precedence": [
+            "4",
+            "5"
+          ],
+          "expect": {
+            "error": "CONFIG_INVALID",
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "precedence_create_5_6_stellar",
+      "rules": [
+        "MANDATE-ROLE-017",
+        "MANDATE-ROLE-002"
+      ],
+      "description": "An all-zero guardian and the principal as an agent: the zero address check comes before role separation.",
+      "applies_to": [
+        "stellar"
+      ],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600"
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "create",
+          "caller": "principal",
+          "args": {
+            "config": {
+              "principal": "principal",
+              "asset": "asset",
+              "recipient_mode": "ALLOWLIST",
+              "tenant_tag": "#tenant",
+              "agents": [
+                "principal"
+              ],
+              "approvers": [],
+              "approvals_required": 0,
+              "guardians": [
+                "zero_account"
+              ],
+              "executors": [],
+              "recovery": [],
+              "recovery_threshold": 0,
+              "limits": {
+                "total_budget": "10000",
+                "per_payment_cap": "1000",
+                "per_recipient_daily_cap": "1000",
+                "approval_threshold": "1001",
+                "payout_ttl_seconds": "86400",
+                "expires_at": "1798761600"
+              },
+              "attester": null,
+              "country_policy_hash": "#no_countries",
+              "max_fee_bps": 0
+            },
+            "salt": "#salt"
+          },
+          "precedence": [
+            "5",
+            "6"
+          ],
+          "expect": {
+            "error": "CONFIG_INVALID",
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "precedence_add_role_3_4_stellar",
+      "rules": [
+        "MANDATE-ROLE-016",
+        "MANDATE-ROLE-017"
+      ],
+      "description": "Role code 9 for the all-zero account: the role code is checked first.",
+      "applies_to": [
+        "stellar"
+      ],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_tag": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "bob",
+              "tag": null
+            }
+          }
+        ],
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "5000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "add_role",
+          "caller": "principal",
+          "args": {
+            "role": 9,
+            "account": "zero_account"
+          },
+          "precedence": [
+            "3",
+            "4"
+          ],
+          "expect": {
+            "error": "CONFIG_INVALID",
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "precedence_propose_principal_1_2_stellar",
+      "rules": [
+        "MANDATE-ROLE-015",
+        "MANDATE-ROLE-017"
+      ],
+      "description": "A guardian proposes the all-zero account: only the principal may, and that fails host authorization first.",
+      "applies_to": [
+        "stellar"
+      ],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_tag": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [
+            "guardian"
+          ],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "10000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "bob",
+              "tag": null
+            }
+          }
+        ],
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "5000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "propose_principal",
+          "caller": "guardian",
+          "args": {
+            "proposed": "zero_account"
+          },
+          "precedence": [
+            "1",
+            "2"
+          ],
+          "expect": {
+            "error": "UNAUTHORIZED",
+            "events": [],
+            "per_chain": {
+              "stellar": {
+                "host_auth_failure": true
+              }
+            }
+          }
+        }
+      ]
     }
   ]
 }

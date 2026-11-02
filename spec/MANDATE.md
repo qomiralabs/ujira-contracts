@@ -208,8 +208,8 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 #### MANDATE-ROLE-017 No zero address as principal or role member
 
-- Precondition: on Celo, the zero address given as `config.principal`, as any role member at creation, in `add_role`, or as `propose_principal(proposed)`. In `recovery_rotate_agent` the zero address encodes "no new agent", so it never reaches this rule.
-- Effect: refused. The zero address can never call, so as a role member it would count toward `len(approvers)` or `len(recovery)` without ever being able to approve or vote, and as a proposed principal it could not be told apart from no proposal. Unreachable on Stellar, which has no zero address; the vectors are Celo only with the unrepresentable-input skip reason.
+- Precondition: a zero address given as `config.principal`, as any role member at creation, in `add_role`, or as `propose_principal(proposed)`. On Celo that is the zero address; on Stellar it is the account whose ed25519 key is 32 zero bytes and the contract whose ID is 32 zero bytes, as in `MANDATE-SPLIT-003`. In `recovery_rotate_agent` on Celo the zero address encodes "no new agent", so it never reaches this rule; on Stellar `new` is optional, so an all-zero `new` is refused under `MANDATE-RECOVERYSET-005`.
+- Effect: refused. Nobody can call from a zero address, so as a role member it would count toward `len(approvers)` or `len(recovery)` without ever being able to approve or vote, which leaves a threshold unreachable or makes it read as stronger than it is, and as a proposed principal it could never accept, and on Celo could not be told apart from no proposal. On Stellar a zero address as `config.principal` already fails the principal's authorization at `create` (`MANDATE-CONFIG-003`), because nobody can sign for it, and this check holds in the constructor all the same.
 - Error: `CONFIG_INVALID`
 
 #### MANDATE-ROLE-018 The attester's key holds no role
@@ -264,8 +264,8 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 #### MANDATE-RECOVERYSET-005 Rotation targets an existing agent
 
-- Precondition: `recovery_rotate_agent(old, new)` where `old` is not a current agent, or `new` is given and is already an agent.
-- Effect: refused. One agent leaves as one joins, so the agent bound cannot be exceeded.
+- Precondition: `recovery_rotate_agent(old, new)` where `old` is not a current agent, or `new` is given and is already an agent or a zero address (`MANDATE-ROLE-017`).
+- Effect: refused. One agent leaves as one joins, so the agent bound cannot be exceeded, and the agent that joins is one that can act.
 - Error: `CONFIG_INVALID`
 
 #### MANDATE-RECOVERYSET-006 Rotation respects the role rules
@@ -1046,7 +1046,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PRINCIPAL-001 Propose a new principal
 
 - Precondition: `propose_principal(proposed)` where `proposed` is in `agents`, `executors` or `recovery`, or is `fee_address`.
-- Effect: refused. The attester key overlap is a separate check (`MANDATE-ROLE-018`), and on Celo so is the zero address (`MANDATE-ROLE-017`). On success `proposed_principal = proposed` and `principal_proposed { current, proposed }` is emitted. A new proposal replaces an earlier one.
+- Effect: refused. The attester key overlap is a separate check (`MANDATE-ROLE-018`), and so is a zero address (`MANDATE-ROLE-017`). On success `proposed_principal = proposed` and `principal_proposed { current, proposed }` is emitted. A new proposal replaces an earlier one.
 - Error: `ROLE_CONFLICT`
 
 #### MANDATE-PRINCIPAL-002 Accept the transfer
@@ -1195,7 +1195,7 @@ Authorization comes first in every call. Every call that takes a `caller` addres
 2. `config.asset` is supported by the factory (MANDATE-ASSET-001).
 3. Every field is in its domain and the cross-field rules hold (MANDATE-CONFIG-002).
 4. The attester is present exactly when the mode needs it, and well formed (MANDATE-CONFIG-005).
-5. On Celo, neither the principal nor any role member is the zero address (MANDATE-ROLE-017).
+5. Neither the principal nor any role member is a zero address (MANDATE-ROLE-017).
 6. The principal is in neither `agents` nor `executors` (MANDATE-ROLE-002).
 7. `agents` and `approvers` are disjoint (MANDATE-ROLE-003).
 8. `executors` and `approvers` are disjoint (MANDATE-ROLE-004).
@@ -1451,7 +1451,7 @@ Effects: `MANDATE-RECOVER-003`, then the settlement balance check of `MANDATE-RE
 1. The caller is the principal (MANDATE-ROLE-015).
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The role code is known and the account is not already in the set (MANDATE-ROLE-016).
-4. On Celo, the account is not the zero address (MANDATE-ROLE-017).
+4. The account is not a zero address (MANDATE-ROLE-017).
 5. The account would not break role separation (MANDATE-ROLE-009).
 6. The account's key is not the attester's key (MANDATE-ROLE-018).
 7. The set would not exceed its bound (MANDATE-ROLE-007).
@@ -1539,7 +1539,7 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 
 <!-- check-order: propose_principal -->
 1. The caller is the principal (MANDATE-ROLE-015).
-2. On Celo, the proposed address is not the zero address (MANDATE-ROLE-017).
+2. The proposed address is not a zero address (MANDATE-ROLE-017).
 3. The proposed address holds no conflicting role (MANDATE-PRINCIPAL-001).
 4. The proposed address's key is not the attester's key (MANDATE-ROLE-018).
 <!-- /check-order -->
@@ -1595,7 +1595,7 @@ Effects: `MANDATE-RECOVERYSET-008`.
 1. The caller authorizes the call (MANDATE-ROLE-019).
 2. The caller is a recovery approver (MANDATE-RECOVERYSET-004).
 3. The mandate is not revoked (MANDATE-REVOKE-002).
-4. `old` is a current agent and `new`, if given, is not (MANDATE-RECOVERYSET-005).
+4. `old` is a current agent and `new`, if given, is neither an agent nor a zero address (MANDATE-RECOVERYSET-005).
 5. `new`, if given, holds no conflicting role (MANDATE-RECOVERYSET-006).
 6. The key of `new`, if given, is not the attester's key (MANDATE-ROLE-018).
 7. The caller has not voted for this action in this epoch (MANDATE-RECOVERYSET-007).

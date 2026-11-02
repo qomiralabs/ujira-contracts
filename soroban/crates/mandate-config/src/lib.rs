@@ -98,6 +98,8 @@ pub fn validate(
     check_domains(config, now)?;
     // The attester is present exactly when the mode needs it.
     check_attester_presence(config.recipient_mode, &config.attester)?;
+    // Nobody can act from a zero address.
+    check_no_zero_members(env, config)?;
     // Role separation.
     check_separation(config, fee_address)?;
     // The attester's key is no role account's key.
@@ -248,6 +250,23 @@ pub fn is_zero_address(env: &Env, address: &Address) -> bool {
         Some(start) => xdr.slice(start..).iter().all(|b| b == 0),
         None => false,
     }
+}
+
+/// Nobody can act from a zero address, so as a role member it would count
+/// toward a threshold it can never help meet: a set reading 2 of 2 would
+/// really be 1 of 1, or could never be met at all.
+fn check_no_zero_members(env: &Env, config: &MandateConfig) -> Result<(), MandateError> {
+    let zero = |list: &Vec<Address>| list.iter().any(|a| is_zero_address(env, &a));
+    if is_zero_address(env, &config.principal)
+        || zero(&config.agents)
+        || zero(&config.approvers)
+        || zero(&config.guardians)
+        || zero(&config.executors)
+        || zero(&config.recovery)
+    {
+        return Err(MandateError::ConfigInvalid);
+    }
+    Ok(())
 }
 
 /// Every role set within its bound.

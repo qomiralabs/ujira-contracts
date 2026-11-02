@@ -7,7 +7,7 @@
 
 extern crate std;
 
-use super::{code, Fx, FUNDED, NOW};
+use super::{code, zero_contract, Fx, FUNDED, NOW};
 use crate::events::{RecoveryExecuted, RecoveryVoteAdded, Revoked, RoleAdded, RoleRemoved};
 use crate::recovery::{ACTION_RAN, KIND_REVOKE, KIND_ROTATE_AGENT, VOTE_RECORDED};
 use crate::types::{ROLE_AGENT, ROLE_GUARDIAN};
@@ -58,6 +58,28 @@ fn rotate_releases_the_old_agents_reservations() {
     m.cancel(&fx.principal, &fx.b32(3));
     let st = m.state();
     assert_eq!((st.spent, st.pending, st.committed), (0, 0, 0));
+}
+
+/// Recovery can never rotate an agent out in favour of an address nobody
+/// can act from, and a refused call records no vote.
+#[test]
+fn rotate_refuses_a_zero_new_agent() {
+    let fx = Fx::new();
+    let (m, r2, _a2) = two_of_two(&fx);
+    let before = m.config();
+    for a in [fx.account(0), zero_contract(&fx.env)] {
+        assert_eq!(
+            code(m.try_recovery_rotate_agent(&fx.recovery, &fx.agent, &Some(a.clone()))),
+            MandateError::ConfigInvalid,
+            "{a:?}"
+        );
+        assert_eq!(
+            code(m.try_recovery_rotate_agent(&r2, &fx.agent, &Some(a.clone()))),
+            MandateError::ConfigInvalid,
+            "{a:?}"
+        );
+    }
+    assert_eq!(m.config(), before);
 }
 
 /// Everything recovery must never change.
