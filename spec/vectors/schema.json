@@ -326,7 +326,7 @@
           "description": "Actors that are contracts. An actor not listed here is an account. Of the reserved names only fee_address may be listed.",
           "type": "object",
           "propertyNames": {
-            "allOf": [{ "$ref": "#/$defs/actor" }, { "not": { "enum": ["mandate", "asset", "other_token", "zero"] } }]
+            "allOf": [{ "$ref": "#/$defs/actor" }, { "not": { "enum": ["mandate", "asset", "other_token", "zero", "zero_account", "zero_contract"] } }]
           },
           "additionalProperties": {
             "type": "object",

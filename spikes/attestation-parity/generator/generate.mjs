@@ -20,7 +20,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { Account, Address, Keypair, MuxedAccount, StrKey } from "@stellar/stellar-base";
+import { Account, Address, Keypair, MuxedAccount, StrKey } from "@stellar/stellar-sdk/base";
 
 const PREFIX = "UJIRA/ATTEST/V2";
 const MESSAGE_BYTES = 47;

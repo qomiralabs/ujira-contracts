@@ -25,7 +25,7 @@
 
 #![no_std]
 
-use mandate_config::{MandateConfig, SPEC_VERSION};
+use mandate_config::{is_zero_address, MandateConfig, SPEC_VERSION};
 use mandate_errors::MandateError;
 use soroban_sdk::{
     contract, contractevent, contractimpl, contracttype, xdr::ToXdr, Address, Bytes, BytesN,
@@ -213,16 +213,6 @@ fn extend_instance(env: &Env) {
     let to = INSTANCE_TTL_EXTEND_TO.min(env.storage().max_ttl());
     let threshold = INSTANCE_TTL_THRESHOLD.min(to);
     env.storage().instance().extend_ttl(threshold, to);
-}
-
-/// An account or contract address whose 32-byte key or hash is all zeros.
-/// Both encode as an XDR `ScVal` address that ends with those 32 bytes.
-fn is_zero_address(env: &Env, address: &Address) -> bool {
-    let xdr = address.clone().to_xdr(env);
-    match xdr.len().checked_sub(32) {
-        Some(start) => xdr.slice(start..).iter().all(|b| b == 0),
-        None => false,
-    }
 }
 
 fn has_repeat(list: &Vec<Address>) -> bool {

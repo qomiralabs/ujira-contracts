@@ -42,8 +42,10 @@ Each actor name stands for one address, the same for the whole vector, which the
 | `other_token` | A second token, which the factory does not support. |
 | `fee_address` | The factory's fee address, an account unless the setup lists it as a contract, as a vector does when it pays a fee above what a Stellar trustline holds. It may make calls, so a vector can show that it holds no role. |
 | `zero` | The zero address. Only Celo has one, so a vector that names it is restricted to Celo. |
+| `zero_account` | The Stellar account whose ed25519 key is 32 zero bytes. Nobody holds its key, so a vector that names it is restricted to Stellar. It may take a tag. |
+| `zero_contract` | The Stellar contract whose ID is 32 zero bytes, where no contract is deployed. A vector that names it is restricted to Stellar. |
 
-`mandate`, `asset`, `other_token` and `zero` never make a call.
+`mandate`, `asset`, `other_token`, `zero`, `zero_account` and `zero_contract` never make a call.
 
 ### Labels and test keys
 
@@ -82,6 +84,7 @@ A vector runs on every chain, `stellar` and `celo`, unless `applies_to` lists fe
 | A negative amount | `stellar` | Celo amounts are unsigned. |
 | An amount above `I128_MAX` | `celo` | Stellar amounts are `i128`. |
 | The `zero` actor | `celo` | Stellar has no zero address. |
+| The `zero_account` or `zero_contract` actor | `stellar` | Only a Stellar address is a 32-byte account key or contract ID. |
 | The non-canonical tag | `celo` | A Stellar destination cannot mark a tag absent and still carry one. |
 | A `reentrant` test token | `celo` | The Stellar host refuses any call into a contract already on the call stack, views included. |
 | `recover_token` of a `moves_settlement` token | `celo`, or `stellar` expecting `TRANSFER_FAILED` | Only on Celo can a second token address move the settlement balance; on Stellar the token's attempt fails its transfer. |

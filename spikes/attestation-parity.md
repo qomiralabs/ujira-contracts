@@ -8,7 +8,7 @@ History: until 2026-10-18 this spike used version 1 (secp256k1 over a keccak dig
 
 ## Test-only keys
 
-Every key in `attestation-parity/fixture.json` is an ed25519 key whose 32 byte seed is the SHA-256 of a public label, written next to the key in the fixture, so anyone can rebuild it. These keys must never hold funds, sign anything real, or be configured as an attester outside tests. The fixture holds the labels and public keys only; a consumer that needs to sign derives the seed itself.
+Every key in `attestation-parity/fixture.json` is an ed25519 key whose 32 byte seed is the SHA-256 of a public label, written next to the key in the fixture, so anyone can rebuild it. These keys must never hold funds, sign anything real, or be configured as an attester outside tests; `scripts/check-test-attesters.py` refuses them everywhere but test code, in CI and before a deploy. The fixture holds the labels and public keys only; a consumer that needs to sign derives the seed itself.
 
 | Key | Seed | Public key |
 | --- | --- | --- |

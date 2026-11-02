@@ -214,7 +214,7 @@ fn request_item(env: &Env, agent: &Agent, req: &PayoutRequest) -> Result<u32, Ma
     let charge = check_amounts(req.total, req.fee)?;
 
     let fixed = storage::fixed(env)?;
-    check_legs(&req.legs, req.total, &fixed.fee_address)?;
+    check_legs(env, &fixed, &req.legs, req.total)?;
 
     let policy = storage::policy(env)?;
     let earliest_valid_until = check_recipients(env, fixed.recipient_mode, &policy, req, now)?;
@@ -326,11 +326,27 @@ fn same_destination(a: &Leg, b: &Leg) -> bool {
     a.destination.address() == b.destination.address() && a.destination.id() == b.destination.id()
 }
 
-/// Leg count, leg amounts, the fee address, duplicates and the sum, in that
-/// order. Stellar has no zero address, and a muxed address cannot mark a
-/// tag absent while carrying a value, so those two leg rules have nothing
-/// to check here.
-fn check_legs(legs: &Vec<Leg>, total: i128, fee_address: &Address) -> Result<(), MandateError> {
+/// An address a payout could reach but nobody could ever spend from: the
+/// mandate itself, the settlement asset's own contract, and the account or
+/// contract whose key is all zeros. Paying the first spends budget and fee
+/// while paying no one; the others burn the amount. Only a principal or an
+/// attester mistake could bind one, so refusing them costs nothing honest.
+pub(crate) fn is_unpayable(env: &Env, fixed: &storage::Fixed, address: &Address) -> bool {
+    *address == env.current_contract_address()
+        || *address == fixed.asset
+        || mandate_config::is_zero_address(env, address)
+}
+
+/// Leg count, leg amounts, unpayable addresses, the fee address,
+/// duplicates and the sum, in that order. A muxed address cannot mark a tag
+/// absent while carrying a value, so the tag form rule has nothing to check
+/// here.
+fn check_legs(
+    env: &Env,
+    fixed: &storage::Fixed,
+    legs: &Vec<Leg>,
+    total: i128,
+) -> Result<(), MandateError> {
     let n = legs.len();
     if n == 0 || n > MAX_LEGS {
         return Err(MandateError::LegsInvalid);
@@ -338,11 +354,17 @@ fn check_legs(legs: &Vec<Leg>, total: i128, fee_address: &Address) -> Result<(),
     if legs.iter().any(|leg| leg.amount < 1) {
         return Err(MandateError::LegsInvalid);
     }
+    if legs
+        .iter()
+        .any(|leg| is_unpayable(env, fixed, &leg.destination.address()))
+    {
+        return Err(MandateError::LegsInvalid);
+    }
     // Every unit that reaches the fee address must be the fee, so the cap
     // on it means something.
     if legs
         .iter()
-        .any(|leg| leg.destination.address() == *fee_address)
+        .any(|leg| leg.destination.address() == fixed.fee_address)
     {
         return Err(MandateError::LegsInvalid);
     }
