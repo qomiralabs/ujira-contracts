@@ -30,6 +30,7 @@ The values in force on Stellar. A row marked Stellar only depends on Stellar sto
 | `MAX_LEGS` | 4 | Legs per payout |
 | `MAX_BATCH` | 10 | Items per `request_payouts`, `cancel_batch` and `execute_batch`, and entries per `allow_recipients` and `disallow_recipients` |
 | `MAX_BATCH_TRANSFERS` | 18 | Token transfers per `execute_batch`: every leg of every item, plus one per item with a non-zero fee |
+| `SOROBAN_MAX_WASM_BYTES` | 131072 | The largest contract wasm the network accepts for upload, in bytes, as `stellar network settings` reports `contract_max_size_bytes` |
 | `MAX_AGENTS` | 8 | Size bound of `agents` |
 | `MAX_APPROVERS` | 10 | Size bound of `approvers` |
 | `MAX_GUARDIANS` | 4 | Size bound of `guardians` |

@@ -107,6 +107,15 @@ jobs:
       - name: Test the header check
         run: scripts/check-headers.test.sh
 
+      # UJIRA runs on Stellar only, so another chain's stack coming back fails
+      # here. The spec keeps its chain-neutral rules and is left out; anything
+      # else needs an exact entry with a reason in the allowlist.
+      - name: Check for chain-specific code
+        run: scripts/check-chain-specific.sh
+
+      - name: Test the chain-specific check
+        run: scripts/check-chain-specific.test.sh
+
       # Literal bidirectional controls and invisible characters can make code
       # read differently from how it runs, in a file, a file name or a symlink
       # target. Reads committed blobs. Uses the runner's python3 and its standard
@@ -143,6 +152,13 @@ jobs:
           scripts/check-test-attesters.py
           scripts/check-test-attesters.test.sh
 
+      # A restored target directory is trusted code, so it must come from an
+      # exact key for this ref, and what ships is built with no cache at all.
+      - name: Check the build caches
+        run: |
+          scripts/check-caches.py
+          scripts/check-caches.test.sh
+
       # Deployment records are committed, so they may hold public ids only.
       # The self test proves the check refuses secret shaped values, other
       # networks and malformed ids, then checks every deployments/*.json.
@@ -156,8 +172,10 @@ jobs:
 
       # Every byte count and length in spec/ENCODING.md is derived from the
       # layout here, not read from the file, and the file is checked against
-      # the derivation. The output is kept in the log so the figures can be
-      # read against their source without running anything.
+      # the derivation. The layouts themselves are evaluated, and every other
+      # digit run must be exempt, by construction or by a named reason. The
+      # output, with the counts, is kept in the log so the figures can be read
+      # against their source without running anything.
       - name: Derive the encoding byte counts
         run: |
           scripts/attestation-message.py --derive
@@ -281,6 +299,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The size check compares the budget file with the commit before this one.
+          fetch-depth: 2
 
       - name: Install the pinned Rust toolchain
         run: |
@@ -304,8 +324,10 @@ jobs:
           rustup target list --installed | grep -qx wasm32v1-none || { echo "wasm32v1-none is not installed" >&2; exit 1; }
           echo "toolchain=${channel}" >> "$GITHUB_ENV"
 
-      # Keyed on the toolchain and the lockfile. A lockfile change restores
-      # the closest older cache and only rebuilds what changed.
+      # Keyed on the ref, the lockfile and the toolchain, with no fallback: what
+      # lands in soroban/target is linked into the build unchecked, so a cache
+      # from another branch must never seed it. A new pull request therefore
+      # starts cold, and later pushes to it restore its own cache.
       - name: Cache cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -314,9 +336,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             soroban/target
-          key: soroban-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
-          restore-keys: |
-            soroban-${{ runner.os }}-${{ env.toolchain }}-
+          key: soroban-${{ runner.os }}-${{ github.ref }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock', 'soroban/rust-toolchain.toml') }}
 
       - name: Install stellar-cli
         run: |
@@ -429,6 +449,14 @@ jobs:
           ../scripts/soroban-build.sh
           ls -l target/wasm32v1-none/release/*.wasm
 
+      # The network refuses a contract above its size limit. Prints each
+      # contract's size, budget and limit, from the build just above.
+      - name: Check the wasm sizes
+        run: |
+          shellcheck ../scripts/check-wasm-sizes.sh ../scripts/check-wasm-sizes.test.sh
+          ../scripts/check-wasm-sizes.test.sh
+          ../scripts/check-wasm-sizes.sh --no-build
+
       - name: Check the tree is clean after the build
         run: |
           status=$(git status --porcelain --untracked-files=all)
@@ -485,9 +513,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             soroban/target
-          key: batch-limits-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
-          restore-keys: |
-            batch-limits-${{ runner.os }}-${{ env.toolchain }}-
+          key: batch-limits-${{ runner.os }}-${{ github.ref }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock', 'soroban/rust-toolchain.toml') }}
 
       - name: Install stellar-cli
         run: |
@@ -544,9 +570,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             soroban/target
-          key: vectors-stellar-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
-          restore-keys: |
-            vectors-stellar-${{ runner.os }}-${{ env.toolchain }}-
+          key: vectors-stellar-${{ runner.os }}-${{ github.ref }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock', 'soroban/rust-toolchain.toml') }}
 
       - name: Install stellar-cli
         run: |
@@ -596,6 +620,42 @@ jobs:
             exit 0
           fi
           exit "$code"
+
+  # The server side of the local guard hooks, which can be skipped or missing on
+  # a fresh machine: no dashes in the files a change touches, no attribution in
+  # its commit messages, no internal files in the tree. Needs the whole history to
+  # find the range. A pull request is checked from its base to its head, and a push
+  # from the commit before it, or just its own commit when that one is unknown.
+  hygiene:
+    name: hygiene
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Test the hygiene check
+        run: |
+          shellcheck scripts/hygiene.sh scripts/hygiene.test.sh
+          scripts/hygiene.test.sh
+
+      - name: Check hygiene over the range
+        if: ${{ !cancelled() }}
+        env:
+          RANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RANGE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          base=$RANGE_BASE
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="${RANGE_HEAD}^"
+          fi
+          scripts/hygiene.sh "$base" "$RANGE_HEAD"
 
   # Fails on any em dash or en dash in a tracked file's content or its path.
   # The same scripts run in every UJIRA repository. The self test runs first,
