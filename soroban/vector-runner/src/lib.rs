@@ -17,12 +17,14 @@
 //! - `invariants`: I1 to I10, checked after every step of a trace.
 //! - `attest`: the attestation message, signatures and tamper kinds.
 //! - `stellar`: the Soroban driver.
+//! - `resources`: the resource snapshot of every public function.
 
 pub mod attest;
 pub mod canon;
 pub mod cli;
 pub mod compare;
 pub mod invariants;
+pub mod resources;
 pub mod run;
 pub mod spec;
 pub mod stellar;

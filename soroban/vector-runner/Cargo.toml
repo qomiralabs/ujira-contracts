@@ -17,6 +17,10 @@ path = "src/bin/vector-run.rs"
 name = "vector-compare"
 path = "src/bin/vector-compare.rs"
 
+[[bin]]
+name = "resource-snapshot"
+path = "src/bin/resource-snapshot.rs"
+
 [dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 mandate-errors = { workspace = true }

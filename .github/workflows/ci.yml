@@ -537,6 +537,66 @@ jobs:
       - name: Run the batch limits suite
         run: cargo test --locked -p batch-limits -- --nocapture --test-threads=1
 
+  # Resource usage decides whether a batch fits in one transaction and what a
+  # payout costs. Compares a fresh run on the compiled contracts with the committed
+  # snapshot, and fails on any figure outside the margin in either direction. Shares
+  # the cargo cache key of vectors-stellar, which builds the same crates, so the
+  # job adds little beyond linking one more binary.
+  resources:
+    name: resources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+    defaults:
+      run:
+        working-directory: soroban
+        shell: env -u RUSTUP_TOOLCHAIN bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the resource check
+        run: |
+          shellcheck ../scripts/check-resources.test.sh
+          ../scripts/check-resources.test.sh
+
+      - name: Install the pinned Rust toolchain
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          [ -n "$channel" ] || { echo "no channel in rust-toolchain.toml" >&2; exit 1; }
+          rustup toolchain install
+          rustc --version | grep -q "^rustc ${channel} " || { echo "rustc is not ${channel}" >&2; exit 1; }
+          echo "toolchain=${channel}" >> "$GITHUB_ENV"
+
+      - name: Cache cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            soroban/target
+          key: vectors-stellar-${{ runner.os }}-${{ github.ref }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock', 'soroban/rust-toolchain.toml') }}
+
+      - name: Install stellar-cli
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -fsSLo stellar.tar.gz "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${STELLAR_CLI_SHA256}  stellar.tar.gz" | sha256sum --check --strict
+          tar -xzf stellar.tar.gz -C "${RUNNER_TEMP}/bin" stellar
+          rm stellar.tar.gz
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: Build the production contracts
+        run: ../scripts/soroban-build.sh
+
+      - name: Check the resource snapshot
+        run: python3 ../scripts/check-resources.py
+
   # Runs the shared vectors against the compiled factory and mandate with
   # tests/run, and validates the traces against tests/trace.schema.json. The
   # runner's own self tests run in the soroban job with the rest of the

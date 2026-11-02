@@ -1,0 +1,232 @@
+{
+  "scenarios": [
+    {
+      "name": "accept_principal",
+      "vector": "principal_two_step_transfer",
+      "fn": "accept_principal",
+      "occurrence": 1
+    },
+    {
+      "name": "add_role",
+      "vector": "approval_first_approver_sets_required_to_one",
+      "fn": "add_role",
+      "occurrence": 1
+    },
+    {
+      "name": "allow_recipients_max_batch",
+      "vector": "config_allowlist_ten_entries_accepted",
+      "fn": "allow_recipients",
+      "occurrence": 1
+    },
+    {
+      "name": "approve",
+      "vector": "amount_i128_max_accepted_and_paid",
+      "fn": "approve",
+      "occurrence": 1
+    },
+    {
+      "name": "cancel",
+      "vector": "approval_remove_last_approver_needs_threshold_above_cap",
+      "fn": "cancel",
+      "occurrence": 1
+    },
+    {
+      "name": "cancel_batch_max_batch",
+      "vector": "batch_cancel_ten_items_accepted",
+      "fn": "cancel_batch",
+      "occurrence": 1
+    },
+    {
+      "name": "cancel_principal_proposal",
+      "vector": "events_configuration_calls_in_order",
+      "fn": "cancel_principal_proposal",
+      "occurrence": 1
+    },
+    {
+      "name": "config",
+      "vector": "config_views_answer",
+      "fn": "config",
+      "occurrence": 1
+    },
+    {
+      "name": "create",
+      "vector": "approval_required_at_create_refused",
+      "fn": "create",
+      "occurrence": 5
+    },
+    {
+      "name": "daily_used",
+      "vector": "config_views_answer",
+      "fn": "daily_used",
+      "occurrence": 1
+    },
+    {
+      "name": "disallow_recipients",
+      "vector": "batch_execute_second_of_three_fails_reverts_all",
+      "fn": "disallow_recipients",
+      "occurrence": 1
+    },
+    {
+      "name": "execute",
+      "vector": "amount_one_unit_accepted_and_paid",
+      "fn": "execute",
+      "occurrence": 1
+    },
+    {
+      "name": "execute_four_legs_and_fee",
+      "vector": "fee_four_legs_plus_fee_paid",
+      "fn": "execute",
+      "occurrence": 1
+    },
+    {
+      "name": "execute_batch_max_batch",
+      "vector": "batch_execute_ten_items_accepted",
+      "fn": "execute_batch",
+      "occurrence": 1
+    },
+    {
+      "name": "execute_batch_max_transfers",
+      "vector": "batch_execute_two_leg_nine_items_accepted",
+      "fn": "execute_batch",
+      "occurrence": 1
+    },
+    {
+      "name": "execute_batch_four_legs_and_fee",
+      "vector": "resource_execute_batch_four_legs_and_fee",
+      "fn": "execute_batch",
+      "occurrence": 1
+    },
+    {
+      "name": "is_allowed",
+      "vector": "config_allowlist_ten_entries_accepted",
+      "fn": "is_allowed",
+      "occurrence": 1
+    },
+    {
+      "name": "lower_fee_cap",
+      "vector": "fee_lowered_cap_stops_queued_payout",
+      "fn": "lower_fee_cap",
+      "occurrence": 1
+    },
+    {
+      "name": "pause",
+      "vector": "approval_reject_while_paused_and_after_expiry",
+      "fn": "pause",
+      "occurrence": 1
+    },
+    {
+      "name": "payout",
+      "vector": "approval_threshold_read_at_request_only",
+      "fn": "payout",
+      "occurrence": 1
+    },
+    {
+      "name": "propose_principal",
+      "vector": "events_configuration_calls_in_order",
+      "fn": "propose_principal",
+      "occurrence": 1
+    },
+    {
+      "name": "recover_token",
+      "vector": "recover_token_pays_the_principal",
+      "fn": "recover_token",
+      "occurrence": 1
+    },
+    {
+      "name": "recovery_revoke",
+      "vector": "precedence_recovery_revoke_3_4",
+      "fn": "recovery_revoke",
+      "occurrence": 1
+    },
+    {
+      "name": "recovery_rotate_agent",
+      "vector": "precedence_recovery_rotate_agent_6_7",
+      "fn": "recovery_rotate_agent",
+      "occurrence": 1
+    },
+    {
+      "name": "reject",
+      "vector": "approval_single_rejection_vetoes",
+      "fn": "reject",
+      "occurrence": 1
+    },
+    {
+      "name": "remove_role",
+      "vector": "approval_removed_approver_no_longer_counts",
+      "fn": "remove_role",
+      "occurrence": 1
+    },
+    {
+      "name": "request_payout",
+      "vector": "amount_one_unit_accepted_and_paid",
+      "fn": "request_payout",
+      "occurrence": 1
+    },
+    {
+      "name": "request_payouts_max_batch",
+      "vector": "batch_request_ten_items_accepted",
+      "fn": "request_payouts",
+      "occurrence": 1
+    },
+    {
+      "name": "resume",
+      "vector": "batch_request_call_checks_come_first",
+      "fn": "resume",
+      "occurrence": 1
+    },
+    {
+      "name": "revoke",
+      "vector": "batch_cancel_refused_after_revoke",
+      "fn": "revoke",
+      "occurrence": 1
+    },
+    {
+      "name": "set_approvals_required",
+      "vector": "approval_repeat_completes_after_requirement_lowered",
+      "fn": "set_approvals_required",
+      "occurrence": 1
+    },
+    {
+      "name": "set_attestation_policy",
+      "vector": "parity_valid_later_policy_epoch",
+      "fn": "set_attestation_policy",
+      "occurrence": 1
+    },
+    {
+      "name": "set_recovery_threshold",
+      "vector": "events_configuration_calls_in_order",
+      "fn": "set_recovery_threshold",
+      "occurrence": 1
+    },
+    {
+      "name": "state",
+      "vector": "amount_zero_total_refused",
+      "fn": "state",
+      "occurrence": 1
+    },
+    {
+      "name": "sweep",
+      "vector": "events_closing_calls_in_order",
+      "fn": "sweep",
+      "occurrence": 1
+    },
+    {
+      "name": "update_limits",
+      "vector": "approval_threshold_read_at_request_only",
+      "fn": "update_limits",
+      "occurrence": 1
+    },
+    {
+      "name": "version",
+      "vector": "config_views_answer",
+      "fn": "version",
+      "occurrence": 1
+    },
+    {
+      "name": "withdraw",
+      "vector": "config_free_balance_bounds_requests_and_withdraw",
+      "fn": "withdraw",
+      "occurrence": 2
+    }
+  ]
+}
