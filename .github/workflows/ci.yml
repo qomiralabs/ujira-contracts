@@ -597,6 +597,42 @@ jobs:
           fi
           exit "$code"
 
+  # The server side of the local guard hooks, which can be skipped or missing on
+  # a fresh machine: no dashes in the files a change touches, no attribution in
+  # its commit messages, no internal files in the tree. Needs the whole history to
+  # find the range. A pull request is checked from its base to its head, and a push
+  # from the commit before it, or just its own commit when that one is unknown.
+  hygiene:
+    name: hygiene
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Test the hygiene check
+        run: |
+          shellcheck scripts/hygiene.sh scripts/hygiene.test.sh
+          scripts/hygiene.test.sh
+
+      - name: Check hygiene over the range
+        if: ${{ !cancelled() }}
+        env:
+          RANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RANGE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          base=$RANGE_BASE
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="${RANGE_HEAD}^"
+          fi
+          scripts/hygiene.sh "$base" "$RANGE_HEAD"
+
   # Fails on any em dash or en dash in a tracked file's content or its path.
   # The same scripts run in every UJIRA repository. The self test runs first,
   # so the check's result is only trusted once the check is known to fail when
