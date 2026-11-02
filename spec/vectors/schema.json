@@ -43,6 +43,19 @@
       "type": "array",
       "items": { "$ref": "#/$defs/actor" }
     },
+    "approvals": {
+      "description": "The approvals of a payout record: who approved, under the epoch the approver held then.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "approver": { "$ref": "#/$defs/actor" },
+          "epoch": { "$ref": "#/$defs/u32" }
+        },
+        "required": ["approver", "epoch"],
+        "additionalProperties": false
+      }
+    },
     "token": {
       "description": "A token: the settlement asset or the second token.",
       "enum": ["asset", "other_token"]
@@ -463,6 +476,7 @@
         "policy_epoch": { "$ref": "#/$defs/u64" },
         "recovery_epoch": { "$ref": "#/$defs/u32" },
         "agent_epoch": { "$ref": "#/$defs/u32" },
+        "approver_epoch": { "$ref": "#/$defs/u32" },
         "approvals_required": { "$ref": "#/$defs/u32" },
         "recovery_threshold": { "$ref": "#/$defs/u32" },
         "max_fee_bps": { "$ref": "#/$defs/u32" },
@@ -493,7 +507,7 @@
         "created_at": { "$ref": "#/$defs/u64" },
         "expires_at": { "$ref": "#/$defs/u64" },
         "policy_epoch": { "$ref": "#/$defs/u64" },
-        "approvals": { "$ref": "#/$defs/actors" }
+        "approvals": { "$ref": "#/$defs/approvals" }
       },
       "additionalProperties": false
     },
@@ -570,7 +584,7 @@
           "created_at": { "$ref": "#/$defs/u64" },
           "expires_at": { "$ref": "#/$defs/u64" },
           "policy_epoch": { "$ref": "#/$defs/u64" },
-          "approvals": { "$ref": "#/$defs/actors" }
+          "approvals": { "$ref": "#/$defs/approvals" }
         },
         "required": ["payout_id", "status"],
         "additionalProperties": false

@@ -74,6 +74,16 @@ pub struct ItemResult {
     pub status: Option<u32>,
 }
 
+/// One approval of a payout: who gave it, and the epoch that approver held
+/// then, so an approval from before a removal can be told apart from one
+/// given after the same address was added back.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Approval {
+    pub approver: Address,
+    pub epoch: u32,
+}
+
 /// A live payout. `agent_epoch` is the value its agent was added under, so a
 /// payout from an agent that was removed, or removed and added back, can be
 /// told apart from that agent's newer work.
@@ -91,7 +101,7 @@ pub struct PayoutRecord {
     pub created_at: u64,
     pub expires_at: u64,
     pub policy_epoch: u64,
-    pub approvals: Vec<Address>,
+    pub approvals: Vec<Approval>,
 }
 
 /// What a terminal payout leaves behind, forever, so its ID is never reused.
@@ -165,4 +175,5 @@ pub struct ConfigView {
     pub proposed_principal: Option<Address>,
     pub recovery_epoch: u32,
     pub agent_epoch: u32,
+    pub approver_epoch: u32,
 }

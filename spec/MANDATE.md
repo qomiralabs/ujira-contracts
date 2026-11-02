@@ -348,7 +348,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-006 Deterministic address and creation events
 
 - Precondition: `create` passed every check.
-- Effect: the mandate is deployed at a deterministic address: on Stellar by the deployer with salt `SHA-256(principal_xdr ‖ salt)`, on Celo by `CREATE2` with salt `keccak256(abi.encode(principal, salt))`. The constructor sets `policy_epoch = 0`, `paused = false`, `revoked = false`, `recovery_epoch = 0` and `agent_epoch = 0`, and stores every agent of the configuration with epoch 0 (`MANDATE-PAYOUT-014`). The factory emits `mandate_created` first, before it deploys, and the mandate's constructor then emits `mandate_initialized`.
+- Effect: the mandate is deployed at a deterministic address: on Stellar by the deployer with salt `SHA-256(principal_xdr ‖ salt)`, on Celo by `CREATE2` with salt `keccak256(abi.encode(principal, salt))`. The constructor sets `policy_epoch = 0`, `paused = false`, `revoked = false`, `recovery_epoch = 0`, `agent_epoch = 0` and `approver_epoch = 0`, and stores every agent of the configuration with epoch 0 (`MANDATE-PAYOUT-014`) and every approver with epoch 0 (`MANDATE-APPROVAL-010`). The factory emits `mandate_created` first, before it deploys, and the mandate's constructor then emits `mandate_initialized`.
 - Error: none
 
 #### MANDATE-CONFIG-007 update_limits
@@ -387,7 +387,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 
 ### Payout records
 
-A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which that agent was added, `MANDATE-PAYOUT-014`), `recipient_ref`, `total`, `fee`, `legs` (1 to `MAX_LEGS` entries of `{ destination, amount }`), `status` (`1 PENDING`, `2 APPROVED`, `3 EXECUTED`, `4 REJECTED`, `5 CANCELLED`), `created_at`, `expires_at`, `policy_epoch` and the distinct `approvals`.
+A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which that agent was added, `MANDATE-PAYOUT-014`), `recipient_ref`, `total`, `fee`, `legs` (1 to `MAX_LEGS` entries of `{ destination, amount }`), `status` (`1 PENDING`, `2 APPROVED`, `3 EXECUTED`, `4 REJECTED`, `5 CANCELLED`), `created_at`, `expires_at`, `policy_epoch` and the distinct `approvals`, each `{ approver, epoch }` with the epoch the approver held when it approved (`MANDATE-APPROVAL-010`).
 
 #### MANDATE-PAYOUT-001 Tombstones keep every ID used forever
 
@@ -829,14 +829,14 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 #### MANDATE-APPROVAL-003 Repeated approval
 
-- Precondition: `approve` from an approver already in `payout.approvals` while the live count is still below `approvals_required`.
+- Precondition: `approve` from an approver that already has an approval in `payout.approvals` under its current epoch (`MANDATE-APPROVAL-010`) while the live count is still below `approvals_required`. An approval it made under an earlier epoch is not a repeat.
 - Effect: refused. When the live count already meets the requirement (for example after the principal lowered it), the call proceeds to the transition without adding, so a payout never gets stuck. Such a call adds no approval and emits no `payout_approval_added`; it emits only `payout_approved`.
 - Error: `ALREADY_APPROVED`
 
 #### MANDATE-APPROVAL-004 M of N approval
 
 - Precondition: `approve` passed every check.
-- Effect: add the caller to `payout.approvals` and emit `payout_approval_added { payout_id, approver, approvals, required }`, unless the call is a repeated approval that proceeds under `MANDATE-APPROVAL-003`, which adds nothing and emits no `payout_approval_added`. The live count is the number of addresses in `payout.approvals` that are current approvers. When it is at least `approvals_required`, the payout becomes APPROVED, `pending -= charged`, `committed += charged`, and `payout_approved { payout_id }` is emitted.
+- Effect: add `{ caller, epoch }` to `payout.approvals`, where `epoch` is the caller's stored approver epoch, replacing any approval the caller made under an earlier epoch, and emit `payout_approval_added { payout_id, approver, approvals, required }`, unless the call is a repeated approval that proceeds under `MANDATE-APPROVAL-003`, which adds nothing and emits no `payout_approval_added`. The live count is the number of approvals in `payout.approvals` whose approver is a current approver holding the same epoch (`MANDATE-APPROVAL-010`). When it is at least `approvals_required`, the payout becomes APPROVED, `pending -= charged`, `committed += charged`, and `payout_approved { payout_id }` is emitted.
 - Error: none
 
 #### MANDATE-APPROVAL-005 A single rejection is a veto
@@ -868,6 +868,12 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Precondition: `update_limits` while `approvers` is empty, with a new `approval_threshold <= ` the new `per_payment_cap`.
 - Effect: refused, whichever of the two fields changed, so no payout can need an approval nobody can give.
 - Error: `CONFIG_INVALID`
+
+#### MANDATE-APPROVAL-010 An approval counts only under the approver's current epoch
+
+- Precondition: a payout in `payout.approvals` holds an approval from an address that was removed as an approver and added again since it approved.
+- Effect: that approval no longer counts toward `approvals_required`, so taking a suspect approver key away withdraws every approval it gave, and adding the same address back later does not revive them; the re-added approver may approve again, and only that new approval counts. The mandate keeps a counter `approver_epoch` and stores, for each approver, the value it was added under. Epoch values: `approver_epoch` starts at 0 and every approver named in the creation configuration is stored with 0; every later `add_role(2, ...)` first increases the counter by one and then stores the new value, so an approver added after creation, or added back after a removal, holds a value of 1 or more that no earlier approval carries. An approval records the approver's stored value, and it counts while its approver is an approver holding that value. `config()` reports `approver_epoch` beside `agent_epoch`. Removing an approver's approvals from open payouts at removal would need a loop over every open payout, which has no bound, so the epoch stands in for it.
+- Error: none
 
 ## Batches
 
@@ -1445,7 +1451,7 @@ Effects: `MANDATE-RECOVER-003`, then the settlement balance check of `MANDATE-RE
 7. The set would not exceed its bound (MANDATE-ROLE-007).
 <!-- /check-order -->
 
-Effects: add the account, emit `role_added { role, account }`; for an agent, increase `agent_epoch` and store the new value with it (`MANDATE-PAYOUT-014`); apply `MANDATE-APPROVAL-007` when it is the first approver and `MANDATE-RECOVERYSET-010` when it is the first recovery approver, and increase `recovery_epoch` once when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
+Effects: add the account, emit `role_added { role, account }`; for an agent, increase `agent_epoch` and store the new value with it (`MANDATE-PAYOUT-014`); for an approver, increase `approver_epoch` and store the new value with it (`MANDATE-APPROVAL-010`); apply `MANDATE-APPROVAL-007` when it is the first approver and `MANDATE-RECOVERYSET-010` when it is the first recovery approver, and increase `recovery_epoch` once when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
 
 ### remove_role
 
@@ -1606,7 +1612,7 @@ The vector runner checks these after every step, and each chain's invariant test
 - I5. The settlement asset leaves the mandate only through `execute`, to destinations bound to the payout's recipient (including recipient-bound forwarders and partner deposit addresses verified off chain under `CHAINOPS-DELIVERY-001` and `CHAINOPS-DELIVERY-002`) plus each executed payout's fee to `fee_address`, and through `withdraw` and `sweep` to the principal. `withdraw` and `sweep` never take a destination argument; this is checked by an ABI test on Celo, a contract interface test on Stellar, and vectors that call them from every role and confirm that only the principal's balance rises.
 - I6. A payout ID reaches EXECUTED at most once, terminal statuses never change, and an ID is never reused.
 - I7. `spent` never decreases and `revoked` never clears.
-- I8. A payout with `charged >= approval_threshold` at request reaches APPROVED only through approvals from distinct current approvers, none of whom is an agent or an executor.
+- I8. A payout with `charged >= approval_threshold` at request reaches APPROVED only through approvals from distinct current approvers, each given under the epoch the approver still holds, none of whom is an agent or an executor.
 - I9. Every state change emits exactly its specified events, and failed calls emit nothing.
 - I10. `pending` equals the sum of the charges of PENDING payouts and `committed` the sum of the charges of APPROVED payouts, until revoke sets both to zero.
 - I11. Recovery actions never transfer funds, and never change a destination, the allowlist, the attestation policy, a limit, the principal, the approvers, the guardians, the executors or the recovery set. A recovery revoke freezes the balance for the principal like any revoke.
@@ -1862,6 +1868,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-APPROVAL-007` | Adding the first approver |
 | `MANDATE-APPROVAL-008` | Removing the last approver |
 | `MANDATE-APPROVAL-009` | Threshold re-checked when there are no approvers |
+| `MANDATE-APPROVAL-010` | An approval counts only under the approver's current epoch |
 | `MANDATE-BATCH-001` | Request batch length |
 | `MANDATE-BATCH-002` | Request batch runs per item |
 | `MANDATE-BATCH-003` | Cancel batch |

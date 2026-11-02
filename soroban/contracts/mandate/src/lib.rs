@@ -45,7 +45,7 @@ pub use mandate_errors::MandateError;
 
 use events::MandateInitialized;
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, MuxedAddress, Vec};
-use storage::{Agent, Fixed, Flags, Policy, Roles, Totals};
+use storage::{Agent, Approver, Fixed, Flags, Policy, Roles, Totals};
 use types::{ConfigView, DailyUsage, ItemResult, PayoutEntry, PayoutRequest, StateView};
 
 #[contract]
@@ -98,11 +98,17 @@ impl UjiraMandate {
         for account in config.agents.iter() {
             agents.push_back(Agent { account, epoch: 0 });
         }
+        // The same for approvers: an approver named at creation holds epoch
+        // 0, and no approval made before a later addition can match it.
+        let mut approvers = Vec::new(&env);
+        for account in config.approvers.iter() {
+            approvers.push_back(Approver { account, epoch: 0 });
+        }
         storage::set_roles(
             &env,
             &Roles {
                 agents,
-                approvers: config.approvers.clone(),
+                approvers,
                 approvals_required: config.approvals_required,
                 guardians: config.guardians.clone(),
                 executors: config.executors.clone(),
@@ -110,6 +116,7 @@ impl UjiraMandate {
                 recovery_threshold: config.recovery_threshold,
                 agent_epoch: 0,
                 recovery_epoch: 0,
+                approver_epoch: 0,
             },
         );
         storage::set_totals(
@@ -226,7 +233,7 @@ impl UjiraMandate {
     }
 
     /// The configuration as it stands now, with the fee address, any
-    /// proposed principal and the recovery and agent epochs.
+    /// proposed principal and the recovery, agent and approver epochs.
     pub fn config(env: Env) -> Result<ConfigView, MandateError> {
         storage::extend_instance(&env);
         let fixed = storage::fixed(&env)?;
@@ -238,7 +245,7 @@ impl UjiraMandate {
             recipient_mode: fixed.recipient_mode,
             tenant_tag: fixed.tenant_tag,
             agents: roles.agent_addresses(&env),
-            approvers: roles.approvers,
+            approvers: roles.approver_addresses(&env),
             approvals_required: roles.approvals_required,
             guardians: roles.guardians,
             executors: roles.executors,
@@ -252,6 +259,7 @@ impl UjiraMandate {
             proposed_principal: storage::proposed_principal(&env),
             recovery_epoch: roles.recovery_epoch,
             agent_epoch: roles.agent_epoch,
+            approver_epoch: roles.approver_epoch,
         })
     }
 
