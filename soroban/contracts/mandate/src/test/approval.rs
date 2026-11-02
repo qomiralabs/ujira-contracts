@@ -236,6 +236,8 @@ fn approve_after_recovery_rotation_gives_agent_removed() {
         r.agents.push_back(Agent {
             account: new.clone(),
             epoch: r.agent_epoch,
+            pending: 0,
+            committed: 0,
         });
         r.recovery_epoch += 1;
     });
@@ -263,6 +265,8 @@ fn approve_after_readd_gives_agent_removed() {
         r.agents.push_back(Agent {
             account: fx.agent.clone(),
             epoch: r.agent_epoch,
+            pending: 0,
+            committed: 0,
         });
     });
     assert_eq!(

@@ -19,7 +19,7 @@
 use crate::admin::{breaks_separation, bump_recovery_epoch, is_attester_key_of, push_agent};
 use crate::events::{RecoveryExecuted, RecoveryVoteAdded, RoleAdded, RoleRemoved};
 use crate::lifecycle::revoke_effects;
-use crate::payout::ensure_not_revoked;
+use crate::payout::{ensure_not_revoked, release_agent};
 use crate::storage::{self, Roles};
 use crate::types::ROLE_AGENT;
 use crate::{UjiraMandate, UjiraMandateArgs, UjiraMandateClient};
@@ -219,10 +219,15 @@ pub fn recovery_rotate_agent(
 
     // The same effects as the principal's remove_role and add_role, in one
     // epoch step.
+    let gone = roles
+        .agents
+        .get(at)
+        .ok_or(MandateError::InternalInvariant)?;
     roles
         .agents
         .remove(at)
         .ok_or(MandateError::InternalInvariant)?;
+    release_agent(env, &gone)?;
     if let Some(n) = new {
         push_agent(&mut roles, n)?;
     }

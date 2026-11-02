@@ -14,7 +14,10 @@ use crate::events::{
     RecipientDisallowed, RecoveryThresholdSet, RoleAdded, RoleRemoved,
 };
 use crate::storage::{self, Agent};
-use crate::types::{AllowEntry, ROLE_AGENT, ROLE_APPROVER, ROLE_GUARDIAN, ROLE_RECOVERY};
+use crate::types::{
+    AllowEntry, ROLE_AGENT, ROLE_APPROVER, ROLE_GUARDIAN, ROLE_RECOVERY, STATUS_APPROVED,
+    STATUS_PENDING,
+};
 use crate::{MandateError, UjiraMandateClient};
 use mandate_config::{MODE_ATTESTED, MODE_BOTH};
 use soroban_sdk::{Address, Bytes, BytesN, Event as _, Vec};
@@ -29,6 +32,97 @@ fn stored_agents(fx: &Fx, m: &Address) -> std::vec::Vec<Agent> {
         .agents
         .iter()
         .collect()
+}
+
+/// Removing an agent releases everything its open payouts reserve at once,
+/// whatever their number and status, and touches no other agent's. A later
+/// reject or cancel of one of those payouts ends it without releasing it a
+/// second time.
+#[test]
+fn remove_agent_releases_its_reservations() {
+    let fx = Fx::new();
+    let other = fx.account(21);
+    let mut config = fx.config();
+    config.agents = fx.list(&[&fx.agent, &other]);
+    let m = fx.ready_with(&config);
+    let (pending, approved, theirs, kept) = (fx.b32(1), fx.b32(2), fx.b32(3), fx.b32(4));
+    assert_eq!(m.request_payout(&fx.agent, &fx.req(1, 500)), STATUS_PENDING);
+    assert_eq!(
+        m.request_payout(&fx.agent, &fx.req(2, 100)),
+        STATUS_APPROVED
+    );
+    assert_eq!(m.request_payout(&other, &fx.req(3, 200)), STATUS_APPROVED);
+    assert_eq!(m.request_payout(&other, &fx.req(4, 500)), STATUS_PENDING);
+    let st = m.state();
+    assert_eq!(
+        (st.pending, st.committed, st.free),
+        (1_000, 300, FUNDED - 1_300)
+    );
+
+    m.remove_role(&ROLE_AGENT, &fx.agent);
+    let st = m.state();
+    assert_eq!(
+        (st.pending, st.committed, st.free),
+        (500, 200, FUNDED - 700)
+    );
+    assert_eq!(st.spent, 0);
+
+    // The records stay open and cannot move on.
+    assert_eq!(fx.record(&m, 1).status, STATUS_PENDING);
+    assert_eq!(fx.record(&m, 2).status, STATUS_APPROVED);
+    assert_eq!(
+        code(m.try_approve(&fx.approver, &pending)),
+        MandateError::AgentRemoved
+    );
+    assert_eq!(
+        code(m.try_execute(&fx.executor, &approved)),
+        MandateError::AgentRemoved
+    );
+
+    // Adding the same address back does not revive them or their
+    // reservations, and what it queues now is its own.
+    m.add_role(&ROLE_AGENT, &fx.agent);
+    assert_eq!(m.state().committed, 200);
+    assert_eq!(
+        code(m.try_execute(&fx.executor, &approved)),
+        MandateError::AgentRemoved
+    );
+    assert_eq!(m.request_payout(&fx.agent, &fx.req(5, 50)), STATUS_APPROVED);
+    assert_eq!(m.state().committed, 250);
+
+    // Ending them releases nothing again.
+    m.reject(&fx.approver, &pending);
+    m.cancel(&fx.principal, &approved);
+    let st = m.state();
+    assert_eq!((st.pending, st.committed), (500, 250));
+
+    // The other agent's payouts are untouched.
+    m.approve(&fx.approver, &kept);
+    m.execute(&fx.executor, &theirs);
+    m.execute(&fx.executor, &kept);
+    m.execute(&fx.executor, &fx.b32(5));
+    let st = m.state();
+    assert_eq!((st.spent, st.pending, st.committed), (750, 0, 0));
+    assert_eq!(st.free, FUNDED - 750);
+}
+
+/// Released reservations stop counting against the budget too.
+#[test]
+fn remove_agent_gives_its_budget_back() {
+    let fx = Fx::new();
+    let other = fx.account(21);
+    let mut config = fx.config();
+    config.agents = fx.list(&[&fx.agent, &other]);
+    config.limits.total_budget = 300;
+    let m = fx.ready_with(&config);
+    m.request_payout(&fx.agent, &fx.req(1, 300));
+    assert_eq!(
+        code(m.try_request_payout(&other, &fx.req(2, 100))),
+        MandateError::BudgetExceeded
+    );
+    m.remove_role(&ROLE_AGENT, &fx.agent);
+    assert_eq!(m.request_payout(&other, &fx.req(2, 300)), STATUS_APPROVED);
+    assert_eq!(m.state().committed, 300);
 }
 
 #[test]

@@ -19,7 +19,8 @@
 use crate::derived;
 use crate::events::PayoutExecuted;
 use crate::payout::{
-    charged, ensure_active, fee_cap, invariant, open_record, release, same_agent, MAX_BATCH,
+    charged, ensure_active, fee_cap, invariant, move_agent_sums, open_record, release, same_agent,
+    MAX_BATCH,
 };
 use crate::storage::{self, Fixed, Roles};
 use crate::types::{DailyUsage, PayoutRecord, STATUS_APPROVED, STATUS_EXECUTED};
@@ -181,12 +182,21 @@ fn pay(env: &Env, fixed: &Fixed, record: &PayoutRecord, now: u64) -> Result<(), 
     let mut totals = storage::totals(env)?;
     release(&mut totals, STATUS_APPROVED, charge)?;
     totals.spent = invariant(totals.spent.checked_add(charge))?;
+    // Only a payout whose agent is still the same agent gets this far.
+    let mut roles = storage::roles(env)?;
+    move_agent_sums(
+        &mut roles,
+        &record.agent,
+        0,
+        invariant(charge.checked_neg())?,
+    )?;
     let today = derived::day_of(now);
     let used = invariant(used_today(env, &record.recipient_ref, now).checked_add(record.total))?;
 
     // The tombstone keeps the record's remaining TTL and is left to archive.
     storage::put_tombstone(env, &record.payout_id, STATUS_EXECUTED);
     storage::set_totals(env, &totals);
+    storage::set_roles(env, &roles);
     storage::set_daily(env, &record.recipient_ref, &DailyUsage { day: today, used });
     PayoutExecuted {
         payout_id: record.payout_id.clone(),

@@ -96,7 +96,12 @@ impl UjiraMandate {
         // a higher value, so no payout queued before it can match it.
         let mut agents = Vec::new(&env);
         for account in config.agents.iter() {
-            agents.push_back(Agent { account, epoch: 0 });
+            agents.push_back(Agent {
+                account,
+                epoch: 0,
+                pending: 0,
+                committed: 0,
+            });
         }
         storage::set_roles(
             &env,

@@ -792,6 +792,8 @@ fn execute_after_readd_gives_agent_removed() {
         r.agents.push_back(Agent {
             account: fx.agent.clone(),
             epoch: r.agent_epoch,
+            pending: 0,
+            committed: 0,
         });
     });
     assert_eq!(

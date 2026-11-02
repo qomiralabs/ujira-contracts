@@ -30,7 +30,7 @@ use crate::events::{
     RecipientDisallowed, RecoveryThresholdSet, RoleAdded, RoleRemoved,
 };
 use crate::lifecycle::authorized_principal;
-use crate::payout::{ensure_not_revoked, MAX_BATCH};
+use crate::payout::{ensure_not_revoked, release_agent, MAX_BATCH};
 use crate::storage::{self, Agent, Policy, Roles};
 use crate::types::{
     AllowEntry, ROLE_AGENT, ROLE_APPROVER, ROLE_EXECUTOR, ROLE_GUARDIAN, ROLE_RECOVERY,
@@ -262,6 +262,8 @@ pub(crate) fn push_agent(roles: &mut Roles, account: &Address) -> Result<(), Man
     roles.agents.push_back(Agent {
         account: account.clone(),
         epoch: roles.agent_epoch,
+        pending: 0,
+        committed: 0,
     });
     Ok(())
 }
@@ -405,10 +407,12 @@ pub fn remove_role(env: &Env, role: u32, account: &Address) -> Result<(), Mandat
                 .position(|a| a.account == *account)
                 .and_then(|i| u32::try_from(i).ok())
                 .ok_or(MandateError::InternalInvariant)?;
+            let gone = roles.agents.get(i).ok_or(MandateError::InternalInvariant)?;
             roles
                 .agents
                 .remove(i)
                 .ok_or(MandateError::InternalInvariant)?;
+            release_agent(env, &gone)?;
             bump_recovery_epoch(&mut roles)?;
         }
         ROLE_APPROVER => {

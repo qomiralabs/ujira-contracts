@@ -62,6 +62,8 @@ fn cancel_by_another_agent_or_any_role_refused_until_lapse() {
         r.agents.push_back(Agent {
             account: other.clone(),
             epoch: r.agent_epoch,
+            pending: 0,
+            committed: 0,
         });
     });
     m.request_payout(&fx.agent, &fx.req(1, 500));
@@ -235,6 +237,8 @@ fn cancel_batch_authority_is_per_item() {
         r.agents.push_back(Agent {
             account: other.clone(),
             epoch: r.agent_epoch,
+            pending: 0,
+            committed: 0,
         });
     });
     m.request_payout(&fx.agent, &fx.req(1, 100));
