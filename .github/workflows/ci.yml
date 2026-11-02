@@ -32,6 +32,10 @@ env:
   # only to a release at least 14 days old.
   GITLEAKS_VERSION: 8.30.1
   GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  # The Unicode tables of the runner's python3 decide what the invisible character
+  # check rejects. A runner update that moves them fails the check, so the set of
+  # rejected characters only changes when this does.
+  INVISIBLE_UNICODE_VERSION: 15.0.0
 
 jobs:
   # Scans the whole history, not only the change, so it checks out every
@@ -104,10 +108,11 @@ jobs:
         run: scripts/check-headers.test.sh
 
       # Literal bidirectional controls and invisible characters can make code
-      # read differently from how it runs. Uses the runner's python3 and its
-      # standard library only.
+      # read differently from how it runs, in a file, a file name or a symlink
+      # target. Reads committed blobs. Uses the runner's python3 and its standard
+      # library only, and fails if its Unicode version is not the pinned one.
       - name: Check invisible characters
-        run: scripts/check-invisible-characters.py
+        run: scripts/check-invisible-characters.py --unicode-version "$INVISIBLE_UNICODE_VERSION"
 
       - name: Test the invisible character check
         run: scripts/check-invisible-characters.test.sh
