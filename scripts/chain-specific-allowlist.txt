@@ -1,0 +1,59 @@
+# Words scripts/check-chain-specific.sh may find, as exact <path>:<word> entries.
+# A comment opens a block and says why its entries are here; a blank line ends
+# the block. Only tracked files may be listed, never a directory or a wildcard.
+# Add an entry only with a reason in review.
+
+# The vector format in spec/vectors keeps its per chain cases and names this chain,
+# so the code that reads or checks that format has to name it too. It is a name in
+# a data format, not support for the chain.
+scripts/check-vectors.py:Celo
+scripts/check-vectors.py:celo
+scripts/check-vectors.py:EVM
+soroban/vector-runner/src/vectors.rs:celo
+soroban/vector-runner/tests/selftest.rs:celo
+tests/trace.schema.json:celo
+
+# The vector checker's self test and fixtures prove that format's chain rules, so
+# they plant vectors restricted to this chain.
+scripts/check-vectors.test.sh:Celo
+scripts/check-vectors.test.sh:celo
+scripts/check-vectors.test.sh:amount-above-i128-celo-only.json
+scripts/check-vectors.test.sh:noncanonical-tag-celo-only.json
+scripts/check-vectors.test.sh:reentrant-token-celo-only.json
+scripts/check-vectors.test.sh:returns-no-data-celo-only.json
+scripts/check-vectors.test.sh:zero-address-celo-only.json
+scripts/fixtures/vectors/amount-above-i128-celo-only.json:Celo
+scripts/fixtures/vectors/amount-above-i128-celo-only.json:celo
+scripts/fixtures/vectors/amount-above-i128-celo-only.json:fixture_above_i128_celo
+scripts/fixtures/vectors/amount-above-i128-celo-only.json:amount-above-i128-celo-only.json
+scripts/fixtures/vectors/applies-to-every-chain.json:celo
+scripts/fixtures/vectors/applies-to-without-skip-reason.json:celo
+scripts/fixtures/vectors/noncanonical-tag-celo-only.json:Celo
+scripts/fixtures/vectors/noncanonical-tag-celo-only.json:celo
+scripts/fixtures/vectors/noncanonical-tag-celo-only.json:fixture_noncanonical_tag_celo
+scripts/fixtures/vectors/noncanonical-tag-celo-only.json:noncanonical-tag-celo-only.json
+scripts/fixtures/vectors/precedence/spec/MANDATE.md:Celo
+scripts/fixtures/vectors/reentrant-token-celo-only.json:celo
+scripts/fixtures/vectors/reentrant-token-celo-only.json:fixture_reentrant_celo
+scripts/fixtures/vectors/reentrant-token-celo-only.json:reentrant-token-celo-only.json
+scripts/fixtures/vectors/zero-address-celo-only.json:Celo
+scripts/fixtures/vectors/zero-address-celo-only.json:celo
+scripts/fixtures/vectors/zero-address-celo-only.json:fixture_zero_celo
+scripts/fixtures/vectors/zero-address-celo-only.json:zero-address-celo-only.json
+
+# The internal audit quotes the spec's wording about chain-only rules. An audit
+# record is not rewritten after the fact.
+audits/internal-audit.md:Celo
+
+# The stopword list in the vendored gitleaks defaults, which must stay identical to
+# upstream.
+.gitleaks.toml:foundry
+
+# Ordinary words that contain a listed one and have nothing to do with a chain:
+# forging a signature, and Rust's OnceLock.
+exploits/README.md:forgery
+exploits/src/fx.rs:OnceLock
+scripts/fixtures/vectors/host-auth-failure-without-caller-rule.json:forged
+soroban/batch-limits/src/test.rs:OnceLock
+soroban/contracts/factory/src/test/mod.rs:OnceLock
+soroban/contracts/mandate/src/test/mod.rs:OnceLock

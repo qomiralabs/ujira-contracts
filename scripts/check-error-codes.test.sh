@@ -71,6 +71,28 @@ check "codes 26, 27 and 65 are in parity" 0 \
   "27 SWEEP_GRACE_PERIOD SweepGracePeriod" \
   "65 AGENT_REMOVED AgentRemoved" -- --list
 
+# A retired rule keeps its ID with Error none and points at no code, so the two
+# sides this check compares never hear of it and it cannot read as missing. Proven
+# on the real spec rather than assumed: the retired list is not empty, every rule on
+# it says Error none, and the check still passes.
+retired_list="$root/spec/retired-ids.txt"
+retired_count=0
+retired_bad=""
+while IFS= read -r rule; do
+  case $rule in '' | '#'*) continue ;; esac
+  retired_count=$((retired_count + 1))
+  line=$(awk -v id="#### $rule " 'index($0, id) == 1 { found = 1; next } found && /^- Error:/ { print; exit }' \
+    "$root/spec/MANDATE.md")
+  [ "$line" = "- Error: none" ] || retired_bad="$retired_bad $rule"
+done <"$retired_list"
+if [ "$retired_count" -gt 0 ] && [ -z "$retired_bad" ]; then
+  check "retired rule with Error none is not missing from errors.json" 0 \
+    "code(s) in spec/errors.json match enum MandateError" --
+else
+  fail "retired rule with Error none is not missing from errors.json" \
+    "$retired_count retired rule(s); not Error none:$retired_bad"
+fi
+
 # The four kinds of drift, each on its own and then all in one run.
 spec=(--spec "$fx/errors.json")
 check "matching fixture" 0 "the 4 code(s) in" -- "${spec[@]}" --rust "$fx/match.rs"
