@@ -14,6 +14,7 @@ extern crate std;
 mod admin;
 mod approval;
 mod attestation;
+mod attestation_properties;
 mod cancel;
 mod constructor;
 mod execute;
@@ -267,6 +268,26 @@ pub fn account(env: &Env, seed: u8) -> Address {
     let mut xdr = Bytes::from_array(env, &[0, 0, 0, 18, 0, 0, 0, 0, 0, 0, 0, 0]);
     xdr.append(&key_of(env, seed));
     Address::from_xdr(env, &xdr).unwrap()
+}
+
+/// The contract address whose 32-byte hash is all zeros: an address value,
+/// a contract, then the hash.
+pub fn zero_contract(env: &Env) -> Address {
+    let mut xdr = Bytes::from_array(env, &[0, 0, 0, 18, 0, 0, 0, 1]);
+    xdr.append(&Bytes::from_array(env, &[0; 32]));
+    Address::from_xdr(env, &xdr).unwrap()
+}
+
+/// Every address a payout could be sent to without anyone ever being able
+/// to spend it: the mandate itself, the settlement asset's contract, and
+/// the account and the contract whose key is all zeros.
+pub fn unpayable(fx: &Fx, mandate: &Address) -> [Address; 4] {
+    [
+        mandate.clone(),
+        fx.asset.clone(),
+        account(&fx.env, 0),
+        zero_contract(&fx.env),
+    ]
 }
 
 /// The ed25519 key of an account made by `account`.

@@ -18,7 +18,15 @@ pub const LABEL_PREFIX: &str = "UJIRA/TEST-ONLY/vector/";
 pub const ACTOR_PREFIX: &str = "ujira-test-actor:";
 
 /// Names with a fixed meaning in every vector.
-pub const RESERVED: [&str; 5] = ["mandate", "asset", "other_token", "fee_address", "zero"];
+pub const RESERVED: [&str; 7] = [
+    "mandate",
+    "asset",
+    "other_token",
+    "fee_address",
+    "zero",
+    "zero_account",
+    "zero_contract",
+];
 
 /// The two tokens a vector can name.
 pub const TOKENS: [&str; 2] = ["asset", "other_token"];

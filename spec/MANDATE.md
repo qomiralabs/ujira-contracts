@@ -67,7 +67,7 @@ Codes are append only and never reused. `0` means success and appears only in ba
 | 26 | `PRINCIPAL_CHANGE_PENDING` | A third-party sweep while a principal change is proposed |
 | 27 | `SWEEP_GRACE_PERIOD` | A third-party sweep within the grace after expiry |
 | 30 | `AMOUNT_INVALID` | An amount outside its domain |
-| 31 | `LEGS_INVALID` | Leg count, leg amount, zero address, tag form or duplicate destination |
+| 31 | `LEGS_INVALID` | Leg count, leg amount, unpayable address, tag form or duplicate destination |
 | 32 | `LEGS_SUM_MISMATCH` | Legs do not sum to the total |
 | 33 | `BATCH_INVALID` | Batch length or transfer budget out of bounds |
 | 34 | `CONFIG_INVALID` | A configuration value or change is not allowed, including an attester key that is not 32 bytes or is 32 zero bytes |
@@ -309,7 +309,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-001 Immutable fields
 
 - Precondition: none.
-- Effect: fixed at construction and never changed: `asset` (the single settlement asset, which the factory must support), `recipient_mode` (`1 ALLOWLIST`, `2 ATTESTED`, `3 BOTH`), `tenant_tag` (an opaque 32-byte value that lets the operator attribute the mandate's events; it is derived off chain from the operator's `tenant_ref` and the mandate's own address (`spec/ENCODING.md`), so it differs for every mandate and never links two mandates of one principal and project), `factory` (the creating factory) and `fee_address` (copied from the factory, never supplied by the principal).
+- Effect: fixed at construction and never changed: `asset` (the single settlement asset, which the factory must support), `recipient_mode` (`1 ALLOWLIST`, `2 ATTESTED`, `3 BOTH`), `tenant_tag` (an opaque 32-byte value that lets the operator attribute the mandate's events; it is derived off chain from the operator's `tenant_ref` and the mandate's own address (`spec/ENCODING.md`), so it differs for every mandate and never links two mandates of one principal and project), `factory` (the factory named at construction, which the contract cannot verify and which proves nothing about who deployed it, `CHAINOPS-INDEX-005`) and `fee_address` (copied from the factory, never supplied by the principal).
 - Error: none
 
 #### MANDATE-CONFIG-002 Field domains and cross-field rules
@@ -657,8 +657,8 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 #### MANDATE-RECIPIENT-016 Allowlist entry validation
 
-- Precondition: `allow_recipients(entries)` or `disallow_recipients(entries)`, where each entry is `{ recipient_ref, destination }`, and: the mode is `ATTESTED`; or an entry has the zero address, a non-canonical tag or the address of `fee_address` (any tag); or, for allow, an entry is already present, or for disallow, an entry is absent, counting duplicate pairs within the same call.
-- Effect: refused. On success the call is atomic and emits one `recipient_allowed` or `recipient_disallowed { recipient_ref, destination }` per entry. The zero address and non-canonical tag checks can only be reached on Celo, as for `MANDATE-SPLIT-003` and `MANDATE-SPLIT-004`; their vectors are Celo only with the unrepresentable-input skip reason.
+- Precondition: `allow_recipients(entries)` or `disallow_recipients(entries)`, where each entry is `{ recipient_ref, destination }`, and: the mode is `ATTESTED`; or an entry has an unpayable address (`MANDATE-SPLIT-003`, any tag), a non-canonical tag or the address of `fee_address` (any tag); or, for allow, an entry is already present, or for disallow, an entry is absent, counting duplicate pairs within the same call.
+- Effect: refused. On success the call is atomic and emits one `recipient_allowed` or `recipient_disallowed { recipient_ref, destination }` per entry. The unpayable address check applies on every chain, with each chain's own set of addresses. The non-canonical tag check can only be reached on Celo, as for `MANDATE-SPLIT-004`; its vectors are Celo only with the unrepresentable-input skip reason.
 - Error: `WRONG_RECIPIENT_MODE`, `CONFIG_INVALID`
 
 #### MANDATE-RECIPIENT-017 Policy epoch
@@ -691,10 +691,10 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 - Effect: refused.
 - Error: `LEGS_INVALID`
 
-#### MANDATE-SPLIT-003 No zero-address leg
+#### MANDATE-SPLIT-003 No leg to an address that can never pay out
 
-- Precondition: a request with a leg whose address is the zero address.
-- Effect: refused. Stated for both chains so the rule is identical; it can only be reached on Celo.
+- Precondition: a request with a leg whose address, under any tag, is an unpayable address: the mandate itself, the settlement asset's own contract, or an address nobody holds the key to. On Celo that last one is the zero address. On Stellar it is the account whose ed25519 key is 32 zero bytes and the contract whose ID is 32 zero bytes; Stellar has no zero address, but these two are valid addresses that nobody controls.
+- Effect: refused. A transfer to the asset contract or an all-zero address burns the amount, and a leg to the mandate spends budget and pays the fee while paying no one. Each needs the principal or the attester to bind a bad address, so this guards against that mistake rather than against an agent. The same addresses are refused as allowlist entries (`MANDATE-RECIPIENT-016`), and the attester refuses to attest them (`CHAINOPS-DELIVERY-005`).
 - Error: `LEGS_INVALID`
 
 #### MANDATE-SPLIT-004 Canonical tag on legs
@@ -1220,7 +1220,7 @@ Checks 3 to 16 run in the factory before it deploys, and again in the constructo
 8. Total and fee are in their domains (MANDATE-AMOUNT-004).
 9. The leg count is 1 to `MAX_LEGS` (MANDATE-SPLIT-001).
 10. Every leg amount is in its domain (MANDATE-SPLIT-002).
-11. No leg pays the zero address (MANDATE-SPLIT-003).
+11. No leg pays an unpayable address (MANDATE-SPLIT-003).
 12. Every leg tag is canonical (MANDATE-SPLIT-004).
 13. No leg pays the fee address (MANDATE-SPLIT-008).
 14. No two legs share a destination pair (MANDATE-SPLIT-005).
@@ -1499,7 +1499,7 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The mode is not `ATTESTED` (MANDATE-RECIPIENT-016).
 4. There are 1 to `MAX_BATCH` entries (MANDATE-BATCH-007).
-5. No entry has the zero address, a non-canonical tag or the fee address (MANDATE-RECIPIENT-016).
+5. No entry has an unpayable address, a non-canonical tag or the fee address (MANDATE-RECIPIENT-016).
 6. No entry is already present, counting duplicates within the call (MANDATE-RECIPIENT-016).
 <!-- /check-order -->
 
@@ -1512,7 +1512,7 @@ Effects: set the threshold, increase `recovery_epoch`, emit `recovery_threshold_
 2. The mandate is not revoked (MANDATE-REVOKE-002).
 3. The mode is not `ATTESTED` (MANDATE-RECIPIENT-016).
 4. There are 1 to `MAX_BATCH` entries (MANDATE-BATCH-007).
-5. No entry has the zero address, a non-canonical tag or the fee address (MANDATE-RECIPIENT-016).
+5. No entry has an unpayable address, a non-canonical tag or the fee address (MANDATE-RECIPIENT-016).
 6. Every entry is present, counting duplicates within the call (MANDATE-RECIPIENT-016).
 <!-- /check-order -->
 
@@ -1643,6 +1643,10 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 - Off chain: an exchange, anchor or off-ramp address is bindable as a leg destination only after the provider confirms in writing that it credits contract-originated asset transfers to its `M` or `G` plus id addresses, a testnet certification payment from a real mandate is credited end to end for that corridor, and, for anchors, the anchor gives every receiver a fixed tag, so no pooled anchor leg ever runs.
 
+#### CHAINOPS-DELIVERY-005 The attester never attests an unpayable address
+
+- Off chain: the attester refuses to sign for a destination whose address is unpayable under `MANDATE-SPLIT-003`: the mandate it would sign for, that mandate's settlement asset contract, or an all-zero address. The mandate refuses such a leg anyway, but a refusal there costs the agent a failed request, and the attester is the only party that sees the destination before it is bound.
+
 #### CHAINOPS-SUBMIT-001 No memo on contract calls
 
 - Off chain: a transaction that invokes a mandate on Stellar never carries a memo; the network rejects it. Pooled destinations are addressed only through the leg's tag.
@@ -1665,7 +1669,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-CREATE-002 Large mandates need more than one key
 
-- Off chain: the dashboard always warns about a single-key principal. When a mandate's total budget, summed over its chain instances at 1 USD per USDC or USDm unit, exceeds 50,000 USD, creation and any budget increase crossing that line are refused unless the principal is a multisig with a signing threshold of at least 2, read on chain, or the instance has a recovery approver set with `recovery_threshold` of at least 2. A Stellar contract wallet counts as a multisig only if its wallet type is on the operator's list of types with a threshold reader. Because the contract cannot price in USD, a principal who raises the budget directly is no longer served by the operator's router and executor until it complies.
+- Off chain: the dashboard always warns about a single-key principal. When a mandate's total budget, summed over its chain instances at 1 USD per USDC or USDm unit, exceeds 50,000 USD, creation and any budget increase crossing that line are refused unless the principal is a multisig with a signing threshold of at least 2, read on chain, or the instance has a recovery approver set with `recovery_threshold` of at least 2. A Stellar contract wallet counts as a multisig only if its wallet type is on the operator's list of types with a threshold reader. The OpenZeppelin smart account is on that list: its reader loads the `mandate` context rule for that mandate and the `admin` context rule, and passes only if no single signer's weight meets either rule's threshold, so the `mandate` threshold and the `admin` threshold each need more than one signer. A failed or partial read does not pass. Because the contract cannot price in USD, a principal who raises the budget directly is no longer served by the operator's router and executor until it complies.
 
 #### CHAINOPS-CREATE-003 Custody guard for operator-held agent keys
 
@@ -1678,6 +1682,10 @@ These rules bind the operator's services, not the contracts. They are listed her
 #### CHAINOPS-CREATE-005 Attester key form
 
 - Off chain: when an attester key is configured or rotated, the operator checks that it decompresses to a canonical ed25519 point that is not of small order, and refuses it otherwise; it may also require the key to prove possession by signing a configuration challenge. The contract only checks its length and that it is not all zero (`MANDATE-CONFIG-005`).
+
+#### CHAINOPS-CREATE-006 The operator cannot sign for, change or upgrade a principal's wallet
+
+- Off chain: before a mandate is created with a contract (`C`) wallet principal, and after every signer or rule change of that wallet the operator relays, the operator reads the wallet's signers, policies, context rules, upgrade authority and code hash. It refuses if any signer, policy or upgrade authority is an operator key or contract, or if the code hash is not on its list of allowed wallet code hashes, and a failed or partial read counts as a refusal. Existing mandates of a wallet that fails the check are flagged to the principal.
 
 #### CHAINOPS-SWEEP-001 Every sweep is booked once
 
@@ -1730,6 +1738,10 @@ These rules bind the operator's services, not the contracts. They are listed her
 #### CHAINOPS-INDEX-004 Every booking key includes the contract id
 
 - Off chain: every booking, idempotency and deduplication key the indexer derives from an event includes the id of the contract that emitted it, for example `(contract_id, payout_id)` for a payout event, so equal IDs from two mandates can never be booked as one payment.
+
+#### CHAINOPS-INDEX-005 A mandate is trusted by its address, never by what it stores
+
+- Off chain: every service that reads or acts on a mandate, including the chain adapter's reads, the attester and the signer, accepts a contract as a mandate only when it is registered under `CHAINOPS-INDEX-001`, or when a contract exists at the address recomputed from a trusted factory (`CHAINOPS-INDEX-002`), the principal the mandate was created for and its salt (`MANDATE-CONFIG-006`). The recomputation uses the principal at creation, not the current one, because the principal can change (`MANDATE-PRINCIPAL-002`). Nothing a contract stores or reports about itself counts as proof. Anyone can deploy the reviewed mandate code without a signature from the principal it names, storing a trusted factory's address, that factory's fee address and a supported asset, so those values and the code hash all match on a look-alike. They may be compared as an extra check, never as the reason to trust.
 
 ## Rule index
 
@@ -1827,7 +1839,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-RECIPIENT-019` | Attestation names the current policy epoch |
 | `MANDATE-SPLIT-001` | Leg count |
 | `MANDATE-SPLIT-002` | Leg amount |
-| `MANDATE-SPLIT-003` | No zero-address leg |
+| `MANDATE-SPLIT-003` | No leg to an address that can never pay out |
 | `MANDATE-SPLIT-004` | Canonical tag on legs |
 | `MANDATE-SPLIT-005` | No duplicate destination |
 | `MANDATE-SPLIT-006` | Legs sum to the total |
@@ -1905,6 +1917,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `CHAINOPS-DELIVERY-002` | Partner deposit addresses need partner confirmation |
 | `CHAINOPS-DELIVERY-003` | Only payable Stellar destinations are bindable |
 | `CHAINOPS-DELIVERY-004` | Providers are certified before use |
+| `CHAINOPS-DELIVERY-005` | The attester never attests an unpayable address |
 | `CHAINOPS-SUBMIT-001` | No memo on contract calls |
 | `CHAINOPS-SUBMIT-002` | Submission discipline on Stellar |
 | `CHAINOPS-SUBMIT-003` | Simulate attested requests before submitting |
@@ -1914,6 +1927,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `CHAINOPS-CREATE-003` | Custody guard for operator-held agent keys |
 | `CHAINOPS-CREATE-004` | The attester key signs for no role account |
 | `CHAINOPS-CREATE-005` | Attester key form |
+| `CHAINOPS-CREATE-006` | The operator cannot sign for, change or upgrade a principal's wallet |
 | `CHAINOPS-SWEEP-001` | Every sweep is booked once |
 | `CHAINOPS-SWEEP-002` | Sweep notifications are grouped |
 | `CHAINOPS-SWEEP-003` | Third-party funding of closed mandates alerts |
@@ -1927,3 +1941,4 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `CHAINOPS-INDEX-002` | mandate_created is read only from a trusted factory |
 | `CHAINOPS-INDEX-003` | The source is the contract id, never a topic or data value |
 | `CHAINOPS-INDEX-004` | Every booking key includes the contract id |
+| `CHAINOPS-INDEX-005` | A mandate is trusted by its address, never by what it stores |
