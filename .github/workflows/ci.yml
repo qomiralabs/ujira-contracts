@@ -172,8 +172,10 @@ jobs:
 
       # Every byte count and length in spec/ENCODING.md is derived from the
       # layout here, not read from the file, and the file is checked against
-      # the derivation. The output is kept in the log so the figures can be
-      # read against their source without running anything.
+      # the derivation. The layouts themselves are evaluated, and every other
+      # digit run must be exempt, by construction or by a named reason. The
+      # output, with the counts, is kept in the log so the figures can be read
+      # against their source without running anything.
       - name: Derive the encoding byte counts
         run: |
           scripts/attestation-message.py --derive

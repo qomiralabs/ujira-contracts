@@ -1,0 +1,42 @@
+[
+  {
+    "name": "the first attempt number",
+    "pattern": "`attempt` starts at (\\d+)",
+    "reason": "A value of the attempt field, not a length. Its width is the u32be in the payout_id layout, which is evaluated."
+  },
+  {
+    "name": "the current message version in its heading",
+    "pattern": "^## Attestation message \\(version (\\d+)\\)$",
+    "reason": "A version label, not a length. The bytes it names are the prefix in the message layout, which is evaluated."
+  },
+  {
+    "name": "the retired message version",
+    "pattern": "Versions: version (\\d+), never deployed",
+    "reason": "A version label for a format that was never deployed, not a length."
+  },
+  {
+    "name": "the lower value of has_tag",
+    "pattern": "`has_tag` is (\\d+) or \\d+\\.",
+    "reason": "A value of the has_tag field, not a length. The field's width is the u8 in the fields layout, which is evaluated."
+  },
+  {
+    "name": "the upper value of has_tag",
+    "pattern": "`has_tag` is \\d+ or (\\d+)\\.",
+    "reason": "A value of the has_tag field, not a length. The field's width is the u8 in the fields layout, which is evaluated."
+  },
+  {
+    "name": "the tag value that differs from no tag",
+    "pattern": "a tag of (\\d+) is distinct from no tag",
+    "reason": "A value of the tag, not a length. Its width is the u64be in the fields layout, which is evaluated."
+  },
+  {
+    "name": "the worked example's policy epoch",
+    "pattern": "^\\| `policy_epoch` \\| (\\d+) \\|$",
+    "reason": "A scalar input of the worked example, not a length. The example's fields hex encodes it, and that hex is compared with the script's output."
+  },
+  {
+    "name": "the worked example's expiry",
+    "pattern": "^\\| `valid_until` \\| (\\d+) \\|$",
+    "reason": "A scalar input of the worked example, a Unix time and not a length. The example's fields hex encodes it, and that hex is compared with the script's output."
+  }
+]
