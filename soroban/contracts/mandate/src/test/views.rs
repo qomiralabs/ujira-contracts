@@ -146,7 +146,6 @@ fn payout_answers_none_record_or_tombstone() {
         payout_id: id.clone(),
         agent: fx.agent.clone(),
         agent_epoch: 0,
-        approver_epoch: 0,
         recipient_ref: fx.b32(0xb0),
         total: 100,
         fee: 0,

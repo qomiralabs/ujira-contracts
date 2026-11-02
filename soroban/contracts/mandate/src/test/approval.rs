@@ -161,11 +161,6 @@ fn approve_from_before_a_readd_does_not_count() {
     m.add_role(&ROLE_APPROVER, &a[0]);
     // One live approval after this, not two.
     assert_eq!(m.approve(&a[1], &id), STATUS_PENDING);
-    assert_eq!(m.config().approver_epoch, 1);
-    assert_eq!(
-        fx.record(&m, 1).approvals,
-        approvals(&fx, &[(&a[0], 0), (&a[1], 0)])
-    );
     assert_eq!(
         fx.events(&m.address),
         [PayoutApprovalAdded {
@@ -175,6 +170,11 @@ fn approve_from_before_a_readd_does_not_count() {
             required: 2,
         }
         .to_xdr(&fx.env, &m.address)]
+    );
+    assert_eq!(m.config().approver_epoch, 1);
+    assert_eq!(
+        fx.record(&m, 1).approvals,
+        approvals(&fx, &[(&a[0], 0), (&a[1], 0)])
     );
     assert_eq!(totals(&m), (0, 500, 0));
     // Not a repeat: the re-added approver's new approval is what counts.
