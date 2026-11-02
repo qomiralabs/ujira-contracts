@@ -112,6 +112,8 @@ check "skip reason without applies_to" 1 "'applies_to' is a dependency of 'skip_
 check "applies_to listing every chain" 1 "applies_to: ['stellar', 'celo'] should not be valid under" -- "$fx/applies-to-every-chain.json"
 check "zero address on both chains" 1 "is the zero address, which only Celo can express" -- "$fx/zero-address-both-chains.json"
 check "zero address on celo only" 0 "every check passed" -- "$fx/zero-address-celo-only.json"
+check "all-zero contract on both chains" 1 "is an all-zero Stellar address, which only Stellar can express" -- "$fx/zero-contract-both-chains.json"
+check "all-zero account on stellar only" 0 "every check passed" -- "$fx/zero-account-stellar-only.json"
 check "attester as an account key on both chains" 1 "is the ed25519 key of an account, which only Stellar can express" -- "$fx/account-key-both-chains.json"
 check "attester as an account key on stellar only" 0 "every check passed" -- "$fx/account-key-stellar-only.json"
 
@@ -203,6 +205,7 @@ check "numeric fee" 1 "args.req.fee: 5 is not of type 'string'" -- "$fx/numeric-
 check "max_fee_bps above 100 is still representable" 0 "every check passed" -- "$fx/max-fee-bps-above-100.json"
 check "fee_address used as a caller" 0 "every check passed" -- "$fx/fee-address-caller.json"
 check "mandate used as a caller" 1 "caller mandate can never make a call" -- "$fx/mandate-caller.json"
+check "all-zero account used as a caller" 1 "caller zero_account can never make a call" -- "$fx/zero-account-caller.json"
 
 # File hygiene and step order.
 check "fraction in a count" 1 "1.5 is not an integer" -- "$fx/fraction.json"

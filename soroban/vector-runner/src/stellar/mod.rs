@@ -625,7 +625,19 @@ impl<'a> World<'a> {
             .iter()
             .filter(|n| !["mandate", "asset", "other_token"].contains(&n.as_str()))
         {
-            let actor = if contract_actors.contains(name) {
+            // Addresses nobody controls: no account entry, no contract and
+            // no key, so they can be named as destinations and never sign.
+            let actor = if name == "zero_account" {
+                Actor {
+                    address: account([0; 32]),
+                    key: None,
+                }
+            } else if name == "zero_contract" {
+                Actor {
+                    address: scval::contract([0; 32]),
+                    key: None,
+                }
+            } else if contract_actors.contains(name) {
                 let address = scval::contract(actor_seed(name));
                 let a = to_address(&env, &address)?;
                 // The SDK's mock account contract accepts any signature, so a

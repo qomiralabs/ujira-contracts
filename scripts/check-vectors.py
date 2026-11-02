@@ -19,13 +19,13 @@
 #     no object repeats a key, and vector IDs are unique across all files;
 #   - an input only one chain's types can express restricts the vector to that
 #     chain: a negative amount, an account with no trustline, a token whose
-#     transfer returns a value or an attester given as an account's key
-#     (Stellar), an amount above I128_MAX, the zero address, the non-canonical
-#     tag, a reentrant test token or a token whose transfer returns no data
-#     (Celo);
+#     transfer returns a value, an attester given as an account's key or an
+#     all-zero account or contract (Stellar), an amount above I128_MAX, the
+#     zero address, the non-canonical tag, a reentrant test token or a token
+#     whose transfer returns no data (Celo);
 #   - a tagged destination is an account actor, only an account actor changes
-#     whether it can receive, and the mandate, the tokens and the zero address
-#     never make a call;
+#     whether it can receive, and the mandate, the tokens and the zero
+#     addresses never make a call;
 #   - every attestation a request names was made by an earlier attest step,
 #     the retired secp256k1 tamper kinds are refused by name, and a
 #     wrong_signer tamper never signs with the key it already uses;
@@ -198,7 +198,12 @@ REQUESTS = {"request_payout", "request_payouts"}
 CALLER_AUTH_RULE = "MANDATE-ROLE-019"
 
 # Reserved actors that are not accounts and can never make a call.
-NOT_ACCOUNTS = {"mandate", "asset", "other_token", "zero"}
+NOT_ACCOUNTS = {"mandate", "asset", "other_token", "zero", "zero_contract"}
+# The Stellar account with an all-zero key is an account, so it can take a
+# tag, but nobody holds its key, so it never makes a call either.
+NEVER_CALL = NOT_ACCOUNTS | {"zero_account"}
+# Addresses nobody controls that only Stellar can name.
+STELLAR_ZERO = {"zero_account", "zero_contract"}
 # Keys whose values are amounts wherever they appear in a vector.
 AMOUNT_KEYS = {
     "total",
@@ -475,6 +480,12 @@ class Vector:
             balance = len(parents) >= 2 and parents[-2] == "balances"
             if value == "zero" or (balance and key == "zero"):
                 self.only_on("celo", "%s is the zero address" % path, "Stellar has no zero address")
+            if (isinstance(value, str) and value in STELLAR_ZERO) or (balance and key in STELLAR_ZERO):
+                self.only_on(
+                    "stellar",
+                    "%s is an all-zero Stellar address" % path,
+                    "only a Stellar address is a 32-byte account key or contract ID",
+                )
             if key in AMOUNT_KEYS or balance:
                 self.check_amount(path, value)
             if isinstance(value, dict) and "has_tag" in value:
@@ -607,7 +618,7 @@ class Vector:
         fn = step.get("fn") if isinstance(step.get("fn"), str) else ""
         for role in ("caller", "signed_by"):
             actor = step.get(role)
-            if isinstance(actor, str) and actor in NOT_ACCOUNTS:
+            if isinstance(actor, str) and actor in NEVER_CALL:
                 self.problem("%s %s can never make a call" % (role, actor), n)
         if "signed_by" in step and fn not in CALLER_ARG:
             self.problem("signed_by is only for calls that take a caller argument, and %s takes none" % fn, n)
