@@ -537,6 +537,67 @@ jobs:
       - name: Run the batch limits suite
         run: cargo test --locked -p batch-limits -- --nocapture --test-threads=1
 
+  # Rebuilds the OpenZeppelin smart account, its WebAuthn verifier and its
+  # weighted threshold policy from the pinned upstream tag, prints their wasm
+  # hashes, and fails when one differs from the hash the build script pins. A
+  # principal's wallet is only checkable if anyone can rebuild it to the same
+  # bytes. The wasm is kept as an artifact so tests can load exactly what was
+  # built here. Upstream code is compiled only on this runner, never on a
+  # workstation.
+  smart-account:
+    name: smart-account
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_BUILD_JOBS: 2
+    defaults:
+      run:
+        shell: env -u RUSTUP_TOOLCHAIN bash --noprofile --norc -euo pipefail {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Rust toolchain
+        working-directory: soroban
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          [ -n "$channel" ] || { echo "no channel in rust-toolchain.toml" >&2; exit 1; }
+          rustup toolchain install
+          rustc --version | grep -q "^rustc ${channel} " || { echo "rustc is not ${channel}" >&2; exit 1; }
+
+      - name: Install stellar-cli
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -fsSLo stellar.tar.gz "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${STELLAR_CLI_SHA256}  stellar.tar.gz" | sha256sum --check --strict
+          tar -xzf stellar.tar.gz -C "${RUNNER_TEMP}/bin" stellar
+          rm stellar.tar.gz
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: Build the pinned smart account
+        run: |
+          code=0
+          scripts/build-smart-account.sh --all --out-dir "${RUNNER_TEMP}/wasm" v0.8.0 >"${RUNNER_TEMP}/hashes.txt" || code=$?
+          cat "${RUNNER_TEMP}/hashes.txt"
+          {
+            echo "### OpenZeppelin smart account v0.8.0, wasm SHA-256"
+            echo '```'
+            cat "${RUNNER_TEMP}/hashes.txt"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - name: Keep the built wasm
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smart-account-wasm-v0.8.0
+          path: ${{ runner.temp }}/wasm/*.wasm
+          if-no-files-found: error
+          retention-days: 30
+
   # Resource usage decides whether a batch fits in one transaction and what a
   # payout costs. Compares a fresh run on the compiled contracts with the committed
   # snapshot, and fails on any figure outside the margin in either direction. Shares

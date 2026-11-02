@@ -26,8 +26,9 @@
 # for the self test.
 #
 # Usage: scripts/build-smart-account.sh [--all] [--out-dir DIR] <tag>
-# Exit codes: 0 built, 1 the tag does not match its pin or a tool has the wrong
-# version, 2 bad usage, an unknown tag, a missing tool or a failed build.
+# Exit codes: 0 built, 1 the tag or a built hash does not match its pin or a
+# tool has the wrong version, 2 bad usage, an unknown tag, a missing tool or a
+# failed build.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -58,10 +59,17 @@ done
 [ "$#" -eq 1 ] || usage
 tag=$1
 
-# One line for every tag this repository has reviewed. Adding a tag here is a
-# decision, backed by the audit coverage record in spikes/.
+# One entry for every tag this repository has reviewed. Adding a tag here is a
+# decision, backed by the audit coverage record in spikes/. A wasm hash is
+# pinned only once two separate CI runs built it and agreed; until then it is
+# empty and the build only reports what it measured.
 case "$tag" in
-  v0.8.0) commit=ddc327eb92d63709436da3a8455f641c2d5476c5 ;;
+  v0.8.0)
+    commit=ddc327eb92d63709436da3a8455f641c2d5476c5
+    pin_account=""
+    pin_verifier=""
+    pin_policy=""
+    ;;
   *)
     echo "build-smart-account: $tag is not a pinned tag" >&2
     exit 2
@@ -129,11 +137,30 @@ build() {
   sha256sum "$out/$file" | cut -d' ' -f1
 }
 
+# A pinned hash that differs fails the run, after printing what was built, so
+# a log always shows the hash that was measured.
+mismatch=0
+check() {
+  local package=$1 got=$2 want=$3
+  if [ -n "$want" ] && [ "$got" != "$want" ]; then
+    echo "build-smart-account: $package built to $got, but $tag pins $want" >&2
+    mismatch=1
+  fi
+}
+
+# Each hash is taken into a variable first: a failure inside a command
+# substitution that is only an argument to echo would not stop the script.
 account=$(build multisig-account-example multisig_account_example.wasm)
+check multisig-account-example "$account" "$pin_account"
 if [ "$all" -eq 0 ]; then
   echo "$account"
-  exit 0
+  exit "$mismatch"
 fi
+verifier=$(build multisig-webauthn-verifier-example multisig_webauthn_verifier_example.wasm)
+check multisig-webauthn-verifier-example "$verifier" "$pin_verifier"
+policy=$(build multisig-weighted-threshold-policy-example multisig_weighted_threshold_policy_example.wasm)
+check multisig-weighted-threshold-policy-example "$policy" "$pin_policy"
 echo "multisig-account-example $account"
-echo "multisig-webauthn-verifier-example $(build multisig-webauthn-verifier-example multisig_webauthn_verifier_example.wasm)"
-echo "multisig-weighted-threshold-policy-example $(build multisig-weighted-threshold-policy-example multisig_weighted_threshold_policy_example.wasm)"
+echo "multisig-webauthn-verifier-example $verifier"
+echo "multisig-weighted-threshold-policy-example $policy"
+exit "$mismatch"
