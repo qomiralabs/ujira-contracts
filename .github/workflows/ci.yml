@@ -143,6 +143,13 @@ jobs:
           scripts/check-test-attesters.py
           scripts/check-test-attesters.test.sh
 
+      # A restored target directory is trusted code, so it must come from an
+      # exact key for this ref, and what ships is built with no cache at all.
+      - name: Check the build caches
+        run: |
+          scripts/check-caches.py
+          scripts/check-caches.test.sh
+
       # Deployment records are committed, so they may hold public ids only.
       # The self test proves the check refuses secret shaped values, other
       # networks and malformed ids, then checks every deployments/*.json.
@@ -304,8 +311,10 @@ jobs:
           rustup target list --installed | grep -qx wasm32v1-none || { echo "wasm32v1-none is not installed" >&2; exit 1; }
           echo "toolchain=${channel}" >> "$GITHUB_ENV"
 
-      # Keyed on the toolchain and the lockfile. A lockfile change restores
-      # the closest older cache and only rebuilds what changed.
+      # Keyed on the ref, the lockfile and the toolchain, with no fallback: what
+      # lands in soroban/target is linked into the build unchecked, so a cache
+      # from another branch must never seed it. A new pull request therefore
+      # starts cold, and later pushes to it restore its own cache.
       - name: Cache cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -314,9 +323,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             soroban/target
-          key: soroban-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
-          restore-keys: |
-            soroban-${{ runner.os }}-${{ env.toolchain }}-
+          key: soroban-${{ runner.os }}-${{ github.ref }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock', 'soroban/rust-toolchain.toml') }}
 
       - name: Install stellar-cli
         run: |
@@ -485,9 +492,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             soroban/target
-          key: batch-limits-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
-          restore-keys: |
-            batch-limits-${{ runner.os }}-${{ env.toolchain }}-
+          key: batch-limits-${{ runner.os }}-${{ github.ref }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock', 'soroban/rust-toolchain.toml') }}
 
       - name: Install stellar-cli
         run: |
@@ -544,9 +549,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             soroban/target
-          key: vectors-stellar-${{ runner.os }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock') }}
-          restore-keys: |
-            vectors-stellar-${{ runner.os }}-${{ env.toolchain }}-
+          key: vectors-stellar-${{ runner.os }}-${{ github.ref }}-${{ env.toolchain }}-${{ hashFiles('soroban/Cargo.lock', 'soroban/rust-toolchain.toml') }}
 
       - name: Install stellar-cli
         run: |
