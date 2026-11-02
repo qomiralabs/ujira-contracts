@@ -6451,7 +6451,7 @@
     },
     {
       "id": "role_removed_agent_payouts_refused",
-      "rules": ["MANDATE-PAYOUT-014", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011"],
+      "rules": ["MANDATE-PAYOUT-014", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-011", "MANDATE-PAYOUT-017"],
       "description": "After remove_role of an agent, approve and execute of its payouts are AGENT_REMOVED, it cannot cancel them, the principal can, and anyone once lapsed.",
       "setup": {
         "now": "1767225600",
@@ -6595,7 +6595,7 @@
           "expect": {
             "ok": true,
             "events": [{ "name": "role_removed", "fields": { "role": 1, "account": "agent" } }],
-            "state": { "mandate": { "agents": ["agent2"] } }
+            "state": { "mandate": { "agents": ["agent2"], "pending": "0", "committed": "0", "free": "1000" } }
           }
         },
         {
@@ -6637,7 +6637,7 @@
               { "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "principal", "reason": 1 } }
             ],
             "state": {
-              "mandate": { "pending": "0", "committed": "100", "free": "900" },
+              "mandate": { "pending": "0", "committed": "0", "free": "1000" },
               "payouts": { "#p1": { "status": "CANCELLED" } }
             }
           }
@@ -6661,7 +6661,7 @@
     },
     {
       "id": "role_rotated_agent_payouts_refused",
-      "rules": ["MANDATE-PAYOUT-014", "MANDATE-RECOVERYSET-008", "MANDATE-PAYOUT-010"],
+      "rules": ["MANDATE-PAYOUT-014", "MANDATE-RECOVERYSET-008", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-017"],
       "description": "After a recovery rotation replaces an agent, approve and execute of its payouts are AGENT_REMOVED and the principal can still cancel them.",
       "setup": {
         "now": "1767225600",
@@ -6814,7 +6814,7 @@
               { "name": "role_added", "fields": { "role": 1, "account": "agent2" } },
               { "name": "recovery_executed", "fields": { "kind": 2, "old": "agent", "new": "agent2", "by": "rescuer" } }
             ],
-            "state": { "mandate": { "agent_epoch": 1, "agents": ["agent2"] } }
+            "state": { "mandate": { "agent_epoch": 1, "agents": ["agent2"], "pending": "0", "committed": "0", "free": "1000" } }
           }
         },
         {
@@ -6842,7 +6842,7 @@
               { "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "principal", "reason": 1 } }
             ],
             "state": {
-              "mandate": { "pending": "0", "committed": "100", "free": "900" },
+              "mandate": { "pending": "0", "committed": "0", "free": "1000" },
               "payouts": { "#p1": { "status": "CANCELLED" } }
             }
           }
@@ -6867,7 +6867,7 @@
     },
     {
       "id": "role_readded_agent_old_payouts_refused",
-      "rules": ["MANDATE-PAYOUT-014", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-007"],
+      "rules": ["MANDATE-PAYOUT-014", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-007", "MANDATE-PAYOUT-017"],
       "description": "An agent removed and added again takes agent_epoch 1, so its epoch 0 payouts stay AGENT_REMOVED and its own cancel is refused, while a new payout runs.",
       "setup": {
         "now": "1767225600",
@@ -7011,7 +7011,7 @@
           "expect": {
             "ok": true,
             "events": [{ "name": "role_removed", "fields": { "role": 1, "account": "agent" } }],
-            "state": { "mandate": { "agents": [] } }
+            "state": { "mandate": { "agents": [], "pending": "0", "committed": "0", "free": "1000" } }
           }
         },
         {
@@ -7057,7 +7057,7 @@
               { "name": "payout_cancelled", "fields": { "payout_id": "#p1", "by": "principal", "reason": 1 } }
             ],
             "state": {
-              "mandate": { "pending": "0", "committed": "100", "free": "900" },
+              "mandate": { "pending": "0", "committed": "0", "free": "1000" },
               "payouts": { "#p1": { "status": "CANCELLED" } }
             }
           }
@@ -7187,7 +7187,7 @@
     },
     {
       "id": "role_rotated_out_and_readded_agent_old_payouts_refused",
-      "rules": ["MANDATE-PAYOUT-014", "MANDATE-RECOVERYSET-008", "MANDATE-PAYOUT-010"],
+      "rules": ["MANDATE-PAYOUT-014", "MANDATE-RECOVERYSET-008", "MANDATE-PAYOUT-010", "MANDATE-PAYOUT-017"],
       "description": "An agent rotated out by recovery and added back by the principal takes a new agent_epoch, so its old payouts stay AGENT_REMOVED.",
       "setup": {
         "now": "1767225600",
@@ -7339,7 +7339,7 @@
               { "name": "role_removed", "fields": { "role": 1, "account": "agent2" } },
               { "name": "recovery_executed", "fields": { "kind": 2, "old": "agent2", "new": null, "by": "rescuer" } }
             ],
-            "state": { "mandate": { "agent_epoch": 0, "agents": ["agent"] } }
+            "state": { "mandate": { "agent_epoch": 0, "agents": ["agent"], "pending": "0", "committed": "0", "free": "1000" } }
           }
         },
         {
@@ -7385,7 +7385,7 @@
               { "name": "payout_cancelled", "fields": { "payout_id": "#p2", "by": "principal", "reason": 1 } }
             ],
             "state": {
-              "mandate": { "pending": "600", "committed": "0", "free": "400" },
+              "mandate": { "pending": "0", "committed": "0", "free": "1000" },
               "payouts": { "#p2": { "status": "CANCELLED" } }
             }
           }
@@ -7426,7 +7426,7 @@
               }
             ],
             "state": {
-              "mandate": { "spent": "0", "pending": "600", "committed": "100", "balance": "1000", "free": "300" },
+              "mandate": { "spent": "0", "pending": "0", "committed": "100", "balance": "1000", "free": "900" },
               "payouts": {
                 "#p3": {
                   "status": "APPROVED",
@@ -7464,7 +7464,7 @@
               }
             ],
             "state": {
-              "mandate": { "spent": "100", "pending": "600", "committed": "0", "balance": "900", "free": "300" },
+              "mandate": { "spent": "100", "pending": "0", "committed": "0", "balance": "900", "free": "900" },
               "payouts": { "#p3": { "status": "EXECUTED" } },
               "daily": { "#bob": { "day": "20454", "used": "100" } },
               "balances": { "asset": { "mandate": "900", "bob": "100" } }

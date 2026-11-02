@@ -4292,7 +4292,7 @@
                 "pending": "500",
                 "committed": "500",
                 "balance": "2000",
-                "free": "1200"
+                "free": "1000"
               }
             }
           }
@@ -5137,7 +5137,7 @@
           "recovery_threshold": 1,
           "limits": {
             "total_budget": "500",
-            "per_payment_cap": "1000",
+            "per_payment_cap": "500",
             "per_recipient_daily_cap": "1000",
             "approval_threshold": "500",
             "payout_ttl_seconds": "86400",

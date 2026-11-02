@@ -406,8 +406,8 @@ fn execute_caller_active_lookup_status_lapse_and_agent_in_order() {
         code(m.try_execute(&fx.executor, &id)),
         MandateError::AgentRemoved
     );
-    // Nothing a refused execute does is left behind.
-    assert_eq!(totals(&m), (0, 500, 100));
+    // Removing the agent released both, and the refused calls left nothing.
+    assert_eq!(totals(&m), (0, 0, 0));
     assert_eq!(fx.record(&m, 1).status, STATUS_APPROVED);
 }
 
@@ -822,7 +822,8 @@ fn execute_batch_item_with_removed_agent_fails_batch_with_65() {
     assert_eq!(fx.events(&m.address), []);
     assert_eq!(bal(&fx, &bob_addr(&fx)), 0);
     assert_eq!(fx.record(&m, 1).status, STATUS_APPROVED);
-    assert_eq!(totals(&m), (0, 0, 200));
+    // What the removed agent reserved is gone; what the other reserved stays.
+    assert_eq!(totals(&m), (0, 0, 100));
     m.execute_batch(&fx.executor, &ids(&fx, &[1]));
     assert_eq!(bal(&fx, &bob_addr(&fx)), 100);
 }
