@@ -1659,7 +1659,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-CREATE-002 Large mandates need more than one key
 
-- Off chain: the dashboard always warns about a single-key principal. When a mandate's total budget, summed over its chain instances at 1 USD per USDC or USDm unit, exceeds 50,000 USD, creation and any budget increase crossing that line are refused unless the principal is a multisig with a signing threshold of at least 2, read on chain, or the instance has a recovery approver set with `recovery_threshold` of at least 2. A Stellar contract wallet counts as a multisig only if its wallet type is on the operator's list of types with a threshold reader. Because the contract cannot price in USD, a principal who raises the budget directly is no longer served by the operator's router and executor until it complies.
+- Off chain: the dashboard always warns about a single-key principal. When a mandate's total budget, summed over its chain instances at 1 USD per USDC or USDm unit, exceeds 50,000 USD, creation and any budget increase crossing that line are refused unless the principal is a multisig with a signing threshold of at least 2, read on chain, or the instance has a recovery approver set with `recovery_threshold` of at least 2. A Stellar contract wallet counts as a multisig only if its wallet type is on the operator's list of types with a threshold reader. The OpenZeppelin smart account is on that list: its reader loads the `mandate` context rule for that mandate and the `admin` context rule, and passes only if no single signer's weight meets either rule's threshold, so the `mandate` threshold and the `admin` threshold each need more than one signer. A failed or partial read does not pass. Because the contract cannot price in USD, a principal who raises the budget directly is no longer served by the operator's router and executor until it complies.
 
 #### CHAINOPS-CREATE-003 Custody guard for operator-held agent keys
 
@@ -1672,6 +1672,10 @@ These rules bind the operator's services, not the contracts. They are listed her
 #### CHAINOPS-CREATE-005 Attester key form
 
 - Off chain: when an attester key is configured or rotated, the operator checks that it decompresses to a canonical ed25519 point that is not of small order, and refuses it otherwise; it may also require the key to prove possession by signing a configuration challenge. The contract only checks its length and that it is not all zero (`MANDATE-CONFIG-005`).
+
+#### CHAINOPS-CREATE-006 The operator cannot sign for, change or upgrade a principal's wallet
+
+- Off chain: before a mandate is created with a contract (`C`) wallet principal, and after every signer or rule change of that wallet the operator relays, the operator reads the wallet's signers, policies, context rules, upgrade authority and code hash. It refuses if any signer, policy or upgrade authority is an operator key or contract, or if the code hash is not on its list of allowed wallet code hashes, and a failed or partial read counts as a refusal. Existing mandates of a wallet that fails the check are flagged to the principal.
 
 #### CHAINOPS-SWEEP-001 Every sweep is booked once
 
@@ -1907,6 +1911,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `CHAINOPS-CREATE-003` | Custody guard for operator-held agent keys |
 | `CHAINOPS-CREATE-004` | The attester key signs for no role account |
 | `CHAINOPS-CREATE-005` | Attester key form |
+| `CHAINOPS-CREATE-006` | The operator cannot sign for, change or upgrade a principal's wallet |
 | `CHAINOPS-SWEEP-001` | Every sweep is booked once |
 | `CHAINOPS-SWEEP-002` | Sweep notifications are grouped |
 | `CHAINOPS-SWEEP-003` | Third-party funding of closed mandates alerts |
