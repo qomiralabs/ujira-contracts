@@ -216,6 +216,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 **Fix:** re-run the batch-limits spike against mainnet config settings before the mainnet deploy.
 
+**Follow-up, after this audit:** `soroban/batch-limits` now runs the worst cases on the production wasm in CI, against the settings read from testnet and mainnet on the date its output names. Re-read them before the mainnet deploy.
+
 ### I6 (informational): after a revoke, payout records still read as open
 
 **Location:** `soroban/contracts/mandate/src/lifecycle.rs:132-154`, and `lib.rs:286-289`.

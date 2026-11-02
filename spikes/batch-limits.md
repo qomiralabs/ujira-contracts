@@ -2,6 +2,8 @@
 
 How many payouts one `request_payouts` or `execute_batch` call can carry, measured instead of guessed, and the value of `MAX_BATCH` that follows. `MAX_BATCH` is a spec constant that cannot change after mainnet without a new version.
 
+This note is the measurement of the prototype that set the limits. `soroban/batch-limits` holds the production contracts to them in CI.
+
 ## Recommendation
 
 | Constant | Value | Applies to |
@@ -68,7 +70,7 @@ A prototype of the batch path of the mandate. It keeps the real storage layout, 
 - The suite was run twice; the numbers are identical.
 
 ```
-cd soroban && cargo test -p batch-limits --release -- --nocapture
+cd soroban && cargo test -p batch-limits-spike --release -- --nocapture
 ```
 
 ## Network cross-checks
