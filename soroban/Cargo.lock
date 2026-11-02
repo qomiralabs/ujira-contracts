@@ -2070,10 +2070,12 @@ dependencies = [
 name = "ujira-mandate"
 version = "0.0.0"
 dependencies = [
+ "ed25519-dalek",
  "mandate-config",
  "mandate-errors",
  "proptest",
  "serde_json",
+ "sha2",
  "soroban-sdk",
 ]
 
