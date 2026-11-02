@@ -290,6 +290,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The size check compares the budget file with the commit before this one.
+          fetch-depth: 2
 
       - name: Install the pinned Rust toolchain
         run: |
@@ -437,6 +439,14 @@ jobs:
         run: |
           ../scripts/soroban-build.sh
           ls -l target/wasm32v1-none/release/*.wasm
+
+      # The network refuses a contract above its size limit. Prints each
+      # contract's size, budget and limit, from the build just above.
+      - name: Check the wasm sizes
+        run: |
+          shellcheck ../scripts/check-wasm-sizes.sh ../scripts/check-wasm-sizes.test.sh
+          ../scripts/check-wasm-sizes.test.sh
+          ../scripts/check-wasm-sizes.sh --no-build
 
       - name: Check the tree is clean after the build
         run: |
