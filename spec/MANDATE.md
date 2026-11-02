@@ -309,7 +309,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-CONFIG-001 Immutable fields
 
 - Precondition: none.
-- Effect: fixed at construction and never changed: `asset` (the single settlement asset, which the factory must support), `recipient_mode` (`1 ALLOWLIST`, `2 ATTESTED`, `3 BOTH`), `tenant_tag` (an opaque 32-byte value that lets the operator attribute the mandate's events; it is derived off chain from the operator's `tenant_ref` and the mandate's own address (`spec/ENCODING.md`), so it differs for every mandate and never links two mandates of one principal and project), `factory` (the creating factory) and `fee_address` (copied from the factory, never supplied by the principal).
+- Effect: fixed at construction and never changed: `asset` (the single settlement asset, which the factory must support), `recipient_mode` (`1 ALLOWLIST`, `2 ATTESTED`, `3 BOTH`), `tenant_tag` (an opaque 32-byte value that lets the operator attribute the mandate's events; it is derived off chain from the operator's `tenant_ref` and the mandate's own address (`spec/ENCODING.md`), so it differs for every mandate and never links two mandates of one principal and project), `factory` (the factory named at construction, which the contract cannot verify and which proves nothing about who deployed it, `CHAINOPS-INDEX-005`) and `fee_address` (copied from the factory, never supplied by the principal).
 - Error: none
 
 #### MANDATE-CONFIG-002 Field domains and cross-field rules
@@ -1729,6 +1729,10 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 - Off chain: every booking, idempotency and deduplication key the indexer derives from an event includes the id of the contract that emitted it, for example `(contract_id, payout_id)` for a payout event, so equal IDs from two mandates can never be booked as one payment.
 
+#### CHAINOPS-INDEX-005 A mandate is trusted by its address, never by what it stores
+
+- Off chain: every service that reads or acts on a mandate, including the chain adapter's reads, the attester and the signer, accepts a contract as a mandate only when it is registered under `CHAINOPS-INDEX-001`, or when a contract exists at the address recomputed from a trusted factory (`CHAINOPS-INDEX-002`), the principal the mandate was created for and its salt (`MANDATE-CONFIG-006`). The recomputation uses the principal at creation, not the current one, because the principal can change (`MANDATE-PRINCIPAL-002`). Nothing a contract stores or reports about itself counts as proof. Anyone can deploy the reviewed mandate code without a signature from the principal it names, storing a trusted factory's address, that factory's fee address and a supported asset, so those values and the code hash all match on a look-alike. They may be compared as an extra check, never as the reason to trust.
+
 ## Rule index
 
 | ID | Title |
@@ -1925,3 +1929,4 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `CHAINOPS-INDEX-002` | mandate_created is read only from a trusted factory |
 | `CHAINOPS-INDEX-003` | The source is the contract id, never a topic or data value |
 | `CHAINOPS-INDEX-004` | Every booking key includes the contract id |
+| `CHAINOPS-INDEX-005` | A mandate is trusted by its address, never by what it stores |
