@@ -7,7 +7,7 @@
 
 extern crate std;
 
-use super::{code, dest, key_of, unpayable, Fx, DAY, FUNDED, NOW};
+use super::{code, dest, key_of, unpayable, zero_contract, Fx, DAY, FUNDED, NOW};
 use crate::events::{
     ApprovalsRequiredSet, AttestationPolicySet, FeeCapLowered, LimitsUpdated,
     PrincipalProposalCancelled, PrincipalProposed, PrincipalTransferred, RecipientAllowed,
@@ -15,8 +15,8 @@ use crate::events::{
 };
 use crate::storage::{self, Agent};
 use crate::types::{
-    AllowEntry, ROLE_AGENT, ROLE_APPROVER, ROLE_GUARDIAN, ROLE_RECOVERY, STATUS_APPROVED,
-    STATUS_PENDING,
+    AllowEntry, ROLE_AGENT, ROLE_APPROVER, ROLE_EXECUTOR, ROLE_GUARDIAN, ROLE_RECOVERY,
+    STATUS_APPROVED, STATUS_PENDING,
 };
 use crate::{MandateError, UjiraMandateClient};
 use mandate_config::{MODE_ATTESTED, MODE_BOTH};
@@ -126,6 +126,37 @@ fn remove_agent_gives_its_budget_back() {
     m.remove_role(&ROLE_AGENT, &fx.agent);
     assert_eq!(m.request_payout(&other, &fx.req(2, 300)), STATUS_APPROVED);
     assert_eq!(m.state().committed, 300);
+}
+
+/// No role on a live mandate can be given to an address nobody can act
+/// from, and neither can the principal's seat.
+#[test]
+fn zero_addresses_cannot_join_a_role_or_be_proposed() {
+    let fx = Fx::new();
+    let m = fx.mandate();
+    let before = m.config();
+    for a in [fx.account(0), zero_contract(&fx.env)] {
+        for role in [
+            ROLE_AGENT,
+            ROLE_APPROVER,
+            ROLE_GUARDIAN,
+            ROLE_EXECUTOR,
+            ROLE_RECOVERY,
+        ] {
+            assert_eq!(
+                code(m.try_add_role(&role, &a)),
+                MandateError::ConfigInvalid,
+                "role {role}, {a:?}"
+            );
+        }
+        assert_eq!(
+            code(m.try_propose_principal(&a)),
+            MandateError::ConfigInvalid,
+            "{a:?}"
+        );
+    }
+    assert_eq!(m.config(), before);
+    assert!(fx.events(&m.address).is_empty());
 }
 
 #[test]

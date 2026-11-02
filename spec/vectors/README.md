@@ -265,7 +265,7 @@ Precedence is checked with `--precedence`: every adjacent pair of checks in ever
 
 - `request_payout` 16 and 17: check 16 applies only in `ALLOWLIST` mode and check 17 only in `ATTESTED` and `BOTH`;
 - `request_payout` 19 and 20: an expired attestation has `valid_until` at or before `now`, so its window is never too long;
-- `add_role` 4 and 5, and `propose_principal` 2 and 3: the zero address is never the principal, the fee address or a role member;
+- `add_role` 4 and 5, and `propose_principal` 2 and 3: a zero address is never the principal, the fee address or a role member;
 - `remove_role` 3 and 4, 4 and 5, and 5 and 6: check 4 applies only to an approver in the set, to one among several, where check 5 applies to the only one, and check 6 to role 5;
 - `add_role` 5 and 6, `propose_principal` 3 and 4, `accept_principal` 3 and 4, and `recovery_rotate_agent` 5 and 6: an account that conflicts is the principal, the fee address or a role member, and the attester's key never matches any of those (`MANDATE-ROLE-018` holds on every path that sets either).
 

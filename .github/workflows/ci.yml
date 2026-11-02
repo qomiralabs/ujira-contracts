@@ -170,6 +170,13 @@ jobs:
       - name: Test the attestation message example
         run: scripts/attestation-message.test.sh
 
+      # The refusals of the pinned smart account build: an unpinned tag, a moved
+      # tag and the wrong tools. It builds nothing and needs no network.
+      - name: Test the smart account build script
+        run: |
+          shellcheck scripts/build-smart-account.sh scripts/build-smart-account.test.sh
+          scripts/build-smart-account.test.sh
+
       # Every byte count and length in spec/ENCODING.md is derived from the
       # layout here, not read from the file, and the file is checked against
       # the derivation. The layouts themselves are evaluated, and every other

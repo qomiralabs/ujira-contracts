@@ -309,6 +309,9 @@ pub fn add_role(env: &Env, role: u32, account: &Address) -> Result<(), MandateEr
     if holds(&roles, role, account)? {
         return Err(MandateError::ConfigInvalid);
     }
+    if mandate_config::is_zero_address(env, account) {
+        return Err(MandateError::ConfigInvalid);
+    }
     let fixed = storage::fixed(env)?;
     if breaks_separation(&roles, &principal, &fixed.fee_address, role, account) {
         return Err(MandateError::RoleConflict);
@@ -676,6 +679,9 @@ fn conflicts_as_principal(roles: &Roles, account: &Address) -> bool {
 
 pub fn propose_principal(env: &Env, proposed: &Address) -> Result<(), MandateError> {
     let principal = authorized_principal(env)?;
+    if mandate_config::is_zero_address(env, proposed) {
+        return Err(MandateError::ConfigInvalid);
+    }
     let roles = storage::roles(env)?;
     let fixed = storage::fixed(env)?;
     if conflicts_as_principal(&roles, proposed) || *proposed == fixed.fee_address {

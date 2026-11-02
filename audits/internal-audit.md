@@ -66,6 +66,8 @@ Every finding is open until it is fixed and re-tested, or accepted with the main
 
 ### L1 (low): legs and allowlist entries may name addresses that can never pay anyone out
 
+**Status:** resolved by #145 (issue #132), fixed and re-tested. The related `MANDATE-ROLE-017` gap is handled in #159 (issue #151).
+
 **Location:**
 * `soroban/contracts/mandate/src/payout.rs:330-365` (`check_legs`).
 * `soroban/contracts/mandate/src/admin.rs:505-520` (`check_entries`).
@@ -97,6 +99,8 @@ Every finding is open until it is fixed and re-tested, or accepted with the main
 
 ### L2 (low): an approver who is removed and added back gets their old approvals back
 
+**Status:** resolved by #147 (issue #133), fixed and re-tested.
+
 **Location:**
 * `soroban/contracts/mandate/src/payout.rs:417-424` (`live_approvals`).
 * `soroban/contracts/mandate/src/payout.rs:446-458`.
@@ -120,6 +124,8 @@ Otherwise, record in MANDATE-APPROVAL-004 that this is accepted.
 **Covered by vectors or exploits:** no. `replay_approval_from_removed_approver_does_not_count` (exploits/src/replay.rs:286) covers removal, but not adding the same address back.
 
 ### L3 (low): removing a compromised agent does not release what it reserved
+
+**Status:** resolved by #150 (issue #134), fixed and re-tested.
 
 **Location:**
 * `soroban/contracts/mandate/src/payout.rs:263-271` (reservation at request).
@@ -152,6 +158,8 @@ No funds are lost; this costs liveness and fees.
 
 ### L4 (low): cargo audit reports a vulnerability that CI does not run cargo audit for
 
+**Status:** resolved by #137 (issue #135), fixed and re-tested.
+
 **Location:**
 * `soroban/Cargo.lock` (crypto-bigint 0.5.5).
 * `soroban/deny.toml` ignore list.
@@ -171,6 +179,8 @@ No funds are lost; this costs liveness and fees.
 
 ### I1 (informational): the mandate expiry branch of cancel reason 3 can never decide anything
 
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+
 **Location:** `soroban/contracts/mandate/src/payout.rs:600-606`.
 
 **Why it is unreachable:**
@@ -182,6 +192,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I2 (informational): changes to recovery_epoch and agent epochs are not evented directly
 
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+
 **Location:**
 * `admin.rs:312-315` and `admin.rs:401-413` (agent add and remove bump `recovery_epoch`).
 * `recovery.rs:222-229` (rotation pushes a new agent epoch).
@@ -192,6 +204,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I3 (informational): the factory never extends the mandate code entry it deploys from
 
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+
 **Location:** `soroban/contracts/factory/src/lib.rs:112-155` and `212-216`.
 
 **What I found:** `create` extends only the factory instance. The mandate wasm stays live only while some mandate is called. If no mandate is used for long enough, the next `create` needs a restore. With auto restore this costs only fees, and the simulation handles it.
@@ -200,6 +214,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I4 (informational): the exploit suite simulates archival, it does not exercise real eviction
 
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+
 **Location:** `exploits/src/storage_events.rs:18-24`, and `replay.rs:71-81`.
 
 **What I found:** "archival" is modelled by advancing the ledger sequence in the test host. That shows the stored values survive; it does not prove behaviour after eviction on the network. That rests on protocol semantics, as MANDATE-PAYOUT-009 and MANDATE-PAYOUT-016 say.
@@ -207,6 +223,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 **Fix:** before mainnet, add a testnet check that restores an evicted tombstone and an evicted allowlist entry.
 
 ### I5 (informational): batch resource bounds were measured against testnet settings
+
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
 
 **Location:**
 * `MAX_BATCH_TRANSFERS` at `soroban/contracts/mandate/src/execute.rs:34`.
@@ -220,6 +238,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I6 (informational): after a revoke, payout records still read as open
 
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+
 **Location:** `soroban/contracts/mandate/src/lifecycle.rs:132-154`, and `lib.rs:286-289`.
 
 **What I found:** revoke sets `pending` and `committed` to 0 but leaves the records PENDING or APPROVED. `cancel` and `reject` are refused once revoked, so `payout(id)` reports them as open forever. Nothing can act on them, so this is not a safety problem.
@@ -228,6 +248,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I7 (informational): a lost principal key means funds that cannot be recovered, by design
 
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+
 **Location:** `lifecycle.rs:188-223`, `recovery.rs`.
 
 **What I found:** recovery can revoke but never change the principal. `sweep` only ever pays the principal. If the principal's key is lost, the balance is unreachable.
@@ -235,6 +257,8 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 This is the intended non-custodial design (MANDATE-RECOVERYSET-009, MANDATE-SWEEP-005). CHAINOPS-CREATE-002 already requires multisig for large budgets; keep that.
 
 ### I8 (informational): the placeholder contract builds by default
+
+**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
 
 **Location:** `soroban/Cargo.toml` (`default-members` includes `contracts/placeholder`).
 

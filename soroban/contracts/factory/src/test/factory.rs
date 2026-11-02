@@ -185,6 +185,34 @@ fn supported_assets_are_fixed_at_construction() {
     assert_eq!(fx.client().mandate_wasm_hash(), fx.wasm_hash);
 }
 
+/// The factory finds this itself rather than letting the constructor fail
+/// with a generic host error, for both all-zero forms and every role.
+#[test]
+fn create_refuses_zero_addresses_as_principal_or_in_any_role() {
+    let fx = Fx::new();
+    for (i, zero) in [account(&fx.env, 0), contract(&fx.env, 0)]
+        .iter()
+        .enumerate()
+    {
+        for field in 0..6u8 {
+            let mut c = fx.config();
+            match field {
+                0 => c.principal = zero.clone(),
+                1 => c.agents.push_back(zero.clone()),
+                2 => c.approvers.push_back(zero.clone()),
+                3 => c.guardians.push_back(zero.clone()),
+                4 => c.executors.push_back(zero.clone()),
+                _ => c.recovery.push_back(zero.clone()),
+            }
+            assert_eq!(
+                create(&fx, &c, &salt(&fx, 0x30 + field)),
+                Err(Refusal::Code(CONFIG_INVALID)),
+                "form {i}, field {field}"
+            );
+        }
+    }
+}
+
 #[test]
 fn create_rejects_unsupported_asset() {
     let fx = Fx::new();
