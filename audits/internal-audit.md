@@ -247,6 +247,9 @@ This is the intended non-custodial design (MANDATE-RECOVERYSET-009, MANDATE-SWEE
   * Anyone can deploy the mandate wasm directly with any `fee_address` and `max_fee_bps` up to 100.
   * The only defences are off chain: recompute the address, or require the factory's `mandate_created`.
   * This should stay a blocker for any integration that discovers mandates without the factory.
+  * Decision, made after this audit: no on-chain proof. The constructor cannot authenticate its deployer, so a stored or exposed factory address would still be a claim, and a registry in the factory would add storage and rent to every create to answer a question the address already answers. The defence stays off chain, in `CHAINOPS-INDEX-001`, `CHAINOPS-INDEX-002` and `CHAINOPS-INDEX-005`.
+  * Exploit 36 now models a reader following those rules and shows it refusing the strongest look-alike: the factory's own code, its fee address and a supported asset, for a principal who signed nothing.
+  * Still open: the suite proves the rule, not the production reader. The decision holds only once the chain adapter enforces `CHAINOPS-INDEX-005`, and that must be confirmed in the security review before go-live. This acceptance needs the maintainer's recorded approval, like any other finding.
 * **#99** (event binding and `tenant_ref`). Confirmed:
   * `tenant_ref` is supplied by the principal and is the topic key of every event that is not a payout event.
   * Look-alike contracts can emit identical events, so intake must bind the contract ID.
