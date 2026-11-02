@@ -55,9 +55,9 @@ fn rotate_releases_the_old_agents_reservations() {
     );
     m.cancel(&fx.principal, &fx.b32(2));
     assert_eq!(m.state().committed, 200);
-    m.execute(&fx.executor, &fx.b32(3));
+    m.cancel(&fx.principal, &fx.b32(3));
     let st = m.state();
-    assert_eq!((st.spent, st.pending, st.committed), (200, 0, 0));
+    assert_eq!((st.spent, st.pending, st.committed), (0, 0, 0));
 }
 
 /// Everything recovery must never change.

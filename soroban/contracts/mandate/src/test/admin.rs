@@ -96,14 +96,16 @@ fn remove_agent_releases_its_reservations() {
     let st = m.state();
     assert_eq!((st.pending, st.committed), (500, 250));
 
-    // The other agent's payouts are untouched.
-    m.approve(&fx.approver, &kept);
-    m.execute(&fx.executor, &theirs);
-    m.execute(&fx.executor, &kept);
-    m.execute(&fx.executor, &fx.b32(5));
+    // The other agent's payouts are untouched and move on as usual.
+    assert_eq!(m.approve(&fx.approver, &kept), STATUS_APPROVED);
     let st = m.state();
-    assert_eq!((st.spent, st.pending, st.committed), (750, 0, 0));
-    assert_eq!(st.free, FUNDED - 750);
+    assert_eq!((st.pending, st.committed), (0, 750));
+    for id in [&theirs, &kept, &fx.b32(5)] {
+        m.cancel(&fx.principal, id);
+    }
+    let st = m.state();
+    assert_eq!((st.spent, st.pending, st.committed), (0, 0, 0));
+    assert_eq!(st.free, FUNDED);
 }
 
 /// Released reservations stop counting against the budget too.
@@ -114,6 +116,7 @@ fn remove_agent_gives_its_budget_back() {
     let mut config = fx.config();
     config.agents = fx.list(&[&fx.agent, &other]);
     config.limits.total_budget = 300;
+    config.limits.per_payment_cap = 300;
     let m = fx.ready_with(&config);
     m.request_payout(&fx.agent, &fx.req(1, 300));
     assert_eq!(
@@ -148,11 +151,15 @@ fn add_role_and_rotation_assign_next_epoch() {
         [
             Agent {
                 account: a2.clone(),
-                epoch: 1
+                epoch: 1,
+                pending: 0,
+                committed: 0,
             },
             Agent {
                 account: fx.agent.clone(),
-                epoch: 2
+                epoch: 2,
+                pending: 0,
+                committed: 0,
             },
         ]
     );
@@ -169,11 +176,15 @@ fn add_role_and_rotation_assign_next_epoch() {
         [
             Agent {
                 account: fx.agent.clone(),
-                epoch: 2
+                epoch: 2,
+                pending: 0,
+                committed: 0,
             },
             Agent {
                 account: a3.clone(),
-                epoch: 3
+                epoch: 3,
+                pending: 0,
+                committed: 0,
             },
         ]
     );

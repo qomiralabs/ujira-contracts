@@ -4,11 +4,11 @@
 //! `cancel` and `cancel_batch`: who may cancel and why, what a cancel
 //! releases, and the batch running per item.
 
-use super::{code, drop_agent, Fx, DAY, FUNDED, NOW};
+use super::{code, Fx, DAY, FUNDED, NOW};
 use crate::events::PayoutCancelled;
 use crate::payout::{CANCEL_BY_AGENT, CANCEL_BY_PRINCIPAL, CANCEL_LAPSED, SWEEP_GRACE_SECONDS};
 use crate::storage::Agent;
-use crate::types::{ItemResult, STATUS_CANCELLED, STATUS_PENDING};
+use crate::types::{ItemResult, ROLE_AGENT, STATUS_CANCELLED, STATUS_PENDING};
 use crate::{MandateError, UjiraMandateClient};
 use soroban_sdk::{Address, BytesN, Event as _, Vec};
 
@@ -181,7 +181,7 @@ fn cancel_removed_agent_refused_principal_allowed() {
     let fx = Fx::new();
     let m = fx.ready();
     m.request_payout(&fx.agent, &fx.req(1, 100));
-    fx.edit_roles(&m.address, |r| drop_agent(r, &fx.agent));
+    m.remove_role(&ROLE_AGENT, &fx.agent);
     assert_eq!(
         code(m.try_cancel(&fx.agent, &fx.b32(1))),
         MandateError::Unauthorized

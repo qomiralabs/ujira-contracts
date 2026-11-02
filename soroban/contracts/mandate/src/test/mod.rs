@@ -417,10 +417,3 @@ impl Fx {
         self.env.ledger().with_mut(|li| li.timestamp = now);
     }
 }
-
-/// Takes an agent out of the stored roles, as `remove_role` will, leaving
-/// the others in their order.
-pub fn drop_agent(roles: &mut storage::Roles, who: &Address) {
-    let i = roles.agents.iter().position(|a| a.account == *who).unwrap();
-    roles.agents.remove(u32::try_from(i).unwrap());
-}

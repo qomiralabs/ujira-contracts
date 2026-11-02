@@ -7,12 +7,13 @@
 
 extern crate std;
 
-use super::{account, code, dest, drop_agent, Fx, BOB_WALLET, DAY, FUNDED, NOW};
+use super::{account, code, dest, Fx, BOB_WALLET, DAY, FUNDED, NOW};
 use crate::events::PayoutExecuted;
 use crate::execute::{transfer, MAX_BATCH_TRANSFERS};
-use crate::storage::{self, Agent, Totals};
+use crate::storage::{self, Totals};
 use crate::types::{
-    DailyUsage, Leg, PayoutRecord, PayoutRequest, STATUS_APPROVED, STATUS_EXECUTED, STATUS_PENDING,
+    DailyUsage, Leg, PayoutRecord, PayoutRequest, ROLE_AGENT, STATUS_APPROVED, STATUS_EXECUTED,
+    STATUS_PENDING,
 };
 use crate::{MandateConfig, MandateError, UjiraMandateClient};
 use mandate_config::{MODE_ATTESTED, MODE_BOTH};
@@ -394,7 +395,7 @@ fn execute_caller_active_lookup_status_lapse_and_agent_in_order() {
         MandateError::PayoutWrongStatus
     );
     // Lapsed comes before the agent check.
-    fx.edit_roles(&m.address, |r| drop_agent(r, &fx.agent));
+    m.remove_role(&ROLE_AGENT, &fx.agent);
     fx.set_time(NOW + DAY);
     assert_eq!(
         code(m.try_execute(&fx.executor, &id)),
@@ -538,6 +539,12 @@ fn attested_payout<'a>(
                 committed: 100,
             },
         );
+        // The agent's own sum moves with the totals, as a real request does.
+        let mut roles = storage::roles(&fx.env).unwrap();
+        let mut agent = roles.agents.get(0).unwrap();
+        agent.committed = 100;
+        roles.agents.set(0, agent);
+        storage::set_roles(&fx.env, &roles);
     });
     m
 }
@@ -768,8 +775,7 @@ fn execute_after_remove_role_gives_agent_removed() {
     let (fx, sac) = setup();
     let m = ready(&fx, &sac, &fx.config());
     approved(&fx, &m, 1, 100);
-    // What remove_role(1, agent) leaves behind.
-    fx.edit_roles(&m.address, |r| drop_agent(r, &fx.agent));
+    m.remove_role(&ROLE_AGENT, &fx.agent);
     assert_eq!(
         code(m.try_execute(&fx.executor, &fx.b32(1))),
         MandateError::AgentRemoved
@@ -786,16 +792,8 @@ fn execute_after_readd_gives_agent_removed() {
     let m = ready(&fx, &sac, &fx.config());
     approved(&fx, &m, 1, 100);
     // Removed, then added back under a later epoch.
-    fx.edit_roles(&m.address, |r| {
-        drop_agent(r, &fx.agent);
-        r.agent_epoch += 1;
-        r.agents.push_back(Agent {
-            account: fx.agent.clone(),
-            epoch: r.agent_epoch,
-            pending: 0,
-            committed: 0,
-        });
-    });
+    m.remove_role(&ROLE_AGENT, &fx.agent);
+    m.add_role(&ROLE_AGENT, &fx.agent);
     assert_eq!(
         code(m.try_execute(&fx.agent, &fx.b32(1))),
         MandateError::AgentRemoved
@@ -816,7 +814,7 @@ fn execute_batch_item_with_removed_agent_fails_batch_with_65() {
     let m = ready(&fx, &sac, &config);
     approved(&fx, &m, 1, 100);
     assert_eq!(m.request_payout(&other, &fx.req(2, 100)), STATUS_APPROVED);
-    fx.edit_roles(&m.address, |r| drop_agent(r, &other));
+    m.remove_role(&ROLE_AGENT, &other);
     let err = code(m.try_execute_batch(&fx.executor, &ids(&fx, &[1, 2])));
     assert_eq!(err, MandateError::AgentRemoved);
     assert_eq!(err as u32, 65);
