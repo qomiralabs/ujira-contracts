@@ -3066,6 +3066,673 @@
           }
         }
       ]
+    },
+    {
+      "id": "split_unpayable_leg_refused",
+      "rules": [
+        "MANDATE-SPLIT-003"
+      ],
+      "description": "A leg to the mandate itself or to the settlement asset contract is LEGS_INVALID, alone or beside a bound leg, and a bound leg still goes through.",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_tag": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "100000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "bob",
+              "tag": null
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "exchange",
+              "tag": null
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "7"
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "8"
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "9"
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "18446744073709551615"
+            }
+          }
+        ],
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "10000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "mandate",
+                    "tag": null
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "60"
+                },
+                {
+                  "destination": {
+                    "address": "mandate",
+                    "tag": null
+                  },
+                  "amount": "40"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "asset",
+                    "tag": null
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "60"
+                },
+                {
+                  "destination": {
+                    "address": "asset",
+                    "tag": null
+                  },
+                  "amount": "40"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [
+                    {
+                      "destination": {
+                        "address": "bob",
+                        "tag": null
+                      },
+                      "amount": "100"
+                    }
+                  ],
+                  "task_ref": "#task1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ],
+            "state": {
+              "mandate": {
+                "spent": "0",
+                "pending": "0",
+                "committed": "100",
+                "balance": "10000",
+                "free": "9900"
+              },
+              "payouts": {
+                "#p1": {
+                  "status": "APPROVED",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [
+                    {
+                      "destination": {
+                        "address": "bob",
+                        "tag": null
+                      },
+                      "amount": "100"
+                    }
+                  ],
+                  "created_at": "1767225600",
+                  "expires_at": "1767312000"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "split_zero_key_leg_refused_on_stellar",
+      "rules": [
+        "MANDATE-SPLIT-003"
+      ],
+      "description": "On Stellar a leg to the all-zero account, with or without a tag, or to the all-zero contract is LEGS_INVALID, and a bound leg still goes through.",
+      "applies_to": [
+        "stellar"
+      ],
+      "skip_reason": "unrepresentable_input",
+      "setup": {
+        "now": "1767225600",
+        "mandate": {
+          "principal": "principal",
+          "asset": "asset",
+          "recipient_mode": "ALLOWLIST",
+          "tenant_tag": "#tenant",
+          "agents": [
+            "agent"
+          ],
+          "approvers": [],
+          "approvals_required": 0,
+          "guardians": [],
+          "executors": [],
+          "recovery": [],
+          "recovery_threshold": 0,
+          "limits": {
+            "total_budget": "100000",
+            "per_payment_cap": "1000",
+            "per_recipient_daily_cap": "1000",
+            "approval_threshold": "1001",
+            "payout_ttl_seconds": "86400",
+            "expires_at": "1798761600"
+          },
+          "attester": null,
+          "country_policy_hash": "#no_countries",
+          "max_fee_bps": 0
+        },
+        "allowlist": [
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "bob",
+              "tag": null
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "exchange",
+              "tag": null
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "7"
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "8"
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "9"
+            }
+          },
+          {
+            "recipient_ref": "#bob",
+            "destination": {
+              "address": "anchor",
+              "tag": "18446744073709551615"
+            }
+          }
+        ],
+        "mints": [
+          {
+            "token": "asset",
+            "to": "mandate",
+            "amount": "10000"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "zero_account",
+                    "tag": null
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "60"
+                },
+                {
+                  "destination": {
+                    "address": "zero_account",
+                    "tag": null
+                  },
+                  "amount": "40"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "zero_account",
+                    "tag": "7"
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "60"
+                },
+                {
+                  "destination": {
+                    "address": "zero_account",
+                    "tag": "7"
+                  },
+                  "amount": "40"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "zero_contract",
+                    "tag": null
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "60"
+                },
+                {
+                  "destination": {
+                    "address": "zero_contract",
+                    "tag": null
+                  },
+                  "amount": "40"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "error": "LEGS_INVALID",
+            "events": []
+          }
+        },
+        {
+          "step": "call",
+          "fn": "request_payout",
+          "caller": "agent",
+          "args": {
+            "req": {
+              "payout_id": "#p1",
+              "recipient_ref": "#bob",
+              "total": "100",
+              "fee": "0",
+              "legs": [
+                {
+                  "destination": {
+                    "address": "bob",
+                    "tag": null
+                  },
+                  "amount": "100"
+                }
+              ],
+              "deadline": "1767226200",
+              "task_ref": "#task1",
+              "attestations": []
+            }
+          },
+          "expect": {
+            "ok": true,
+            "return": "APPROVED",
+            "events": [
+              {
+                "name": "payout_requested",
+                "fields": {
+                  "payout_id": "#p1",
+                  "agent": "agent",
+                  "recipient_ref": "#bob",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [
+                    {
+                      "destination": {
+                        "address": "bob",
+                        "tag": null
+                      },
+                      "amount": "100"
+                    }
+                  ],
+                  "task_ref": "#task1",
+                  "status": "APPROVED",
+                  "expires_at": "1767312000"
+                }
+              }
+            ],
+            "state": {
+              "mandate": {
+                "spent": "0",
+                "pending": "0",
+                "committed": "100",
+                "balance": "10000",
+                "free": "9900"
+              },
+              "payouts": {
+                "#p1": {
+                  "status": "APPROVED",
+                  "total": "100",
+                  "fee": "0",
+                  "legs": [
+                    {
+                      "destination": {
+                        "address": "bob",
+                        "tag": null
+                      },
+                      "amount": "100"
+                    }
+                  ],
+                  "created_at": "1767225600",
+                  "expires_at": "1767312000"
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   ]
 }
