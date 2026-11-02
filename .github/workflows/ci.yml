@@ -107,6 +107,15 @@ jobs:
       - name: Test the header check
         run: scripts/check-headers.test.sh
 
+      # UJIRA runs on Stellar only, so another chain's stack coming back fails
+      # here. The spec keeps its chain-neutral rules and is left out; anything
+      # else needs an exact entry with a reason in the allowlist.
+      - name: Check for chain-specific code
+        run: scripts/check-chain-specific.sh
+
+      - name: Test the chain-specific check
+        run: scripts/check-chain-specific.test.sh
+
       # Literal bidirectional controls and invisible characters can make code
       # read differently from how it runs, in a file, a file name or a symlink
       # target. Reads committed blobs. Uses the runner's python3 and its standard
