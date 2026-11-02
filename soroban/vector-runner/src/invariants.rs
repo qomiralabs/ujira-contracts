@@ -56,6 +56,9 @@ pub struct Checker {
     asset_intervened: bool,
     /// Every payout ID a `payout_requested` event has named.
     requested: BTreeSet<String>,
+    /// Open payouts whose agent has since been removed, whose reservations
+    /// that removal released.
+    released: BTreeSet<String>,
 }
 
 impl Checker {
@@ -69,6 +72,7 @@ impl Checker {
             executed_per_day: BTreeMap::new(),
             asset_intervened: false,
             requested: BTreeSet::new(),
+            released: BTreeSet::new(),
         })
     }
 
@@ -90,6 +94,11 @@ impl Checker {
                 self.requested.insert(id.to_string());
             }
         }
+        for e in events.iter().filter(|e| e["name"] == "role_removed") {
+            if e["fields"]["role"] == 1 {
+                self.note_released(&e["fields"]["account"], &prev["payouts"]);
+            }
+        }
         if kind == "clawback" && step["from"] == "mandate" {
             self.asset_intervened = true;
         }
@@ -108,7 +117,7 @@ impl Checker {
                 .iter()
                 .all(|id| cur["payouts"].get(id).is_some());
             if all_recorded {
-                i10(m, &cur["payouts"])?;
+                i10(m, &cur["payouts"], &self.released)?;
             }
             i3_records(&cur["payouts"])?;
             i6_records(&prev["payouts"], &cur["payouts"])?;
@@ -124,6 +133,16 @@ impl Checker {
         }
         self.prev = cur;
         Ok(())
+    }
+
+    /// The open payouts of an agent that was just removed hold nothing now.
+    fn note_released(&mut self, agent: &Value, payouts: &Value) {
+        for (id, rec) in payouts.as_object().into_iter().flatten() {
+            let open = rec["status"] == "PENDING" || rec["status"] == "APPROVED";
+            if open && rec["agent"] == *agent {
+                self.released.insert(id.clone());
+            }
+        }
     }
 
     /// I9: a failed call emits nothing and changes nothing.
@@ -434,8 +453,9 @@ fn i7(before: &Value, after: &Value) -> Check {
 }
 
 /// I10: pending and committed are the charges of the PENDING and APPROVED
-/// payouts, and both are zero once revoked.
-fn i10(m: &Value, payouts: &Value) -> Check {
+/// payouts, leaving out those of an agent removed since, and both are zero
+/// once revoked.
+fn i10(m: &Value, payouts: &Value, released: &BTreeSet<String>) -> Check {
     let (Some(p), Some(c)) = (amount(&m["pending"]), amount(&m["committed"])) else {
         return Ok(());
     };
@@ -456,6 +476,9 @@ fn i10(m: &Value, payouts: &Value) -> Check {
     let mut want_p: i128 = 0;
     let mut want_c: i128 = 0;
     for (id, rec) in payouts.as_object().into_iter().flatten() {
+        if released.contains(id) {
+            continue;
+        }
         let target = match rec["status"].as_str() {
             Some("PENDING") => &mut want_p,
             Some("APPROVED") => &mut want_c,

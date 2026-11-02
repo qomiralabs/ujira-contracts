@@ -143,6 +143,67 @@ pub(crate) fn release(totals: &mut Totals, status: u32, amount: i128) -> Result<
     Ok(())
 }
 
+/// Moves what an agent's open payouts hold, in step with the same move on the
+/// totals, so its sums always equal the charges of its PENDING and of its
+/// APPROVED payouts.
+pub(crate) fn move_agent_sums(
+    roles: &mut Roles,
+    account: &Address,
+    pending: i128,
+    committed: i128,
+) -> Result<(), MandateError> {
+    let i = invariant(
+        roles
+            .agents
+            .iter()
+            .position(|a| a.account == *account)
+            .and_then(|i| u32::try_from(i).ok()),
+    )?;
+    let mut agent = invariant(roles.agents.get(i))?;
+    agent.pending = invariant(agent.pending.checked_add(pending))?;
+    agent.committed = invariant(agent.committed.checked_add(committed))?;
+    if agent.pending < 0 || agent.committed < 0 {
+        return Err(MandateError::InternalInvariant);
+    }
+    roles.agents.set(i, agent);
+    Ok(())
+}
+
+/// Takes everything a removed agent's open payouts reserve out of the
+/// totals. Those payouts can never execute, so a reservation kept for them
+/// would only lock the principal's money behind a key that is already gone.
+pub(crate) fn release_agent(env: &Env, agent: &Agent) -> Result<(), MandateError> {
+    let mut totals = storage::totals(env)?;
+    release(&mut totals, STATUS_PENDING, agent.pending)?;
+    release(&mut totals, STATUS_APPROVED, agent.committed)?;
+    storage::set_totals(env, &totals);
+    Ok(())
+}
+
+/// Takes back what a payout reserved as it ends without being paid. A payout
+/// whose agent is gone holds nothing any more: removing the agent released
+/// it. Every failure comes before the one write here.
+fn release_ended(
+    totals: &mut Totals,
+    env: &Env,
+    record: &PayoutRecord,
+) -> Result<(), MandateError> {
+    let mut roles = storage::roles(env)?;
+    if !same_agent(&roles, record) {
+        return Ok(());
+    }
+    let charge = charged(record.total, record.fee)?;
+    let back = invariant(charge.checked_neg())?;
+    release(totals, record.status, charge)?;
+    if record.status == STATUS_PENDING {
+        move_agent_sums(&mut roles, &record.agent, back, 0)?;
+    } else {
+        move_agent_sums(&mut roles, &record.agent, 0, back)?;
+    }
+    storage::set_roles(env, &roles);
+    Ok(())
+}
+
 // Requests.
 
 pub fn request_payout(
@@ -262,11 +323,14 @@ fn request_item(env: &Env, agent: &Agent, req: &PayoutRequest) -> Result<u32, Ma
 
     // Every check passed. Funds are reserved now, so `committed` always
     // means covered by the balance and the principal sees what is queued.
+    let mut roles = storage::roles(env)?;
     let status = if charge >= limits.approval_threshold {
         totals.pending = invariant(totals.pending.checked_add(charge))?;
+        move_agent_sums(&mut roles, &agent.account, charge, 0)?;
         STATUS_PENDING
     } else {
         totals.committed = invariant(totals.committed.checked_add(charge))?;
+        move_agent_sums(&mut roles, &agent.account, 0, charge)?;
         STATUS_APPROVED
     };
     // Within one time to live of the largest time the sum cannot be stored.
@@ -293,6 +357,7 @@ fn request_item(env: &Env, agent: &Agent, req: &PayoutRequest) -> Result<u32, Ma
     };
     storage::put_new_record(env, &record);
     storage::set_totals(env, &totals);
+    storage::set_roles(env, &roles);
     PayoutRequested {
         payout_id: req.payout_id.clone(),
         agent: agent.account.clone(),
@@ -461,7 +526,7 @@ fn without_approval_of(env: &Env, record: &PayoutRecord, approver: &Address) -> 
 
 pub fn approve(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<u32, MandateError> {
     caller.require_auth();
-    let roles = storage::roles(env)?;
+    let mut roles = storage::roles(env)?;
     let approver = roles.approver(caller).ok_or(MandateError::Unauthorized)?;
     let now = env.ledger().timestamp();
     ensure_active(env, now)?;
@@ -504,6 +569,8 @@ pub fn approve(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<u3
         let charge = charged(record.total, record.fee)?;
         release(&mut totals, STATUS_PENDING, charge)?;
         totals.committed = invariant(totals.committed.checked_add(charge))?;
+        let out = invariant(charge.checked_neg())?;
+        move_agent_sums(&mut roles, &record.agent, out, charge)?;
         record.status = STATUS_APPROVED;
     }
 
@@ -519,6 +586,7 @@ pub fn approve(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<u3
     }
     if completes {
         storage::set_totals(env, &totals);
+        storage::set_roles(env, &roles);
         PayoutApproved {
             payout_id: payout_id.clone(),
         }
@@ -541,11 +609,7 @@ pub fn reject(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<(),
         return Err(MandateError::PayoutWrongStatus);
     }
     let mut totals = storage::totals(env)?;
-    release(
-        &mut totals,
-        STATUS_PENDING,
-        charged(record.total, record.fee)?,
-    )?;
+    release_ended(&mut totals, env, &record)?;
 
     storage::put_tombstone(env, payout_id, STATUS_REJECTED);
     storage::set_totals(env, &totals);
@@ -606,11 +670,7 @@ fn cancel_item(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<()
     }
     let reason = cancel_reason(env, caller, &record)?;
     let mut totals = storage::totals(env)?;
-    release(
-        &mut totals,
-        record.status,
-        charged(record.total, record.fee)?,
-    )?;
+    release_ended(&mut totals, env, &record)?;
 
     storage::put_tombstone(env, payout_id, STATUS_CANCELLED);
     storage::set_totals(env, &totals);

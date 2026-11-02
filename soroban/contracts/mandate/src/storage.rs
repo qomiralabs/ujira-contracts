@@ -86,12 +86,17 @@ pub struct Policy {
     pub max_fee_bps: u32,
 }
 
-/// An agent and the `agent_epoch` value it was added under.
+/// An agent, the `agent_epoch` value it was added under, and what its open
+/// payouts hold of `pending` and `committed`. Nothing limits how many payouts
+/// can be open, so these sums are what lets a removal release them all in
+/// one step instead of a loop over the payouts.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Agent {
     pub account: Address,
     pub epoch: u32,
+    pub pending: i128,
+    pub committed: i128,
 }
 
 /// An approver and the `approver_epoch` value it was added under.

@@ -27,6 +27,39 @@ fn two_of_two(fx: &Fx) -> (UjiraMandateClient<'_>, Address, Address) {
     (fx.ready_with(&config), r2, a2)
 }
 
+/// Rotating an agent out releases what its open payouts reserve, in the
+/// call that completes the rotation, exactly as a removal by the principal.
+#[test]
+fn rotate_releases_the_old_agents_reservations() {
+    let fx = Fx::new();
+    let (m, r2, a2) = two_of_two(&fx);
+    m.request_payout(&fx.agent, &fx.req(1, 500));
+    m.request_payout(&fx.agent, &fx.req(2, 100));
+    m.request_payout(&a2, &fx.req(3, 200));
+    let open = (m.state().pending, m.state().committed);
+    assert_eq!(open, (500, 300));
+    assert_eq!(
+        m.recovery_rotate_agent(&fx.recovery, &fx.agent, &None),
+        VOTE_RECORDED
+    );
+    // A vote alone releases nothing.
+    assert_eq!((m.state().pending, m.state().committed), open);
+    assert_eq!(m.recovery_rotate_agent(&r2, &fx.agent, &None), ACTION_RAN);
+    let st = m.state();
+    assert_eq!((st.pending, st.committed), (0, 200));
+    assert_eq!(st.free, FUNDED - 200);
+    // The queue is dead, and a later cancel releases nothing a second time.
+    assert_eq!(
+        code(m.try_execute(&fx.executor, &fx.b32(2))),
+        MandateError::AgentRemoved
+    );
+    m.cancel(&fx.principal, &fx.b32(2));
+    assert_eq!(m.state().committed, 200);
+    m.cancel(&fx.principal, &fx.b32(3));
+    let st = m.state();
+    assert_eq!((st.spent, st.pending, st.committed), (0, 0, 0));
+}
+
 /// Everything recovery must never change.
 #[derive(Debug, PartialEq)]
 struct Untouchable {

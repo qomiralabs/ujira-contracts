@@ -4,11 +4,11 @@
 //! `approve` and `reject`: M of N distinct current approvers, the repeat
 //! rule, the veto, and refusing the payouts of an agent that is gone.
 
-use super::drop_agent;
 use super::{code, Fx, DAY, FUNDED, NOW};
 use crate::events::{PayoutApprovalAdded, PayoutApproved, PayoutRejected};
-use crate::storage::Agent;
-use crate::types::{Approval, ROLE_APPROVER, STATUS_APPROVED, STATUS_PENDING, STATUS_REJECTED};
+use crate::types::{
+    Approval, ROLE_AGENT, ROLE_APPROVER, STATUS_APPROVED, STATUS_PENDING, STATUS_REJECTED,
+};
 use crate::{MandateError, UjiraMandateClient};
 use soroban_sdk::{Address, Event as _, Vec};
 
@@ -226,7 +226,7 @@ fn approve_check_order() {
         MandateError::PayoutNotFound
     );
     // Lapsed comes before the agent check.
-    fx.edit_roles(&m.address, |r| drop_agent(r, &fx.agent));
+    m.remove_role(&ROLE_AGENT, &fx.agent);
     fx.set_time(NOW + DAY);
     assert_eq!(
         code(m.try_approve(&fx.approver, &id)),
@@ -275,8 +275,7 @@ fn approve_expired_mandate_refused() {
 fn approve_after_remove_role_gives_agent_removed() {
     let fx = Fx::new();
     let m = pending_one(&fx);
-    // What remove_role(1, agent) leaves behind.
-    fx.edit_roles(&m.address, |r| drop_agent(r, &fx.agent));
+    m.remove_role(&ROLE_AGENT, &fx.agent);
     assert_eq!(
         code(m.try_approve(&fx.approver, &fx.b32(1))),
         MandateError::AgentRemoved
@@ -291,17 +290,7 @@ fn approve_after_recovery_rotation_gives_agent_removed() {
     let fx = Fx::new();
     let m = pending_one(&fx);
     let new = fx.account(22);
-    // What a recovery rotation leaves behind: the old agent out, the new
-    // one in under the next epoch.
-    fx.edit_roles(&m.address, |r| {
-        drop_agent(r, &fx.agent);
-        r.agent_epoch += 1;
-        r.agents.push_back(Agent {
-            account: new.clone(),
-            epoch: r.agent_epoch,
-        });
-        r.recovery_epoch += 1;
-    });
+    m.recovery_rotate_agent(&fx.recovery, &fx.agent, &Some(new.clone()));
     assert_eq!(
         code(m.try_approve(&fx.approver, &fx.b32(1))),
         MandateError::AgentRemoved
@@ -320,14 +309,8 @@ fn approve_after_readd_gives_agent_removed() {
     let fx = Fx::new();
     let m = pending_one(&fx);
     // Removed, then added back: it returns under a later epoch.
-    fx.edit_roles(&m.address, |r| {
-        drop_agent(r, &fx.agent);
-        r.agent_epoch += 1;
-        r.agents.push_back(Agent {
-            account: fx.agent.clone(),
-            epoch: r.agent_epoch,
-        });
-    });
+    m.remove_role(&ROLE_AGENT, &fx.agent);
+    m.add_role(&ROLE_AGENT, &fx.agent);
     assert_eq!(
         code(m.try_approve(&fx.approver, &fx.b32(1))),
         MandateError::AgentRemoved

@@ -428,7 +428,7 @@
     },
     {
       "id": "recovery_rotation_stops_queued_payouts",
-      "rules": ["MANDATE-RECOVERYSET-008", "MANDATE-PAYOUT-014"],
+      "rules": ["MANDATE-RECOVERYSET-008", "MANDATE-PAYOUT-014", "MANDATE-PAYOUT-017"],
       "description": "A payout queued by an agent the recovery set rotated out cannot execute, and the principal cancels it.",
       "setup": {
         "now": "1767225600",
@@ -527,7 +527,7 @@
             ],
             "token_events": [],
             "state": {
-              "mandate": { "agents": ["agent2", "agent3"], "agent_epoch": 1, "recovery_epoch": 1, "committed": "300" }
+              "mandate": { "agents": ["agent2", "agent3"], "agent_epoch": 1, "recovery_epoch": 1, "committed": "0" }
             }
           }
         },

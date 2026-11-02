@@ -753,6 +753,8 @@ fn request_stores_the_agents_epoch_on_the_payout() {
         r.agents.push_back(Agent {
             account: later.clone(),
             epoch: 3,
+            pending: 0,
+            committed: 0,
         });
     });
     m.request_payout(&fx.agent, &fx.req(1, 100));

@@ -283,7 +283,7 @@ Not errors of the mandate: a missing signature on Stellar (a host authorization 
 #### MANDATE-RECOVERYSET-008 Voting and execution
 
 - Precondition: all checks of the recovery call pass.
-- Effect: record the vote and emit `recovery_vote_added { kind, old, new, votes, required, recovery_epoch }`, where `kind` is `1 REVOKE` or `2 ROTATE_AGENT`. When the votes of distinct current members reach `recovery_threshold`, perform the action exactly as the principal's own path would (the revoke effects of `MANDATE-REVOKE-001`, or `role_removed` for `old` and, if `new` is given, `role_added` for `new`, where the new agent takes the next `agent_epoch` value: the counter increases first and the agent stores the new value, `MANDATE-PAYOUT-014`), increase `recovery_epoch`, and emit `recovery_executed { kind, old, new, by }` last. For a revoke, `old` and `new` are empty. The `by` of `recovery_executed`, and of `revoked` for a revoke, is the member whose vote completed the action. `recovery_vote_added` carries the vote count including this vote, `required` as `recovery_threshold`, and the epoch the vote was cast in, before any increase. Returns `1` when a vote was recorded and `2` when the action ran. While the set has a member, `recovery_threshold` is at least 1 (`MANDATE-RECOVERYSET-002`), so a single vote completes an action only when the threshold is 1, never because it is 0.
+- Effect: record the vote and emit `recovery_vote_added { kind, old, new, votes, required, recovery_epoch }`, where `kind` is `1 REVOKE` or `2 ROTATE_AGENT`. When the votes of distinct current members reach `recovery_threshold`, perform the action exactly as the principal's own path would (the revoke effects of `MANDATE-REVOKE-001`, or the release of what `old`'s open payouts reserve (`MANDATE-PAYOUT-017`), `role_removed` for `old` and, if `new` is given, `role_added` for `new`, where the new agent takes the next `agent_epoch` value: the counter increases first and the agent stores the new value, `MANDATE-PAYOUT-014`), increase `recovery_epoch`, and emit `recovery_executed { kind, old, new, by }` last. For a revoke, `old` and `new` are empty. The `by` of `recovery_executed`, and of `revoked` for a revoke, is the member whose vote completed the action. `recovery_vote_added` carries the vote count including this vote, `required` as `recovery_threshold`, and the epoch the vote was cast in, before any increase. Returns `1` when a vote was recorded and `2` when the action ran. While the set has a member, `recovery_threshold` is at least 1 (`MANDATE-RECOVERYSET-002`), so a single vote completes an action only when the threshold is 1, never because it is 0.
 - Error: none
 
 #### MANDATE-RECOVERYSET-009 Recovery powers are limited
@@ -452,7 +452,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-011 Cancel effects
 
 - Precondition: `cancel` passed every check.
-- Effect: tombstone CANCELLED; release `pending` or `committed` by `total + fee`; no fee is paid; emit `payout_cancelled { payout_id, by, reason }` with reason `1` principal, `2` agent or `3` lapsed.
+- Effect: tombstone CANCELLED; release `pending` or `committed` by `total + fee`, unless removing the payout's agent already released it (`MANDATE-PAYOUT-017`); no fee is paid; emit `payout_cancelled { payout_id, by, reason }` with reason `1` principal, `2` agent or `3` lapsed.
 - Error: none
 
 #### MANDATE-PAYOUT-012 Execute effects
@@ -470,7 +470,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-PAYOUT-014 The requesting agent is still the same agent
 
 - Precondition: `approve` or `execute` of a payout whose `payout.agent` is no longer in `agents`, or was removed and added again since the request.
-- Effect: refused, so removing or rotating out a compromised agent stops every payout it queued, including when the principal's key is lost and only the recovery set can act, and adding the same address back later does not revive them. The mandate keeps a counter `agent_epoch` and stores, for each agent, the value it was added under; each payout record copies its agent's value at request (`MANDATE-PAYOUT-007`). Epoch values: `agent_epoch` starts at 0 and every agent named in the creation configuration is stored with 0; every later addition, by `add_role(1, ...)` or as the `new` agent of a rotation, first increases the counter by one and then stores the new value. So an agent added after creation, or added back after a removal, always holds a value of 1 or more that no payout queued before that addition carries. The check is that `payout.agent` is an agent and its stored value equals `payout.agent_epoch`. Such payouts can still be cancelled by the principal, or by anyone once they lapse. Cancel reason 2 uses the same test.
+- Effect: refused, so removing or rotating out a compromised agent stops every payout it queued, including when the principal's key is lost and only the recovery set can act, and adding the same address back later does not revive them. The mandate keeps a counter `agent_epoch` and stores, for each agent, the value it was added under; each payout record copies its agent's value at request (`MANDATE-PAYOUT-007`). Epoch values: `agent_epoch` starts at 0 and every agent named in the creation configuration is stored with 0; every later addition, by `add_role(1, ...)` or as the `new` agent of a rotation, first increases the counter by one and then stores the new value. So an agent added after creation, or added back after a removal, always holds a value of 1 or more that no payout queued before that addition carries. The check is that `payout.agent` is an agent and its stored value equals `payout.agent_epoch`. Such payouts can still be cancelled by the principal, or by anyone once they lapse, and what they reserved is already released (`MANDATE-PAYOUT-017`). Cancel reason 2 uses the same test.
 - Error: `AGENT_REMOVED`
 
 #### MANDATE-PAYOUT-015 No nested call into the mandate during a transfer
@@ -483,6 +483,12 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 - Precondition: on Stellar, a request stores a payout record.
 - Effect: the request extends the record's TTL so that it stays live until at least `payout.expires_at + RECORD_TTL_MARGIN_SECONDS`, that is, by `ceil((payout.expires_at + RECORD_TTL_MARGIN_SECONDS - now) / STELLAR_LEDGER_SECONDS)` ledgers, clamped to the network's maximum entry TTL. A new persistent entry already starts at the network's minimum TTL and an extension never shortens one, so the TTL is never below that minimum. At the network's current close time the record does not fall short; if the network later closes ledgers faster, a record may archive somewhat before that point, which only costs a restore fee on its next use (`MANDATE-PAYOUT-009`). The submitter pays the rent. Nothing extends a record after that: the tombstone a terminal transition writes keeps the record's remaining TTL and is then left to archive, because an archived record or tombstone still counts as present (`MANDATE-PAYOUT-009`) and a later restore costs only a fee. Leaving tombstones to archive is safe only while an archived tombstone still blocks its key. The signal to revisit this rule is any protocol change that moves archived state out of validator storage so that restoring needs an outside proof, or that lets a new entry be created at an archived key without restoring it first, because either would let a payout ID be reused. The one-day margin covers ledger clock drift, a last-moment execute, and the operator's read of the record after the payout lapses, without a restore. Celo storage does not expire, so the rule has no effect there.
+- Error: none
+
+#### MANDATE-PAYOUT-017 Removing an agent releases what its open payouts reserve
+
+- Precondition: `remove_role(1, account)` or a recovery rotation out of `old` passed every check and the rotation has reached its threshold.
+- Effect: in that call `pending` and `committed` drop by everything the agent's open payouts reserve, so `free` and the budget get it back at once. Those payouts can never execute (`MANDATE-PAYOUT-014`), so keeping their reservations would let a leaked key hold the balance after the key is gone, leaving the principal to cancel each payout or revoke. Nothing limits how many payouts can be open, so the release does not loop over them: the mandate keeps, for each agent it stores, the sum of the charges its PENDING and of its APPROVED payouts reserve, moves those sums with every request, approval, reject, cancel and execute, and subtracts them on removal. The records stay as they are, PENDING or APPROVED, until they are cancelled, rejected or lapse; a reject or cancel of one tombstones it and releases nothing a second time. Adding the same address back later gives it a new epoch and empty sums, so it revives neither the old payouts nor their reservations. Removal emits only its existing events; `state()` shows the new `pending`, `committed` and `free`.
 - Error: none
 
 ## Amounts, time and identity
@@ -842,7 +848,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-APPROVAL-005 A single rejection is a veto
 
 - Precondition: `reject` passed every check.
-- Effect: tombstone REJECTED; `pending -= charged`; no fee is paid; emit `payout_rejected { payout_id, by }`. Allowed while paused and after expiry.
+- Effect: tombstone REJECTED; `pending -= charged`, unless removing the payout's agent already released it (`MANDATE-PAYOUT-017`); no fee is paid; emit `payout_rejected { payout_id, by }`. Allowed while paused and after expiry.
 - Error: none
 
 #### MANDATE-APPROVAL-006 Approver removal keeps the gate working
@@ -972,7 +978,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-WITHDRAW-003 Withdraw is capped at the free balance
 
 - Precondition: `withdraw(amount)` with `amount > free`. While active, `free` excludes `pending` and `committed`; once revoked or expired, `free` is the whole balance.
-- Effect: refused. To take back reserved funds the principal cancels payouts, or revokes and then withdraws, so an approved payout never fails at execute because funds quietly left.
+- Effect: refused. To take back reserved funds the principal cancels payouts, removes the agent that queued them (`MANDATE-PAYOUT-017`), or revokes and then withdraws, so an approved payout never fails at execute because funds quietly left.
 - Error: `INSUFFICIENT_FUNDS`
 
 #### MANDATE-WITHDRAW-004 Withdraw effects
@@ -1466,7 +1472,7 @@ Effects: add the account, emit `role_added { role, account }`; for an agent, inc
 6. Removing one recovery approver among several keeps the threshold within the set size (MANDATE-RECOVERYSET-002).
 <!-- /check-order -->
 
-Effects: remove the account, emit `role_removed { role, account }`, apply `MANDATE-APPROVAL-008` when it was the last approver and `MANDATE-RECOVERYSET-011` when it was the last recovery approver, and increase `recovery_epoch` once when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
+Effects: remove the account, release what its open payouts reserve when it was an agent (`MANDATE-PAYOUT-017`), emit `role_removed { role, account }`, apply `MANDATE-APPROVAL-008` when it was the last approver and `MANDATE-RECOVERYSET-011` when it was the last recovery approver, and increase `recovery_epoch` once when the role is agent or recovery (`MANDATE-RECOVERYSET-003`).
 
 ### set_approvals_required
 
@@ -1614,7 +1620,7 @@ The vector runner checks these after every step, and each chain's invariant test
 - I7. `spent` never decreases and `revoked` never clears.
 - I8. A payout with `charged >= approval_threshold` at request reaches APPROVED only through approvals from distinct current approvers, each given under the epoch the approver still holds, none of whom is an agent or an executor.
 - I9. Every state change emits exactly its specified events, and failed calls emit nothing.
-- I10. `pending` equals the sum of the charges of PENDING payouts and `committed` the sum of the charges of APPROVED payouts, until revoke sets both to zero.
+- I10. `pending` equals the sum of the charges of PENDING payouts and `committed` the sum of the charges of APPROVED payouts, leaving out the payouts of an agent that has been removed since their request (`MANDATE-PAYOUT-017`), until revoke sets both to zero.
 - I11. Recovery actions never transfer funds, and never change a destination, the allowlist, the attestation policy, a limit, the principal, the approvers, the guardians, the executors or the recovery set. A recovery revoke freezes the balance for the principal like any revoke.
 - I12. For every payout, `fee <= fee_cap(total)` under the `max_fee_bps` in force at request and at execute; `max_fee_bps <= MAX_FEE_BPS` always and never increases; the fee is transferred only to `fee_address`, only by `execute`, and exactly once per executed payout; rejected, cancelled and lapsed payouts pay no fee.
 - I13. `recovery_threshold` is 0 exactly when `recovery` is empty, and in `[1, len(recovery)]` otherwise, so no recovery action ever runs on a threshold of 0.
@@ -1806,6 +1812,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 | `MANDATE-PAYOUT-014` | The requesting agent is still the same agent |
 | `MANDATE-PAYOUT-015` | No nested call into the mandate during a transfer |
 | `MANDATE-PAYOUT-016` | Payout record lifetime on Stellar |
+| `MANDATE-PAYOUT-017` | Removing an agent releases what its open payouts reserve |
 | `MANDATE-AMOUNT-001` | Amounts are integer smallest units |
 | `MANDATE-AMOUNT-002` | Amount domain |
 | `MANDATE-AMOUNT-003` | Only addition, subtraction and comparison |
