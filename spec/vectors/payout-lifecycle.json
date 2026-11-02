@@ -117,7 +117,7 @@
             ],
             "state": {
               "mandate": { "pending": "0", "committed": "600", "free": "4400" },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["approver"] } }
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "approver", "epoch": 0 }] } }
             }
           }
         },

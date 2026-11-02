@@ -231,8 +231,8 @@ Every call has one `expect`:
 
 `return` is compared exactly. `state` is compared after the call, and only on what it names:
 
-- `mandate`: any of `spent`, `pending`, `committed`, `balance`, `free`, `paused`, `revoked`, `expired`, `policy_epoch`, `recovery_epoch`, `agent_epoch`, `approvals_required`, `recovery_threshold`, `max_fee_bps`, `principal`, `proposed_principal`, the five role sets, `limits`, `attester` and `country_policy_hash`;
-- `payouts`: by payout ID, any fields of the record, or `status` alone for a tombstone, or null when there is neither;
+- `mandate`: any of `spent`, `pending`, `committed`, `balance`, `free`, `paused`, `revoked`, `expired`, `policy_epoch`, `recovery_epoch`, `agent_epoch`, `approver_epoch`, `approvals_required`, `recovery_threshold`, `max_fee_bps`, `principal`, `proposed_principal`, the five role sets, `limits`, `attester` and `country_policy_hash`;
+- `payouts`: by payout ID, any fields of the record, or `status` alone for a tombstone, or null when there is neither; a record's `approvals` is a list of `{ approver, epoch }`;
 - `balances`: by token, then by actor;
 - `daily`: by `recipient_ref`, `{ day, used }`.
 

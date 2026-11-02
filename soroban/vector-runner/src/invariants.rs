@@ -47,6 +47,9 @@ pub struct Checker {
     executed: BTreeSet<String>,
     needs_approval: BTreeSet<String>,
     approvals: BTreeMap<String, BTreeSet<String>>,
+    /// How many times each approver has been removed. An approver added back
+    /// may approve the same payout again, and that is not approving twice.
+    removals: BTreeMap<String, u32>,
     executed_per_day: BTreeMap<(String, String), i128>,
     /// Set once the asset itself has taken the mandate's balance, after
     /// which I2 no longer has to hold.
@@ -62,6 +65,7 @@ impl Checker {
             executed: BTreeSet::new(),
             needs_approval: BTreeSet::new(),
             approvals: BTreeMap::new(),
+            removals: BTreeMap::new(),
             executed_per_day: BTreeMap::new(),
             asset_intervened: false,
             requested: BTreeSet::new(),
@@ -202,16 +206,23 @@ impl Checker {
                             format!("{who} approved {id} while an agent or an executor"),
                         );
                     }
+                    let removed = self.removals.get(&who).copied().unwrap_or(0);
                     if !self
                         .approvals
                         .entry(id.clone())
                         .or_default()
-                        .insert(who.clone())
+                        .insert(format!("{who}/{removed}"))
                     {
                         return fail("I8", format!("{who} approved {id} twice"));
                     }
                 }
                 "payout_approved" => self.has_approvals(&id)?,
+                "role_removed" if f["role"] == 2 => {
+                    if let Some(who) = f["account"].as_str() {
+                        let n = self.removals.entry(who.to_string()).or_insert(0);
+                        *n = n.saturating_add(1);
+                    }
+                }
                 "payout_executed" => {
                     if !self.executed.insert(id.clone()) {
                         return fail("I6", format!("payout {id} was executed twice"));

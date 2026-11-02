@@ -8,9 +8,9 @@ use super::drop_agent;
 use super::{code, Fx, DAY, FUNDED, NOW};
 use crate::events::{PayoutApprovalAdded, PayoutApproved, PayoutRejected};
 use crate::storage::Agent;
-use crate::types::{STATUS_APPROVED, STATUS_PENDING, STATUS_REJECTED};
+use crate::types::{Approval, ROLE_APPROVER, STATUS_APPROVED, STATUS_PENDING, STATUS_REJECTED};
 use crate::{MandateError, UjiraMandateClient};
-use soroban_sdk::{Address, Event as _};
+use soroban_sdk::{Address, Event as _, Vec};
 
 /// A mandate with three approvers, two of whom must approve, and one
 /// pending payout of 500.
@@ -22,6 +22,18 @@ fn two_of_three(fx: &Fx) -> (UjiraMandateClient<'_>, [Address; 3]) {
     let m = fx.ready_with(&config);
     assert_eq!(m.request_payout(&fx.agent, &fx.req(1, 500)), STATUS_PENDING);
     (m, a)
+}
+
+/// What a record's approvals should hold: who approved, under which epoch.
+fn approvals(fx: &Fx, items: &[(&Address, u32)]) -> Vec<Approval> {
+    let mut out = Vec::new(&fx.env);
+    for (who, epoch) in items {
+        out.push_back(Approval {
+            approver: (*who).clone(),
+            epoch: *epoch,
+        });
+    }
+    out
 }
 
 fn pending_one(fx: &Fx) -> UjiraMandateClient<'_> {
@@ -59,7 +71,7 @@ fn approve_one_of_one_moves_the_charge_to_committed() {
     assert_eq!(totals(&m), (0, 0, 500));
     let r = fx.record(&m, 1);
     assert_eq!(r.status, STATUS_APPROVED);
-    assert_eq!(r.approvals, fx.list(&[&fx.approver]));
+    assert_eq!(r.approvals, approvals(&fx, &[(&fx.approver, 0)]));
 }
 
 #[test]
@@ -104,7 +116,7 @@ fn approve_repeat_completes_after_requirement_lowered() {
         }
         .to_xdr(&fx.env, &m.address)]
     );
-    assert_eq!(fx.record(&m, 1).approvals, fx.list(&[&a[0]]));
+    assert_eq!(fx.record(&m, 1).approvals, approvals(&fx, &[(&a[0], 0)]));
 }
 
 #[test]
@@ -114,8 +126,8 @@ fn approve_from_removed_approver_no_longer_counts() {
     m.approve(&a[0], &fx.b32(1));
     let gone = a[0].clone();
     fx.edit_roles(&m.address, |r| {
-        let i = r.approvers.first_index_of(&gone).unwrap();
-        r.approvers.remove(i);
+        let i = r.approvers.iter().position(|x| x.account == gone).unwrap();
+        r.approvers.remove(u32::try_from(i).unwrap());
     });
     // Only the live approval counts: one, not two.
     assert_eq!(m.approve(&a[1], &fx.b32(1)), STATUS_PENDING);
@@ -134,6 +146,57 @@ fn approve_from_removed_approver_no_longer_counts() {
     assert_eq!(
         code(m.try_approve(&gone, &fx.b32(1))),
         MandateError::Unauthorized
+    );
+}
+
+/// An approver removed and added back starts over: what it approved before
+/// no longer counts, and it may approve again, which does count.
+#[test]
+fn approve_from_before_a_readd_does_not_count() {
+    let fx = Fx::new();
+    let (m, a) = two_of_three(&fx);
+    let id = fx.b32(1);
+    assert_eq!(m.approve(&a[0], &id), STATUS_PENDING);
+    m.remove_role(&ROLE_APPROVER, &a[0]);
+    m.add_role(&ROLE_APPROVER, &a[0]);
+    // One live approval after this, not two.
+    assert_eq!(m.approve(&a[1], &id), STATUS_PENDING);
+    assert_eq!(m.config().approver_epoch, 1);
+    assert_eq!(
+        fx.record(&m, 1).approvals,
+        approvals(&fx, &[(&a[0], 0), (&a[1], 0)])
+    );
+    assert_eq!(
+        fx.events(&m.address),
+        [PayoutApprovalAdded {
+            payout_id: id.clone(),
+            approver: a[1].clone(),
+            approvals: 1,
+            required: 2,
+        }
+        .to_xdr(&fx.env, &m.address)]
+    );
+    assert_eq!(totals(&m), (0, 500, 0));
+    // Not a repeat: the re-added approver's new approval is what counts.
+    assert_eq!(m.approve(&a[0], &id), STATUS_APPROVED);
+    assert_eq!(
+        fx.events(&m.address),
+        [
+            PayoutApprovalAdded {
+                payout_id: id.clone(),
+                approver: a[0].clone(),
+                approvals: 2,
+                required: 2,
+            }
+            .to_xdr(&fx.env, &m.address),
+            PayoutApproved { payout_id: id }.to_xdr(&fx.env, &m.address),
+        ]
+    );
+    assert_eq!(totals(&m), (0, 0, 500));
+    // The old entry is replaced, not kept beside the new one.
+    assert_eq!(
+        fx.record(&m, 1).approvals,
+        approvals(&fx, &[(&a[1], 0), (&a[0], 1)])
     );
 }
 

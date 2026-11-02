@@ -103,9 +103,10 @@ const STATE_FIELDS: [&str; 9] = [
 ];
 
 /// The mandate fields a vector's state can name that `config()` reports.
-const CONFIG_FIELDS: [&str; 15] = [
+const CONFIG_FIELDS: [&str; 16] = [
     "recovery_epoch",
     "agent_epoch",
+    "approver_epoch",
     "approvals_required",
     "recovery_threshold",
     "max_fee_bps",
