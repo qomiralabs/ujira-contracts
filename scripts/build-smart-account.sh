@@ -66,9 +66,9 @@ tag=$1
 case "$tag" in
   v0.8.0)
     commit=ddc327eb92d63709436da3a8455f641c2d5476c5
-    pin_account=""
-    pin_verifier=""
-    pin_policy=""
+    pin_account=6f1a3a524e75da519db0e815115101addd9bae529a45603aa4c3d1a2274d7de2
+    pin_verifier=82ac47ab4f139fc07f9524e1c8b26547a21d686384c46ec89cac2284abba65ef
+    pin_policy=61af5ce32e207ced16163a6fbbb063ca10241c73450402bc4ed9c07f743e430a
     ;;
   *)
     echo "build-smart-account: $tag is not a pinned tag" >&2

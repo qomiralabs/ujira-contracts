@@ -6,7 +6,11 @@ Which audits cover the OpenZeppelin `stellar-accounts` smart account that passke
 
 **Pin tag `v0.8.0`, commit `ddc327eb92d63709436da3a8455f641c2d5476c5`.** It is the latest release, and the latest audited release that includes the accounts package. No critical or high finding is open in the files we use.
 
-**The wasm hash is not pinned yet.** The CI job `smart-account` builds it from the tag. It is written here, and into `scripts/build-smart-account.sh`, only once two separate CI runs agree. See [The pinned build](#the-pinned-build).
+The smart account built from that tag has this wasm hash, measured by the CI job `smart-account` and pinned in `scripts/build-smart-account.sh`, which fails any later build that differs. See [The pinned build](#the-pinned-build).
+
+```
+6f1a3a524e75da519db0e815115101addd9bae529a45603aa4c3d1a2274d7de2
+```
 
 **Decided by the contract owner on 2026-11-02: the coverage is enough, and `v0.8.0` is pinned.** The coverage has five limits, kept under [Limits accepted](#limits-accepted) as the record of what was decided. The sharpest two: the deployable account contract is an example that no audit report lists in scope, and every report comes from OpenZeppelin auditing its own library.
 
@@ -154,9 +158,9 @@ Facts from the reports and the code that the next issues must respect.
 
 | Package, from `examples/multisig-smart-account/` | Wasm SHA-256 |
 | --- | --- |
-| `multisig-account-example` (the smart account) | Not measured |
-| `multisig-webauthn-verifier-example` | Not measured |
-| `multisig-weighted-threshold-policy-example` | Not measured |
+| `multisig-account-example` (the smart account) | `6f1a3a524e75da519db0e815115101addd9bae529a45603aa4c3d1a2274d7de2` |
+| `multisig-webauthn-verifier-example` | `82ac47ab4f139fc07f9524e1c8b26547a21d686384c46ec89cac2284abba65ef` |
+| `multisig-weighted-threshold-policy-example` | `61af5ce32e207ced16163a6fbbb063ca10241c73450402bc4ed9c07f743e430a` |
 
 To check it:
 
@@ -167,4 +171,4 @@ scripts/build-smart-account.sh --all v0.8.0  # prints all three, one per line
 
 Upstream attaches no wasm to the `v0.8.0` release, so there is no published hash to compare with. The file `examples/multisig-smart-account/factory/testdata/multisig_account_example.wasm` at the tag was last changed on 2026-09-10, before the tag, so it is not the tagged account and its hash must not be used.
 
-The build compiles upstream's source and its dependencies, including their build scripts, on the machine that runs it, so it runs in the CI job `smart-account` and not on a workstation. The job prints the three hashes in its log and its summary, keeps the wasm as the artifact `smart-account-wasm-v0.8.0`, and fails if a hash differs from the one the script pins. The hashes are pinned only after two separate runs, each from a fresh checkout on a fresh runner, printed the same values. The script's refusals are tested by `scripts/build-smart-account.test.sh`.
+The build compiles upstream's source and its dependencies, including their build scripts, on the machine that runs it, so it runs in the CI job `smart-account` and not on a workstation. The job prints the three hashes in its log and its summary, keeps the wasm as the artifact `smart-account-wasm-v0.8.0`, and fails if a hash differs from the one the script pins. The hashes above come from [run 1](https://github.com/qomiralabs/ujira-contracts/actions/runs/41534125967). They were pinned in the next commit, whose own CI run rebuilt all three from a fresh checkout on a fresh runner and would have failed on any difference, so two separate runs agree. The script's refusals are tested by `scripts/build-smart-account.test.sh`.
