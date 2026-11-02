@@ -9,6 +9,7 @@ members = [
     "contracts/placeholder",
     "crates/mandate-config",
     "crates/mandate-errors",
+    "batch-limits",
     "spikes/attestation-parity",
     "spikes/batch-limits",
     "spikes/batch-limits/proto",

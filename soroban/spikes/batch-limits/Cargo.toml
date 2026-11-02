@@ -1,5 +1,5 @@
 [package]
-name = "batch-limits"
+name = "batch-limits-spike"
 version = "0.0.0"
 description = "Measures batch request and execute resource use of the prototype wasm against the network limits."
 edition.workspace = true

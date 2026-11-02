@@ -1,0 +1,18 @@
+[package]
+name = "batch-limits"
+version = "0.0.0"
+description = "Holds the worst batches of the production mandate and factory to the network limits. Test only, never deployed."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+mandate-config = { workspace = true }
+ujira-mandate = { path = "../contracts/mandate" }
+ujira-factory = { path = "../contracts/factory" }
+ed25519-dalek = "=2.2.0"
+sha2 = "=0.10.9"
