@@ -79,7 +79,7 @@ pub fn pause(env: &Env, caller: &Address) -> Result<(), MandateError> {
     caller.require_auth();
     let roles = storage::roles(env)?;
     let may = *caller == storage::principal(env)?
-        || roles.approvers.contains(caller)
+        || roles.is_approver(caller)
         || roles.guardians.contains(caller)
         || roles.recovery.contains(caller);
     if !may {

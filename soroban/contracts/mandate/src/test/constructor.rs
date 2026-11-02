@@ -556,6 +556,7 @@ fn expected_view(c: &MandateConfig, fee_address: &Address) -> ConfigView {
         proposed_principal: None,
         recovery_epoch: 0,
         agent_epoch: 0,
+        approver_epoch: 0,
     }
 }
 

@@ -23,8 +23,8 @@ use crate::events::{
 };
 use crate::storage::{self, Agent, Policy, Roles, Totals};
 use crate::types::{
-    ItemResult, Leg, PayoutEntry, PayoutRecord, PayoutRequest, STATUS_APPROVED, STATUS_CANCELLED,
-    STATUS_PENDING, STATUS_REJECTED,
+    Approval, ItemResult, Leg, PayoutEntry, PayoutRecord, PayoutRequest, STATUS_APPROVED,
+    STATUS_CANCELLED, STATUS_PENDING, STATUS_REJECTED,
 };
 use mandate_config::{MODE_ALLOWLIST, MODE_ATTESTED, MODE_BOTH};
 use mandate_errors::MandateError;
@@ -437,23 +437,32 @@ fn check_recipients(
 
 // Approval and rejection.
 
-/// The number of approvals given by addresses that are approvers now. An
-/// approval from someone since removed no longer counts.
+/// The number of approvals given by addresses that are approvers now, under
+/// the epoch they still hold. An approval from someone since removed no
+/// longer counts, and neither does it once the same address is added back.
 fn live_approvals(roles: &Roles, record: &PayoutRecord) -> Result<u32, MandateError> {
     let n = record
         .approvals
         .iter()
-        .filter(|a| roles.approvers.contains(a))
+        .filter(|a| matches!(roles.approver(&a.approver), Some(r) if r.epoch == a.epoch))
         .count();
     invariant(u32::try_from(n).ok())
+}
+
+/// The approvals with any earlier one by `approver` taken out, so one address
+/// has one entry however often it was removed and added back.
+fn without_approval_of(env: &Env, record: &PayoutRecord, approver: &Address) -> Vec<Approval> {
+    let mut out = Vec::new(env);
+    for a in record.approvals.iter().filter(|a| a.approver != *approver) {
+        out.push_back(a);
+    }
+    out
 }
 
 pub fn approve(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<u32, MandateError> {
     caller.require_auth();
     let roles = storage::roles(env)?;
-    if !roles.approvers.contains(caller) {
-        return Err(MandateError::Unauthorized);
-    }
+    let approver = roles.approver(caller).ok_or(MandateError::Unauthorized)?;
     let now = env.ledger().timestamp();
     ensure_active(env, now)?;
     let mut record = open_record(env, payout_id)?;
@@ -469,7 +478,12 @@ pub fn approve(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<u3
         return Err(MandateError::AgentRemoved);
     }
     let mut live = live_approvals(&roles, &record)?;
-    let repeat = record.approvals.contains(caller);
+    // An approval from before a removal is not a repeat: it no longer counts,
+    // so the same address may give a new one.
+    let repeat = record
+        .approvals
+        .iter()
+        .any(|a| a.approver == *caller && a.epoch == approver.epoch);
     // A repeat is refused only while it would change nothing. Once the
     // requirement is met, for example after the principal lowered it, a
     // repeat goes on to the transition so the payout never gets stuck.
@@ -477,7 +491,11 @@ pub fn approve(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<u3
         return Err(MandateError::AlreadyApproved);
     }
     if !repeat {
-        record.approvals.push_back(caller.clone());
+        record.approvals = without_approval_of(env, &record, caller);
+        record.approvals.push_back(Approval {
+            approver: caller.clone(),
+            epoch: approver.epoch,
+        });
         live = invariant(live.checked_add(1))?;
     }
     let completes = live >= roles.approvals_required;
@@ -514,7 +532,7 @@ pub fn approve(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<u3
 pub fn reject(env: &Env, caller: &Address, payout_id: &BytesN<32>) -> Result<(), MandateError> {
     caller.require_auth();
     let roles = storage::roles(env)?;
-    if !roles.approvers.contains(caller) && *caller != storage::principal(env)? {
+    if !roles.is_approver(caller) && *caller != storage::principal(env)? {
         return Err(MandateError::Unauthorized);
     }
     ensure_not_revoked(env)?;
