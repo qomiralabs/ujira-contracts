@@ -80,7 +80,7 @@ cd soroban && cargo test -p batch-limits-spike -- --nocapture --test-threads=1
 
 ## Network cross-checks
 
-**Not re-run.** Everything in this section was measured on 2026-10-17 on earlier builds of the prototype, before it moved to ed25519, and is kept as dated history. Re-running it needs a testnet deployment. The figures that depend on the signature scheme are the instructions of the attested requests; event bytes do not change with it, and the new run's event bytes match the test env column here.
+**Not re-run.** Everything in this section was measured on 2026-10-17 on earlier builds of the prototype, before it moved to ed25519, and is kept as dated history. Re-running it needs a testnet deployment. The figures that depend on the signature scheme are the instructions of the attested requests; event bytes do not change with it, and for the batches the new run also measures (18 and 20 tagged legs on 10 items, 2 legs to classic accounts on 10 items), its event bytes equal the test env column here.
 
 Every transaction below was built from a fresh simulation with padded write bytes and judged by `getTransaction`, not by the CLI's summary.
 
