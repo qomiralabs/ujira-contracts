@@ -103,3 +103,17 @@ Lists are compared in order, role sets included. The vectors write a role set in
 `cargo test -p vector-runner` in `soroban/` proves the runner without the real mandate: comparator cases built from the shared vectors (`extra_event_fails`, `missing_event_fails`, `reordered_events_fail`, `invariant_violation_fails`, `only_calls_selects_matching_vectors`), runs against the test-only reference factory and mandate in `soroban/vector-runner/contracts` (`reference_contract_wrong_return_is_reported`, `token_error_is_never_read_as_a_mandate_error`, `runner_registers_wasm_only`), the token kinds, receiving states and clawback on the test host, and the attest step against every case of `spikes/attestation-parity/fixture.json`. The reference contracts are committed as wasm in `soroban/vector-runner/fixtures`, and `scripts/check-wasm-fixtures.sh` checks they match their source.
 
 The four Stellar only cases in `soroban/vector-runner/chain-specific/stellar.json` need the real contracts, built first with `scripts/soroban-build.sh`, and run with the rest of the self tests: `cargo test -p vector-runner chain_specific`.
+
+## The resource snapshot
+
+`soroban/resource-snapshot.json` records what every public function of the mandate and the factory uses: instructions, memory, and read and write entries and bytes, on the compiled wasm and signed as on a network. It also holds the heavy cases that decide whether a batch fits in one transaction: `MAX_BATCH` items, the full transfer budget, and four legs plus the fee transfer, both alone and in a batch.
+
+```sh
+scripts/soroban-build.sh
+scripts/check-resources.py            # compares a fresh run with the snapshot
+scripts/check-resources.py --update   # writes the snapshot, for a change that means to move it
+```
+
+The `resources` CI job fails if any figure moves by more than the margin in `ci/resource-budget.json`, in either direction, naming the scenario and the figure. An improvement fails too until the snapshot is updated, so a later regression cannot hide inside it.
+
+`soroban/vector-runner/resources/scenarios.json` names which vector's call stands for each function. A new public function fails the run until it has a scenario, and `soroban/vector-runner/resources/vectors.json` holds any vector that exists only to be measured. The absolute limits a batch must stay under are held separately, by `cargo test -p batch-limits`.
