@@ -462,3 +462,39 @@ fn wasm_cost_per_case() {
     // can never cost more than the leg would have.
     assert!(cost_of["flipped_s_bit"] <= one);
 }
+
+/// The attester really signed the bare hash, so this case tests the verifier's
+/// prefix and not a bad signature. The fixture's `wrong_chain` differs from
+/// what it presents in the network ID alone.
+#[test]
+fn unprefixed_and_wrong_chain_cases_are_what_they_claim() {
+    let fx = fixture();
+    let cases = fx["cases"].as_array().unwrap();
+    let case = |name: &str| {
+        cases
+            .iter()
+            .find(|c| s(c, "name") == name)
+            .unwrap_or_else(|| panic!("the fixture has no case {name}"))
+    };
+
+    let unprefixed = case("unprefixed_message");
+    assert_eq!(s(unprefixed, "expect"), "HOST_TRAP");
+    let attestation = &unprefixed["attestations"][0];
+    let key = VerifyingKey::from_bytes(&arr::<32>(s(unprefixed, "attester_public_key"))).unwrap();
+    let signature = Signature::from_bytes(&arr::<64>(s(attestation, "signature")));
+    let hash = unhex(s(&attestation["signed"], "fields_sha256"));
+    assert_eq!(hash.len(), 32);
+    key.verify(&hash, &signature)
+        .expect("the attester signed the bare hash");
+    assert!(key
+        .verify(&unhex(s(&attestation["checked"], "message")), &signature)
+        .is_err());
+
+    let chain = case("wrong_chain");
+    assert_eq!(s(chain, "expect"), "HOST_TRAP");
+    let attestation = &chain["attestations"][0];
+    let signed = unhex(s(&attestation["signed"], "fields"));
+    let checked = unhex(s(&attestation["checked"], "fields"));
+    assert_ne!(signed[..32], checked[..32], "the network IDs are the same");
+    assert_eq!(signed[32..], checked[32..], "more than the network differs");
+}

@@ -118,6 +118,7 @@ PARITY_EXEMPT = {
     "valid_policy_epoch_u64_max": "the policy epoch reaches the u64 maximum only after as many policy changes",
     "wrong_policy_epoch_signed": "an attest step signs the policy_epoch it carries, so it cannot sign one and carry another",
     "flipped_s_bit": "flipped_bit is the one tamper kind that flips a bit, and it flips one in R",
+    "unprefixed_message": "an attest step always signs the prefixed message",
     "zero_signature": "no tamper kind replaces the whole signature",
     "identity_r_zero_s": "no tamper kind replaces the whole signature",
     "small_order_attester_key": "no tamper kind writes the identity point and a zero S as the signature",

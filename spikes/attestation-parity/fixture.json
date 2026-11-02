@@ -980,6 +980,48 @@
       ]
     },
     {
+      "name": "unprefixed_message",
+      "tamper": "unprefixed_message",
+      "expect": "HOST_TRAP",
+      "expect_code": null,
+      "calls": 1,
+      "now": "1767225600",
+      "network_passphrase": "Test SDF Network ; September 2015",
+      "network_id": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+      "mandate": "CDUKSTCG3XKTPTHMNRJZIW23J3T5DKHASDPQ3CIRKQ4YJH3PDOFFULZA",
+      "mandate_xdr": "0x0000001200000001e8a94c46ddd537ccec6c53945b5b4ee7d1a8e090df0d89115439849f6f1b8a5a",
+      "attester_public_key": "0x421adb50c10fe73fb1fc0d4211a16911a188bb001eaf0391b479316026141d48",
+      "recipient_ref": "0x187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d",
+      "country_policy_hash": "0x343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca830415",
+      "policy_epoch": "0",
+      "legs": [
+        {
+          "destination": "GDTYAUMMX45E2SU2Q7JRJHCXDIYTEUAXVBHZ7DVCVXZGMAKMWFL7SOY4",
+          "destination_xdr": "0x000000120000000000000000e780518cbf3a4d4a9a87d3149c571a31325017a84f9f8ea2adf266014cb157f9",
+          "has_tag": false,
+          "tag": "0",
+          "amount": "500"
+        }
+      ],
+      "attestations": [
+        {
+          "valid_until": "1767229200",
+          "policy_epoch": "0",
+          "signature": "0x00ee866aab77321d67967d1a8f0c910b4e18d153791125870d6a34b11a5d41e7a93175106ae6e9c3aa69d85684f5bfa7dc2da617d3f89c97ed0093386e0c300b",
+          "signed": {
+            "fields": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472280000001200000001e8a94c46ddd537ccec6c53945b5b4ee7d1a8e090df0d89115439849f6f1b8a5a187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca8304150000000000000000000000006955c7102c000000120000000000000000e780518cbf3a4d4a9a87d3149c571a31325017a84f9f8ea2adf266014cb157f9000000000000000000",
+            "fields_sha256": "0x6786dd0154eaa55fca26d77da8952c91df2fcc0927e381771667f4c37a7f115e",
+            "message": "0x554a4952412f4154544553542f56326786dd0154eaa55fca26d77da8952c91df2fcc0927e381771667f4c37a7f115e"
+          },
+          "checked": {
+            "fields": "0xcee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472280000001200000001e8a94c46ddd537ccec6c53945b5b4ee7d1a8e090df0d89115439849f6f1b8a5a187204dacf1b6ae9830406f0405b3710d69d86df034cf3fe3753e7b460c8e97d343fb1d75ee948735be1a836a29a40ecd0612986ab9bd1183f8271ccca8304150000000000000000000000006955c7102c000000120000000000000000e780518cbf3a4d4a9a87d3149c571a31325017a84f9f8ea2adf266014cb157f9000000000000000000",
+            "fields_sha256": "0x6786dd0154eaa55fca26d77da8952c91df2fcc0927e381771667f4c37a7f115e",
+            "message": "0x554a4952412f4154544553542f56326786dd0154eaa55fca26d77da8952c91df2fcc0927e381771667f4c37a7f115e"
+          }
+        }
+      ]
+    },
+    {
       "name": "wrong_valid_until",
       "tamper": "wrong_valid_until",
       "expect": "HOST_TRAP",

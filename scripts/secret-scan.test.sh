@@ -328,7 +328,7 @@ expect "missing base branch is refused" 2 "$work/pr-missing-base"
 # allowlist is no longer needed and the test says so.
 fixture=spikes/attestation-parity/fixture.json
 real_key() {
-  python3 - "$here" "$fixture" "$1" <<'PY'
+  python3 -I - "$here" "$fixture" "$1" <<'PY'
 import json, subprocess, sys
 root, path, name = sys.argv[1:]
 revs = subprocess.run(["git", "-C", root, "rev-list", "HEAD", "--", path],

@@ -82,14 +82,14 @@ fn attest_step_reproduces_every_fixture_case() {
     let cases = fx["cases"].as_array().unwrap();
     assert_eq!(
         cases.len(),
-        48,
+        49,
         "the fixture has a different number of cases"
     );
 
     // The fixture's own damage, mapped to the vector format's tamper kinds
-    // where one exists. flip_s, zero and identity signatures are not tamper
-    // kinds of the vector format, so for them only the signed bytes are
-    // checked.
+    // where one exists. flip_s, zero, identity and unprefixed signatures are
+    // not tamper kinds of the vector format, so for them only the signed bytes
+    // are checked.
     let mapped = [
         (63usize, Tamper::ShortSignature),
         (65, Tamper::LongSignature),
@@ -175,8 +175,9 @@ fn attest_step_reproduces_every_fixture_case() {
     assert!(exact >= 40, "only {exact} signatures reproduced");
     // Truncated twice, extended, empty, flipped R and S + L.
     assert_eq!(tampered, 6);
-    // Flipped S, the zero signature and the identity signature twice.
-    assert_eq!(unmapped, 4);
+    // Flipped S, the zero signature, the identity signature twice and the
+    // signature over the bare hash.
+    assert_eq!(unmapped, 5);
 }
 
 #[test]
