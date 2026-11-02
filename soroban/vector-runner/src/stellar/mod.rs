@@ -230,6 +230,30 @@ impl NetworkLimits {
     pub const EVENTS_BYTES: u32 = 16_384;
 }
 
+/// What one invocation used, as the network counts it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CallResources {
+    pub instructions: i64,
+    pub memory_bytes: i64,
+    pub read_entries: u32,
+    pub write_entries: u32,
+    pub read_bytes: u32,
+    pub write_bytes: u32,
+}
+
+/// What the last invocation used, if the host recorded it.
+pub fn last_invocation(env: &Env) -> Option<CallResources> {
+    let r = env.host().get_last_invocation_resources()?;
+    Some(CallResources {
+        instructions: r.instructions,
+        memory_bytes: r.mem_bytes,
+        read_entries: r.disk_read_entries + r.memory_read_entries,
+        write_entries: r.write_entries,
+        read_bytes: r.disk_read_bytes,
+        write_bytes: r.write_bytes,
+    })
+}
+
 /// Lifts the test host's own invocation limits. A signed call records an
 /// authorization snapshot that a network never builds, and with a large
 /// batch the snapshot alone runs the host out of budget after the contract
@@ -541,6 +565,9 @@ fn collect_mentions(v: &Value, out: &mut Mentions) {
 /// One vector's world: the env, its actors and tokens, the factory, and the
 /// mandate once it exists.
 pub struct World<'a> {
+    /// What the last call step used. Read here because every step goes on to
+    /// read the state through views, which replace the host's own record.
+    last_call: Option<CallResources>,
     env: Env,
     spec: &'a Spec,
     actors: BTreeMap<String, Actor>,
@@ -691,6 +718,7 @@ impl<'a> World<'a> {
         }
 
         Ok(World {
+            last_call: None,
             env,
             spec,
             actors,
@@ -1654,6 +1682,7 @@ impl<'a> World<'a> {
                     Auth::Signer(signer)
                 };
                 let (o, events) = self.invoke(&target, &f, &args, auth)?;
+                self.last_call = last_invocation(&self.env);
                 if let (Outcome::Ok(ScVal::Address(a)), "create", None) =
                     (&o, f.as_str(), &self.mandate)
                 {
@@ -1718,6 +1747,11 @@ impl<'a> World<'a> {
             rec.insert(String::from("state_errors"), json!(errors));
         }
         Ok((Value::Object(rec), stop))
+    }
+
+    /// What the last call step used.
+    pub fn call_resources(&self) -> Option<CallResources> {
+        self.last_call
     }
 
     /// Each actor's strkey, for reading a trace next to a network.
