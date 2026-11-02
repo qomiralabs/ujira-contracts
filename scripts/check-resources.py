@@ -116,8 +116,8 @@ def compare(committed, fresh, margin):
                 continue
             change = "%+d" % (after - before)
             percent = "%+.2f%%" % (100.0 * (after - before) / before) if before else "from zero"
-            word = "regression" if after > before else "improvement"
-            problems.append("%s: %s %d to %d (%s, %s), a %s beyond the %d percent margin"
+            word = "a regression" if after > before else "an improvement"
+            problems.append("%s: %s %d to %d (%s, %s), %s beyond the %d percent margin"
                             % (name, metric, before, after, change, percent, word, margin))
     return problems, compared
 
