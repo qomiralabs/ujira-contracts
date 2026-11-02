@@ -1,0 +1,340 @@
+{
+  "scenarios": {
+    "accept_principal": {
+      "instructions": 1425816,
+      "memory_bytes": 1355915,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1820,
+      "write_entries": 2
+    },
+    "add_role": {
+      "instructions": 1448983,
+      "memory_bytes": 1357684,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1916,
+      "write_entries": 2
+    },
+    "allow_recipients_max_batch": {
+      "instructions": 3024524,
+      "memory_bytes": 1548643,
+      "read_bytes": 92,
+      "read_entries": 14,
+      "write_bytes": 1876,
+      "write_entries": 11
+    },
+    "approve": {
+      "instructions": 1663179,
+      "memory_bytes": 1379803,
+      "read_bytes": 92,
+      "read_entries": 5,
+      "write_bytes": 2740,
+      "write_entries": 3
+    },
+    "cancel": {
+      "instructions": 1584979,
+      "memory_bytes": 1371947,
+      "read_bytes": 92,
+      "read_entries": 5,
+      "write_bytes": 2072,
+      "write_entries": 3
+    },
+    "cancel_batch_max_batch": {
+      "instructions": 4562262,
+      "memory_bytes": 1536259,
+      "read_bytes": 92,
+      "read_entries": 14,
+      "write_bytes": 4340,
+      "write_entries": 12
+    },
+    "cancel_principal_proposal": {
+      "instructions": 1363370,
+      "memory_bytes": 1367281,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1908,
+      "write_entries": 2
+    },
+    "config": {
+      "instructions": 909256,
+      "memory_bytes": 1324484,
+      "read_bytes": 0,
+      "read_entries": 2,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "create": {
+      "instructions": 2876441,
+      "memory_bytes": 3938077,
+      "read_bytes": 92,
+      "read_entries": 6,
+      "write_bytes": 2012,
+      "write_entries": 2
+    },
+    "daily_used": {
+      "instructions": 713241,
+      "memory_bytes": 1315184,
+      "read_bytes": 0,
+      "read_entries": 3,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "disallow_recipients": {
+      "instructions": 1371425,
+      "memory_bytes": 1345772,
+      "read_bytes": 92,
+      "read_entries": 5,
+      "write_bytes": 76,
+      "write_entries": 2
+    },
+    "execute": {
+      "instructions": 2015962,
+      "memory_bytes": 1411607,
+      "read_bytes": 208,
+      "read_entries": 10,
+      "write_bytes": 2604,
+      "write_entries": 6
+    },
+    "execute_batch_four_legs_and_fee": {
+      "instructions": 6461809,
+      "memory_bytes": 1988290,
+      "read_bytes": 672,
+      "read_entries": 20,
+      "write_bytes": 3824,
+      "write_entries": 13
+    },
+    "execute_batch_max_batch": {
+      "instructions": 8273173,
+      "memory_bytes": 1973339,
+      "read_bytes": 208,
+      "read_entries": 19,
+      "write_bytes": 4872,
+      "write_entries": 15
+    },
+    "execute_batch_max_transfers": {
+      "instructions": 9199506,
+      "memory_bytes": 2160970,
+      "read_bytes": 324,
+      "read_entries": 20,
+      "write_bytes": 4736,
+      "write_entries": 15
+    },
+    "execute_four_legs_and_fee": {
+      "instructions": 2701064,
+      "memory_bytes": 1527386,
+      "read_bytes": 672,
+      "read_entries": 17,
+      "write_bytes": 3068,
+      "write_entries": 10
+    },
+    "factory_fee_address": {
+      "instructions": 477265,
+      "memory_bytes": 1241498,
+      "read_bytes": 0,
+      "read_entries": 2,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "factory_mandate_wasm_hash": {
+      "instructions": 479332,
+      "memory_bytes": 1241499,
+      "read_bytes": 0,
+      "read_entries": 2,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "factory_supported_assets": {
+      "instructions": 477611,
+      "memory_bytes": 1241368,
+      "read_bytes": 0,
+      "read_entries": 2,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "factory_version": {
+      "instructions": 456186,
+      "memory_bytes": 1240163,
+      "read_bytes": 0,
+      "read_entries": 2,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "is_allowed": {
+      "instructions": 701445,
+      "memory_bytes": 1317584,
+      "read_bytes": 0,
+      "read_entries": 3,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "lower_fee_cap": {
+      "instructions": 1372271,
+      "memory_bytes": 1355135,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1820,
+      "write_entries": 2
+    },
+    "pause": {
+      "instructions": 1393672,
+      "memory_bytes": 1358538,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1916,
+      "write_entries": 2
+    },
+    "payout": {
+      "instructions": 758887,
+      "memory_bytes": 1319111,
+      "read_bytes": 0,
+      "read_entries": 3,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "propose_principal": {
+      "instructions": 1408722,
+      "memory_bytes": 1367663,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1992,
+      "write_entries": 2
+    },
+    "recover_token": {
+      "instructions": 1494500,
+      "memory_bytes": 1376444,
+      "read_bytes": 208,
+      "read_entries": 9,
+      "write_bytes": 416,
+      "write_entries": 3
+    },
+    "recovery_revoke": {
+      "instructions": 1323428,
+      "memory_bytes": 1342688,
+      "read_bytes": 92,
+      "read_entries": 5,
+      "write_bytes": 248,
+      "write_entries": 2
+    },
+    "recovery_rotate_agent": {
+      "instructions": 1461263,
+      "memory_bytes": 1347442,
+      "read_bytes": 92,
+      "read_entries": 5,
+      "write_bytes": 328,
+      "write_entries": 2
+    },
+    "reject": {
+      "instructions": 1622746,
+      "memory_bytes": 1381119,
+      "read_bytes": 92,
+      "read_entries": 5,
+      "write_bytes": 2360,
+      "write_entries": 3
+    },
+    "remove_role": {
+      "instructions": 1455572,
+      "memory_bytes": 1366180,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 2012,
+      "write_entries": 2
+    },
+    "request_payout": {
+      "instructions": 1954928,
+      "memory_bytes": 1407638,
+      "read_bytes": 92,
+      "read_entries": 9,
+      "write_bytes": 2552,
+      "write_entries": 3
+    },
+    "request_payouts_max_batch": {
+      "instructions": 7634777,
+      "memory_bytes": 1893304,
+      "read_bytes": 92,
+      "read_entries": 18,
+      "write_bytes": 9140,
+      "write_entries": 12
+    },
+    "resume": {
+      "instructions": 1367100,
+      "memory_bytes": 1358446,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1960,
+      "write_entries": 2
+    },
+    "revoke": {
+      "instructions": 1462178,
+      "memory_bytes": 1364619,
+      "read_bytes": 92,
+      "read_entries": 6,
+      "write_bytes": 1820,
+      "write_entries": 2
+    },
+    "set_approvals_required": {
+      "instructions": 1428430,
+      "memory_bytes": 1365113,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 2108,
+      "write_entries": 2
+    },
+    "set_attestation_policy": {
+      "instructions": 1466611,
+      "memory_bytes": 1360351,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1856,
+      "write_entries": 2
+    },
+    "set_recovery_threshold": {
+      "instructions": 1392051,
+      "memory_bytes": 1365747,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1908,
+      "write_entries": 2
+    },
+    "state": {
+      "instructions": 900275,
+      "memory_bytes": 1330616,
+      "read_bytes": 0,
+      "read_entries": 4,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "sweep": {
+      "instructions": 1492567,
+      "memory_bytes": 1366960,
+      "read_bytes": 208,
+      "read_entries": 7,
+      "write_bytes": 416,
+      "write_entries": 3
+    },
+    "update_limits": {
+      "instructions": 1497098,
+      "memory_bytes": 1371673,
+      "read_bytes": 92,
+      "read_entries": 4,
+      "write_bytes": 1916,
+      "write_entries": 2
+    },
+    "version": {
+      "instructions": 675151,
+      "memory_bytes": 1313009,
+      "read_bytes": 0,
+      "read_entries": 2,
+      "write_bytes": 0,
+      "write_entries": 0
+    },
+    "withdraw": {
+      "instructions": 1494313,
+      "memory_bytes": 1365355,
+      "read_bytes": 208,
+      "read_entries": 7,
+      "write_bytes": 416,
+      "write_entries": 3
+    }
+  }
+}
