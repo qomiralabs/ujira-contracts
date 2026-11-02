@@ -69,18 +69,9 @@ const DAILY_TTL: u32 = 34_560;
 const INSTANCE_TTL: u32 = 535_680;
 const INSTANCE_BUMP_AT: u32 = 518_400;
 
-const DOMAIN: &[u8; 15] = b"UJIRA/ATTEST/V1";
-
-// secp256k1 group order n and floor(n / 2), big-endian.
-const ORDER: [u8; 32] = [
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,
-    0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41,
-];
-const HALF_ORDER: [u8; 32] = [
-    0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0x5d, 0x57, 0x6e, 0x73, 0x57, 0xa4, 0x50, 0x1d, 0xdf, 0xe9, 0x2f, 0x46, 0x68, 0x1b, 0x20, 0xa0,
-];
-const ZERO: [u8; 32] = [0; 32];
+const PREFIX: &[u8; 15] = b"UJIRA/ATTEST/V2";
+const ATTESTER_KEY_BYTES: u32 = 32;
+const SIGNATURE_BYTES: u32 = 64;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -93,6 +84,7 @@ pub struct Leg {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Attestation {
     pub valid_until: u64,
+    pub policy_epoch: u64,
     pub signature: Bytes,
 }
 
@@ -117,7 +109,7 @@ pub struct Config {
     pub fee_address: Address,
     pub agents: Vec<Address>,
     pub recipient_mode: u32,
-    pub attester: BytesN<65>,
+    pub attester: Bytes,
     pub country_policy_hash: BytesN<32>,
     pub max_fee_bps: u32,
     pub total_budget: i128,
@@ -134,7 +126,7 @@ pub struct Counters {
     pub spent: i128,
     pub pending: i128,
     pub committed: i128,
-    pub policy_epoch: u32,
+    pub policy_epoch: u64,
 }
 
 #[contracttype]
@@ -148,7 +140,7 @@ pub struct Payout {
     pub status: u32,
     pub created_at: u64,
     pub expires_at: u64,
-    pub policy_epoch: u32,
+    pub policy_epoch: u64,
     pub approvals: Vec<Address>,
 }
 
@@ -264,7 +256,8 @@ impl BatchProto {
     pub fn __constructor(env: Env, config: Config) -> Result<(), Error> {
         if config.agents.is_empty()
             || !(MODE_ALLOWLIST..=MODE_BOTH).contains(&config.recipient_mode)
-            || config.attester.get(0) != Some(0x04)
+            || config.attester.len() != ATTESTER_KEY_BYTES
+            || config.attester.iter().all(|b| b == 0)
         {
             return Err(Error::ConfigInvalid);
         }
@@ -300,22 +293,23 @@ impl BatchProto {
         Ok(())
     }
 
-    /// The digest an attester signs for one leg of a request to this mandate.
-    pub fn digest(
+    /// The 47 bytes an attester signs for one leg of a request to this mandate.
+    pub fn message(
         env: Env,
         recipient_ref: BytesN<32>,
         destination: MuxedAddress,
         valid_until: u64,
-    ) -> Result<BytesN<32>, Error> {
+        policy_epoch: u64,
+    ) -> Result<Bytes, Error> {
         let cfg = load_config(&env)?;
-        Ok(keccak_digest(
+        attestation_message(
             &env,
             &recipient_ref,
             &cfg.country_policy_hash,
+            policy_epoch,
             &destination,
             valid_until,
-        )?
-        .to_bytes())
+        )
     }
 
     pub fn request_payouts(
@@ -601,7 +595,15 @@ fn request_one(
                 {
                     return Err(Error::RecipientNotAllowed);
                 }
-                verify_attestation(env, cfg, &req.recipient_ref, &leg.destination, &att, now)?;
+                verify_attestation(
+                    env,
+                    cfg,
+                    counters.policy_epoch,
+                    &req.recipient_ref,
+                    &leg.destination,
+                    &att,
+                    now,
+                )?;
             }
         }
     }
@@ -691,11 +693,14 @@ fn request_one(
     Ok(status)
 }
 
-/// The prechecks run before recovery because the host traps, instead of
-/// returning, on high s, out-of-range scalars and recovery ids above 3.
+/// Every check that can give a code runs first, because a failed ed25519
+/// verification traps in the host and takes the whole batch down with it. A
+/// stale policy epoch in particular gets its code before the signature, so an
+/// honest batch built before a policy change fails per item.
 fn verify_attestation(
     env: &Env,
     cfg: &Config,
+    policy_epoch: u64,
     recipient_ref: &BytesN<32>,
     destination: &MuxedAddress,
     att: &Attestation,
@@ -708,64 +713,60 @@ fn verify_attestation(
     if att.valid_until - now > MAX_ATTESTATION_VALIDITY {
         return Err(Error::AttestationInvalid);
     }
-    if att.signature.len() != 65 {
+    if att.signature.len() != SIGNATURE_BYTES {
         return Err(Error::AttestationInvalid);
     }
-    let v = att.signature.get(64).ok_or(Error::AttestationInvalid)?;
-    if v != 27 && v != 28 {
-        return Err(Error::AttestationInvalid);
+    if att.policy_epoch != policy_epoch {
+        return Err(Error::PolicyChanged);
     }
-    let mut r = [0u8; 32];
-    let mut s = [0u8; 32];
-    att.signature.slice(0..32).copy_into_slice(&mut r);
-    att.signature.slice(32..64).copy_into_slice(&mut s);
-    if r == ZERO || r >= ORDER || s == ZERO || s > HALF_ORDER {
-        return Err(Error::AttestationInvalid);
-    }
-    let mut rs = [0u8; 64];
-    rs[..32].copy_from_slice(&r);
-    rs[32..].copy_from_slice(&s);
-    let digest = keccak_digest(
+    let signature =
+        BytesN::<64>::try_from(att.signature.clone()).map_err(|_| Error::InternalInvariant)?;
+    let attester =
+        BytesN::<32>::try_from(cfg.attester.clone()).map_err(|_| Error::InternalInvariant)?;
+    let message = attestation_message(
         env,
         recipient_ref,
         &cfg.country_policy_hash,
+        att.policy_epoch,
         destination,
         att.valid_until,
     )?;
-    let recovered =
-        env.crypto()
-            .secp256k1_recover(&digest, &BytesN::from_array(env, &rs), u32::from(v - 27));
-    if recovered != cfg.attester {
-        return Err(Error::AttestationInvalid);
-    }
+    // Traps on any failure, and that is the point: the contract must not be
+    // able to skip past a wrongly signed attestation.
+    env.crypto().ed25519_verify(&attester, &message, &signature);
     Ok(())
 }
 
-fn keccak_digest(
+/// The prefix and the SHA-256 of the attested fields, in the layout of the
+/// attestation parity spike.
+fn attestation_message(
     env: &Env,
     recipient_ref: &BytesN<32>,
     policy: &BytesN<32>,
+    policy_epoch: u64,
     destination: &MuxedAddress,
     valid_until: u64,
-) -> Result<soroban_sdk::crypto::Hash<32>, Error> {
+) -> Result<Bytes, Error> {
     let mandate = env.current_contract_address().to_xdr(env);
     let dest = destination.address().to_xdr(env);
     let (has_tag, tag) = match destination.id() {
         Some(id) => (1u8, id),
         None => (0u8, 0u64),
     };
-    let mut b = Bytes::from_array(env, DOMAIN);
-    b.append(&env.ledger().network_id().into());
-    b.append(&recipient_ref.clone().into());
-    b.append(&policy.clone().into());
-    b.extend_from_array(&valid_until.to_be_bytes());
+    let mut b: Bytes = env.ledger().network_id().into();
     b.push_back(u8::try_from(mandate.len()).map_err(|_| Error::InternalInvariant)?);
     b.append(&mandate);
+    b.append(&recipient_ref.clone().into());
+    b.append(&policy.clone().into());
+    b.extend_from_array(&policy_epoch.to_be_bytes());
+    b.extend_from_array(&valid_until.to_be_bytes());
     b.push_back(u8::try_from(dest.len()).map_err(|_| Error::InternalInvariant)?);
     b.append(&dest);
     b.push_back(has_tag);
     b.extend_from_array(&tag.to_be_bytes());
-    Ok(env.crypto().keccak256(&b))
+    let mut message = Bytes::from_array(env, PREFIX);
+    message.append(&env.crypto().sha256(&b).to_bytes().into());
+    Ok(message)
 }
 
 /// Any error the token returns, of any type, is TRANSFER_FAILED, and

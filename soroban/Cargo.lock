@@ -243,7 +243,9 @@ dependencies = [
 name = "batch-limits-spike"
 version = "0.0.0"
 dependencies = [
- "k256",
+ "ed25519-dalek",
+ "serde_json",
+ "sha2",
  "soroban-sdk",
 ]
 
@@ -703,7 +705,6 @@ dependencies = [
  "elliptic-curve",
  "rfc6979",
  "signature",
- "spki",
 ]
 
 [[package]]
@@ -761,7 +762,6 @@ dependencies = [
  "ff",
  "generic-array",
  "group",
- "pkcs8",
  "rand_core 0.6.4",
  "sec1",
  "subtle",
@@ -1138,7 +1138,6 @@ dependencies = [
  "cfg-if",
  "ecdsa",
  "elliptic-curve",
- "once_cell",
  "sha2",
 ]
 
@@ -1526,7 +1525,6 @@ dependencies = [
  "base16ct",
  "der",
  "generic-array",
- "pkcs8",
  "subtle",
  "zeroize",
 ]

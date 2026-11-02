@@ -68,7 +68,7 @@ Hand check: the fields, SHA-256 and message of `valid_tagged` were rebuilt in pl
 
 Each case in the fixture has `name`, `tamper`, `expect` (`ok`, `ATTESTATION_INVALID`, `ATTESTATION_EXPIRED`, `POLICY_CHANGED` or `HOST_TRAP`), `expect_code` (null for a trap), `calls`, `now`, the network passphrase and id, the mandate and its XDR, `attester_public_key`, `recipient_ref`, `country_policy_hash`, the mandate's `policy_epoch`, and the legs. Each attestation has `valid_until`, `policy_epoch`, `signature`, `signed` (what the signer encoded) and `checked` (what the contract must build, null when there is no leg at that index), each with `fields`, `fields_sha256` and `message`.
 
-The `tamper` values: `wrong_signer`, `wrong_chain`, `wrong_mandate`, `wrong_destination`, `wrong_policy`, `wrong_ref`, `wrong_tag`, `wrong_valid_until`, `wrong_epoch` (signed under another epoch than the one it names), `stale_epoch` (names another epoch than the mandate's), `truncated` and `malformed` (wrong length), `bad_signature` (damaged or non-canonical bytes), `expired`, `window`, `count`, `wrong_amount` and `replayed`.
+The `tamper` values: `wrong_signer`, `wrong_chain` (signed for the Public network, presented on the Test network), `unprefixed_message` (the attester's signature over the bare SHA-256 of the fields), `wrong_mandate`, `wrong_destination`, `wrong_policy`, `wrong_ref`, `wrong_tag`, `wrong_valid_until`, `wrong_epoch` (signed under another epoch than the one it names), `stale_epoch` (names another epoch than the mandate's), `truncated` and `malformed` (wrong length), `bad_signature` (damaged or non-canonical bytes), `expired`, `window`, `count`, `wrong_amount` and `replayed`.
 
 ## Check order
 
@@ -98,6 +98,7 @@ Every case runs twice, on the native contract and on the compiled wasm, with the
 | `replay_same_attestation` | replayed | ok | 964120 | 1264708 |
 | `wrong_signer` | wrong_signer | HOST_TRAP | 962428 | 1264708 |
 | `wrong_chain` | wrong_chain | HOST_TRAP | 962428 | 1264708 |
+| `unprefixed_message` | unprefixed_message | HOST_TRAP | 962428 | 1264708 |
 | `wrong_mandate` | wrong_mandate | HOST_TRAP | 962428 | 1264708 |
 | `wrong_destination` | wrong_destination | HOST_TRAP | 962428 | 1264708 |
 | `wrong_tag_other_value` | wrong_tag | HOST_TRAP | 965653 | 1264812 |

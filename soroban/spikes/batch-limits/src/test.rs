@@ -7,7 +7,9 @@
 
 extern crate std;
 
-use k256::ecdsa::SigningKey;
+use ed25519_dalek::{Signer, SigningKey};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     token::StellarAssetClient,
@@ -18,6 +20,7 @@ use soroban_sdk::{
     },
     Address, Bytes, BytesN, Env, MuxedAddress, TryFromVal, Vec,
 };
+use std::path::Path;
 use std::{format, println, rc::Rc, string::String, vec::Vec as StdVec};
 
 mod proto {
@@ -233,11 +236,10 @@ fn create_receiver(env: &Env, address: &Address, asset: &xdr::Asset) {
     );
 }
 
-fn attester_key(key: &SigningKey) -> [u8; 65] {
-    let point = key.verifying_key().to_encoded_point(false);
-    let mut out = [0u8; 65];
-    out.copy_from_slice(point.as_bytes());
-    out
+/// A key whose seed is the SHA-256 of a public label, so nothing here can ever
+/// be a real key and anyone can rebuild it.
+fn test_key(label: &str) -> SigningKey {
+    SigningKey::from_bytes(&Sha256::digest(label.as_bytes()).into())
 }
 
 fn world(mode: u32) -> World {
@@ -264,14 +266,14 @@ fn world(mode: u32) -> World {
     let agent = Address::generate(&env);
     let fee_address = account_address(&env, 0);
     create_receiver(&env, &fee_address, &asset);
-    let key = SigningKey::from_bytes(&[7u8; 32].into()).unwrap();
+    let key = test_key("UJIRA/TEST-ONLY/S18/attester-ed25519");
     let config = Config {
         principal,
         asset: sac.address(),
         fee_address,
         agents: Vec::from_array(&env, [agent.clone()]),
         recipient_mode: mode,
-        attester: BytesN::from_array(&env, &attester_key(&key)),
+        attester: Bytes::from_array(&env, key.verifying_key().as_bytes()),
         country_policy_hash: BytesN::from_array(&env, &[3; 32]),
         max_fee_bps: 100,
         total_budget: i128::MAX / 4,
@@ -313,21 +315,15 @@ fn sign(
     destination: &MuxedAddress,
     valid_until: u64,
 ) -> Attestation {
-    let digest = w
+    let message = w
         .client()
-        .digest(recipient_ref, destination, &valid_until)
-        .to_array();
-    let (mut sig, mut recid) = w.key.sign_prehash_recoverable(&digest).unwrap();
-    if let Some(low) = sig.normalize_s() {
-        sig = low;
-        recid = k256::ecdsa::RecoveryId::from_byte(recid.to_byte() ^ 1).unwrap();
-    }
-    let mut raw = [0u8; 65];
-    raw[..64].copy_from_slice(&sig.to_bytes());
-    raw[64] = 27 + recid.to_byte();
+        .message(recipient_ref, destination, &valid_until, &0);
+    let mut raw = std::vec![0u8; message.len() as usize];
+    message.copy_into_slice(&mut raw);
     Attestation {
         valid_until,
-        signature: Bytes::from_array(&w.env, &raw),
+        policy_epoch: 0,
+        signature: Bytes::from_array(&w.env, &w.key.sign(&raw).to_bytes()),
     }
 }
 
@@ -701,5 +697,166 @@ fn transfer_cap_sweep() {
     for dest in [Dest::Account, Dest::Tagged] {
         let (_, ex) = measure_plan(MODE_ALLOWLIST, &worst_plan(MAX_BATCH, MAX_BATCH), dest);
         println!("{}", line(&ex));
+    }
+}
+
+fn unhex(h: &str) -> StdVec<u8> {
+    let h = h.strip_prefix("0x").unwrap_or(h);
+    (0..h.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap())
+        .collect()
+}
+
+fn array32(h: &str) -> [u8; 32] {
+    unhex(h).try_into().unwrap()
+}
+
+/// The prototype builds the same bytes as the parity spike's reference signer,
+/// for one leg of each kind of destination. It runs at the fixture's own
+/// address and network, because both are part of the message.
+#[test]
+fn message_matches_the_parity_fixture_for_every_kind_of_destination() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../spikes/attestation-parity/fixture.json");
+    let fixture: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let cases = fixture["cases"].as_array().unwrap();
+    for name in [
+        "valid_untagged",
+        "valid_contract_destination",
+        "valid_tagged",
+    ] {
+        let case = cases
+            .iter()
+            .find(|c| c["name"] == name)
+            .unwrap_or_else(|| panic!("the fixture has no case {name}"));
+        let env = Env::new_with_config(soroban_sdk::testutils::EnvTestConfig {
+            capture_snapshot_at_drop: false,
+        });
+        env.mock_all_auths();
+        env.ledger()
+            .set_network_id(array32(case["network_id"].as_str().unwrap()));
+        let admin = Address::generate(&env);
+        let asset = env.register_stellar_asset_contract_v2(admin).address();
+        let key = test_key("UJIRA/TEST-ONLY/S18/attester-ed25519");
+        let config = Config {
+            principal: Address::generate(&env),
+            asset,
+            fee_address: Address::generate(&env),
+            agents: Vec::from_array(&env, [Address::generate(&env)]),
+            recipient_mode: MODE_ATTESTED,
+            attester: Bytes::from_array(&env, key.verifying_key().as_bytes()),
+            country_policy_hash: BytesN::from_array(
+                &env,
+                &array32(case["country_policy_hash"].as_str().unwrap()),
+            ),
+            max_fee_bps: 100,
+            total_budget: 1_000_000,
+            per_payment_cap: 1_000,
+            per_recipient_daily_cap: 1_000,
+            approval_threshold: 1_001,
+            payout_ttl_seconds: 86_400,
+            expires_at: NOW + 86_400,
+        };
+        let mandate = soroban_sdk::String::from_str(&env, case["mandate"].as_str().unwrap());
+        let mandate = Address::from_string(&mandate);
+        env.register_at(&mandate, proto::WASM, (config,));
+
+        let leg = &case["legs"][0];
+        let base = soroban_sdk::String::from_str(&env, leg["destination"].as_str().unwrap());
+        let destination: MuxedAddress = if leg["has_tag"].as_bool().unwrap() {
+            let raw = unhex(leg["destination_xdr"].as_str().unwrap());
+            let account = ScAddress::Account(AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(
+                raw[raw.len() - 32..].try_into().unwrap(),
+            ))));
+            muxed(
+                &env,
+                &Address::try_from_val(&env, &account).unwrap(),
+                leg["tag"].as_str().unwrap().parse().unwrap(),
+            )
+        } else {
+            MuxedAddress::from(Address::from_string(&base))
+        };
+        let attestation = &case["attestations"][0];
+        let got = proto::Client::new(&env, &mandate).message(
+            &BytesN::from_array(&env, &array32(case["recipient_ref"].as_str().unwrap())),
+            &destination,
+            &attestation["valid_until"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+            &attestation["policy_epoch"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+        );
+        assert_eq!(
+            got,
+            Bytes::from_slice(
+                &env,
+                &unhex(attestation["checked"]["message"].as_str().unwrap())
+            ),
+            "{name}"
+        );
+    }
+}
+
+/// The epoch is checked before the signature, so an attestation with both
+/// wrong gets a code for its own item instead of trapping the whole batch.
+#[test]
+fn a_stale_policy_epoch_wins_over_a_bad_signature() {
+    let mut w = world(MODE_ATTESTED);
+    let mut reqs = build(&mut w, &[(1, false)], Dest::Account, 1);
+    let leg_attestation = reqs[0].attestations.get(0).unwrap();
+    reqs[0].attestations = Vec::from_array(
+        &w.env,
+        [Attestation {
+            valid_until: leg_attestation.valid_until,
+            policy_epoch: 1,
+            signature: Bytes::from_array(&w.env, &[7u8; 64]),
+        }],
+    );
+    let batch = Vec::from_slice(&w.env, &reqs);
+    let results = w.client().request_payouts(&w.agent, &batch);
+    assert_eq!(results.get(0).unwrap().code, 53);
+}
+
+/// A key of the wrong length, or 32 zero bytes, can never verify anything, so
+/// the constructor refuses it.
+#[test]
+fn the_constructor_refuses_a_malformed_attester_key() {
+    for bad in [
+        StdVec::from([1u8; 31]),
+        StdVec::from([1u8; 33]),
+        StdVec::from([0u8; 32]),
+    ] {
+        let env = Env::new_with_config(soroban_sdk::testutils::EnvTestConfig {
+            capture_snapshot_at_drop: false,
+        });
+        let asset = env
+            .register_stellar_asset_contract_v2(Address::generate(&env))
+            .address();
+        let config = Config {
+            principal: Address::generate(&env),
+            asset,
+            fee_address: Address::generate(&env),
+            agents: Vec::from_array(&env, [Address::generate(&env)]),
+            recipient_mode: MODE_ATTESTED,
+            attester: Bytes::from_slice(&env, &bad),
+            country_policy_hash: BytesN::from_array(&env, &[3; 32]),
+            max_fee_bps: 100,
+            total_budget: 1_000,
+            per_payment_cap: 1_000,
+            per_recipient_daily_cap: 1_000,
+            approval_threshold: 1_001,
+            payout_ttl_seconds: 86_400,
+            expires_at: NOW + 86_400,
+        };
+        let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            env.register(proto::WASM, (config,))
+        }));
+        assert!(refused.is_err(), "the key {bad:?} was accepted");
     }
 }

@@ -218,7 +218,7 @@ const NOW = 1767225600n; // 2026-01-01T00:00:00Z
 const VU = NOW + 3600n;
 const CTX = { network: "primary", mandate: "primary", policy: "primary", epoch: 0n, attester: "attester" };
 const leg = (over = {}) => ({ dest: "primary", tag: null, amount: 500n, ...over });
-const att = (over = {}) => ({ validUntil: VU, epoch: null, signer: "attester", signOver: {}, mutate: null, ...over });
+const att = (over = {}) => ({ validUntil: VU, epoch: null, signer: "attester", signOver: {}, mutate: null, unprefixed: false, ...over });
 
 // Each case: what the verifier sees (ctx, ref, legs, attestations) and, per
 // attestation, what the signer actually signed (signOver) and any byte damage
@@ -297,6 +297,14 @@ const CASES = [
     attestations: [att({ signOver: { policy: "other" } })],
   },
   { name: "wrong_ref", tamper: "wrong_ref", expect: HOST_TRAP, attestations: [att({ signOver: { ref: "other" } })] },
+  {
+    // The attester's own signature over SHA-256(fields) without the prefix,
+    // which is what a verifier that dropped the version would accept.
+    name: "unprefixed_message",
+    tamper: "unprefixed_message",
+    expect: HOST_TRAP,
+    attestations: [att({ unprefixed: true })],
+  },
   {
     name: "wrong_valid_until",
     tamper: "wrong_valid_until",
@@ -459,7 +467,7 @@ function buildCase(c) {
     });
     const signed = encoded(signedFields);
     const signedMessage = message(signedFields);
-    const sig = ed25519.sign(signedMessage, SEEDS[a.signer]);
+    const sig = ed25519.sign(a.unprefixed ? sha256(signedFields) : signedMessage, SEEDS[a.signer]);
     const signature = a.mutate === null ? sig : MUTATIONS[a.mutate](sig);
     // What the contract will build: its own network and address, the
     // presented leg at the same index, the presented valid_until and epoch.
