@@ -31,7 +31,7 @@ use crate::events::{
 };
 use crate::lifecycle::authorized_principal;
 use crate::payout::{ensure_not_revoked, is_unpayable, release_agent, MAX_BATCH};
-use crate::storage::{self, Agent, Policy, Roles};
+use crate::storage::{self, Agent, Approver, Policy, Roles};
 use crate::types::{
     AllowEntry, ROLE_AGENT, ROLE_APPROVER, ROLE_EXECUTOR, ROLE_GUARDIAN, ROLE_RECOVERY,
 };
@@ -188,7 +188,7 @@ pub fn update_limits(env: &Env, limits: &Limits) -> Result<(), MandateError> {
 fn holds(roles: &Roles, role: u32, account: &Address) -> Result<bool, MandateError> {
     Ok(match role {
         ROLE_AGENT => roles.agent(account).is_some(),
-        ROLE_APPROVER => roles.approvers.contains(account),
+        ROLE_APPROVER => roles.is_approver(account),
         ROLE_GUARDIAN => roles.guardians.contains(account),
         ROLE_EXECUTOR => roles.executors.contains(account),
         ROLE_RECOVERY => roles.recovery.contains(account),
@@ -222,7 +222,7 @@ pub(crate) fn breaks_separation(
 ) -> bool {
     let is_principal = account == principal;
     let agent = roles.agent(account).is_some();
-    let approver = roles.approvers.contains(account);
+    let approver = roles.is_approver(account);
     let executor = roles.executors.contains(account);
     let recovery = roles.recovery.contains(account);
     let refused = match role {
@@ -264,6 +264,21 @@ pub(crate) fn push_agent(roles: &mut Roles, account: &Address) -> Result<(), Man
         epoch: roles.agent_epoch,
         pending: 0,
         committed: 0,
+    });
+    Ok(())
+}
+
+/// Appends an approver under the next `approver_epoch`, for the same reason
+/// as agents: added back after a removal, it holds a value no approval it
+/// gave before carries, so those approvals never count again.
+fn push_approver(roles: &mut Roles, account: &Address) -> Result<(), MandateError> {
+    roles.approver_epoch = roles
+        .approver_epoch
+        .checked_add(1)
+        .ok_or(MandateError::InternalInvariant)?;
+    roles.approvers.push_back(Approver {
+        account: account.clone(),
+        epoch: roles.approver_epoch,
     });
     Ok(())
 }
@@ -317,7 +332,7 @@ pub fn add_role(env: &Env, role: u32, account: &Address) -> Result<(), MandateEr
         }
         ROLE_APPROVER => {
             approvals_set = roles.approvers.is_empty();
-            roles.approvers.push_back(account.clone());
+            push_approver(&mut roles, account)?;
             if approvals_set {
                 roles.approvals_required = 1;
             }
@@ -416,7 +431,16 @@ pub fn remove_role(env: &Env, role: u32, account: &Address) -> Result<(), Mandat
             bump_recovery_epoch(&mut roles)?;
         }
         ROLE_APPROVER => {
-            remove_member(&mut roles.approvers, account)?;
+            let i = roles
+                .approvers
+                .iter()
+                .position(|a| a.account == *account)
+                .and_then(|i| u32::try_from(i).ok())
+                .ok_or(MandateError::InternalInvariant)?;
+            roles
+                .approvers
+                .remove(i)
+                .ok_or(MandateError::InternalInvariant)?;
             approvals_set = roles.approvers.is_empty();
             if approvals_set {
                 roles.approvals_required = 0;
@@ -593,7 +617,7 @@ fn key_holds_role(
     is(principal)
         || is(fee_address)
         || roles.agents.iter().any(|a| is(&a.account))
-        || roles.approvers.iter().any(|a| is(&a))
+        || roles.approvers.iter().any(|a| is(&a.account))
         || roles.guardians.iter().any(|a| is(&a))
         || roles.executors.iter().any(|a| is(&a))
         || roles.recovery.iter().any(|a| is(&a))

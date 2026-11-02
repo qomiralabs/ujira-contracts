@@ -2036,7 +2036,7 @@
             "token_events": [],
             "state": {
               "mandate": { "spent": "0", "pending": "0", "committed": "1999", "balance": "5000", "free": "3001" },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["approver"] } },
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "approver", "epoch": 0 }] } },
               "balances": { "asset": { "fee_address": "0" } }
             }
           }

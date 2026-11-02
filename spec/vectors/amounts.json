@@ -258,7 +258,7 @@
                 "balance": "170141183460469231731687303715884105727",
                 "free": "0"
               },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["approver"] } }
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "approver", "epoch": 0 }] } }
             }
           }
         },

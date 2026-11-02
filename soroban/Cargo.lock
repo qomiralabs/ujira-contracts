@@ -224,14 +224,26 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 name = "batch-limits"
 version = "0.0.0"
 dependencies = [
- "k256",
+ "ed25519-dalek",
+ "mandate-config",
+ "sha2",
  "soroban-sdk",
+ "ujira-factory",
+ "ujira-mandate",
 ]
 
 [[package]]
 name = "batch-limits-proto"
 version = "0.0.0"
 dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
+name = "batch-limits-spike"
+version = "0.0.0"
+dependencies = [
+ "k256",
  "soroban-sdk",
 ]
 

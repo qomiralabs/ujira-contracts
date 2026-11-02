@@ -3126,7 +3126,7 @@
             ],
             "state": {
               "mandate": { "pending": "0", "committed": "600", "free": "4400" },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["approver"] } }
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "approver", "epoch": 0 }] } }
             }
           }
         },
@@ -4024,7 +4024,7 @@
             ],
             "state": {
               "mandate": { "pending": "0", "committed": "600", "free": "400" },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["approver"] } }
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "approver", "epoch": 0 }] } }
             }
           }
         },
@@ -4649,7 +4649,7 @@
             ],
             "state": {
               "mandate": { "pending": "0", "committed": "400", "free": "600" },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["principal"] } }
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "principal", "epoch": 0 }] } }
             }
           }
         },
@@ -8738,7 +8738,7 @@
             ],
             "state": {
               "mandate": { "pending": "0", "committed": "400", "free": "600" },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["approver"] } }
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "approver", "epoch": 0 }] } }
             }
           }
         }
@@ -9080,7 +9080,7 @@
             ],
             "state": {
               "mandate": { "pending": "0", "committed": "400", "free": "600" },
-              "payouts": { "#p1": { "status": "APPROVED", "approvals": ["principal"] } }
+              "payouts": { "#p1": { "status": "APPROVED", "approvals": [{ "approver": "principal", "epoch": 0 }] } }
             }
           }
         },

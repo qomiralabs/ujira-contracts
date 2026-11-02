@@ -99,6 +99,14 @@ pub struct Agent {
     pub committed: i128,
 }
 
+/// An approver and the `approver_epoch` value it was added under.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Approver {
+    pub account: Address,
+    pub epoch: u32,
+}
+
 /// Every role set with its gate and its epochs. Each list is kept in the
 /// order its members were added: a member is appended on add and taken out
 /// on removal without reordering the rest.
@@ -106,7 +114,7 @@ pub struct Agent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Roles {
     pub agents: Vec<Agent>,
-    pub approvers: Vec<Address>,
+    pub approvers: Vec<Approver>,
     pub approvals_required: u32,
     pub guardians: Vec<Address>,
     pub executors: Vec<Address>,
@@ -114,6 +122,7 @@ pub struct Roles {
     pub recovery_threshold: u32,
     pub agent_epoch: u32,
     pub recovery_epoch: u32,
+    pub approver_epoch: u32,
 }
 
 impl Roles {
@@ -123,6 +132,23 @@ impl Roles {
             out.push_back(a.account);
         }
         out
+    }
+
+    pub fn approver_addresses(&self, env: &Env) -> Vec<Address> {
+        let mut out = Vec::new(env);
+        for a in self.approvers.iter() {
+            out.push_back(a.account);
+        }
+        out
+    }
+
+    /// The stored entry of `account` when it is an approver.
+    pub fn approver(&self, account: &Address) -> Option<Approver> {
+        self.approvers.iter().find(|a| a.account == *account)
+    }
+
+    pub fn is_approver(&self, account: &Address) -> bool {
+        self.approver(account).is_some()
     }
 
     /// The stored entry of `account` when it is an agent.
