@@ -1,9 +1,9 @@
 {
   "network": "testnet",
   "network_passphrase": "Test SDF Network ; September 2015",
-  "factory": "CAAVOGDGGM7JOLDS3CIQNPGSJOYFI54CJSAQQEFQKW7CES5UYIAZOYUQ",
-  "factory_wasm_hash": "a19ae223028544464b79ff006c52ced61e004e71f02426d8bee66be578df3a36",
-  "mandate_wasm_hash": "be92ba1343f49dd8e623ad3f11e7ff91b540826b97377a4b573e96ec94b86ca0",
+  "factory": "CCXG5U74UHWDCS6EH2MOLEDAUNCSBKHMF5UMKHRBGTQKPGKAE5NBKB6V",
+  "factory_wasm_hash": "4ec32aca58ed53ccf4f7ca74818f765d5b0aeaafd169c4335c6eb69b22804361",
+  "mandate_wasm_hash": "4e4ae3589f9d5b651c3aac8835688881757b720bc9598395ec4a86ebf5d1a5e8",
   "spec_version": 1,
   "supported_assets": [
     {
@@ -20,8 +20,8 @@
   ],
   "fee_address": "GBG3EN6ZUFOJ3P7JM2ASPDZIOFYD66SMVEOJ5L4LMIP2JHFB344FBRRN",
   "deployer": "GDQKNFDGVOVPAGQOVTRWHBULBG3VGFTS6HF6BG7IVRBTZVJFMINIGT7K",
-  "commit": "e306910efd995f2f522cf9cd46ff6c872a168819",
-  "soroban_tree": "e5326c0cd63b4cba365a2c098c9fd86ea6c0f421",
-  "deploy_transaction": "04618a0db23574fcddea5f1e76f198af1964984ef8ed18a57cef0a7e11c6a002",
-  "deployed_at": "2026-10-31T20:30:50Z"
+  "commit": "f63884818f3f29ac36ca8ff0bd507606079ea2ff",
+  "soroban_tree": "b4cc42e743c90082c5fdf18e16f3525991fcd643",
+  "deploy_transaction": "af451da4efab40b0f0032ba322166726fc3fafb39b3efdddfe3794f29cc12553",
+  "deployed_at": "2026-11-02T21:24:48Z"
 }
