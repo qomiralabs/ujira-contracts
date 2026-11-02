@@ -14,6 +14,7 @@ extern crate std;
 mod admin;
 mod approval;
 mod attestation;
+mod attestation_properties;
 mod cancel;
 mod constructor;
 mod execute;
