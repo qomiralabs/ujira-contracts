@@ -123,7 +123,7 @@ Every pull request starts from `.github/pull_request_template.md`: the linked is
 
 | Job | What it checks |
 | --- | --- |
-| `headers` | actionlint on the workflows, the license header check, the invisible character check, the mandate spec rule ID check, the pull request template check, the deployment record check and their self tests. |
+| `headers` | actionlint on the workflows, the license header check, the invisible character check, the mandate spec rule ID check, the pull request template check, the deployment record check, the check that keeps the public test attester keys out of everything but test code, and their self tests. |
 | `vectors` | `scripts/check-vectors.sh` on the shared test vectors in `spec/vectors/`, after its self test `scripts/check-vectors.test.sh`. See `spec/vectors/README.md`. |
 | `error-codes` | `scripts/check-error-codes.py`: the error enum in `soroban/crates/mandate-errors` matches `spec/errors.json` entry for entry, after its self test `scripts/check-error-codes.test.sh`. |
 | `fixtures` | Rebuilds the attestation parity fixture from its generator under `spikes/attestation-parity/generator/` and fails unless it matches the committed file byte for byte. |

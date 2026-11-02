@@ -136,6 +136,13 @@ jobs:
       - name: Test the spec ID check
         run: scripts/check-spec-ids.test.sh
 
+      # The public test attester keys sign for anyone who rebuilds them from
+      # their labels, so they may only appear in test code.
+      - name: Check for test attester keys outside tests
+        run: |
+          scripts/check-test-attesters.py
+          scripts/check-test-attesters.test.sh
+
       # Deployment records are committed, so they may hold public ids only.
       # The self test proves the check refuses secret shaped values, other
       # networks and malformed ids, then checks every deployments/*.json.

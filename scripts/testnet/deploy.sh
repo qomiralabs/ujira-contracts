@@ -43,6 +43,8 @@ fi
 commit=$(git -C "$root" rev-parse HEAD)
 soroban_tree=$(git -C "$root" rev-parse HEAD:soroban)
 
+"$root/scripts/check-test-attesters.py" "$root" || testnet_die "a public test attester key is outside the test code"
+
 testnet_init "$root"
 
 # 1. Build.
