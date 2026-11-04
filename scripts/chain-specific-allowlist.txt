@@ -57,3 +57,4 @@ scripts/fixtures/vectors/host-auth-failure-without-caller-rule.json:forged
 soroban/batch-limits/src/test.rs:OnceLock
 soroban/contracts/factory/src/test/mod.rs:OnceLock
 soroban/contracts/mandate/src/test/mod.rs:OnceLock
+soroban/contracts/wallet-factory/src/test/mod.rs:OnceLock

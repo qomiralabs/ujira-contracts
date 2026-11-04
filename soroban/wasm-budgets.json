@@ -1,5 +1,6 @@
 {
   "ujira_factory": { "budget": 16384, "recorded": 12110 },
   "ujira_mandate": { "budget": 72704, "recorded": 66095 },
-  "ujira_placeholder": { "budget": 1024, "recorded": 494 }
+  "ujira_placeholder": { "budget": 1024, "recorded": 494 },
+  "ujira_wallet_factory": { "budget": 10240, "recorded": 6797 }
 }

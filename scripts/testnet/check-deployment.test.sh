@@ -95,6 +95,39 @@ variant("asset-extra-key", lambda r: r["supported_assets"][0].update(secret="x")
 variant("asset-test-only-string", lambda r: r["supported_assets"][1].update(test_only="yes"))
 variant("stamp-local", lambda r: r.update(deployed_at="2026-10-31 12:00:00"))
 variant("not-object", lambda r: (r.clear()))
+
+wallet = {
+    "factory": contract(),
+    "factory_wasm_hash": "12" * 32,
+    "account_wasm_hash": "34" * 32,
+    "verifier": contract(),
+    "verifier_wasm_hash": "56" * 32,
+    "policy": contract(),
+    "policy_wasm_hash": "78" * 32,
+    "deny_list": [account(), account(), contract()],
+    "upstream_tag": "v0.8.0",
+    "upstream_commit": "3" * 40,
+    "commit": "4" * 40,
+    "deploy_transaction": "9a" * 32,
+    "deployed_at": "2026-11-04T12:00:00Z",
+}
+write("good-wallet", dict(copy.deepcopy(good), wallet_factory=copy.deepcopy(wallet)))
+
+def wallet_variant(name, change):
+    record = dict(copy.deepcopy(good), wallet_factory=copy.deepcopy(wallet))
+    change(record["wallet_factory"])
+    write("bad-wallet-" + name, record)
+
+wallet_variant("missing-hash", lambda w: w.pop("account_wasm_hash"))
+wallet_variant("unknown-field", lambda w: w.update(admin=account()))
+wallet_variant("factory-is-account", lambda w: w.update(factory=account()))
+wallet_variant("hash-uppercase", lambda w: w.update(verifier_wasm_hash="AB" * 32))
+wallet_variant("tag-moving", lambda w: w.update(upstream_tag="main"))
+wallet_variant("deny-empty", lambda w: w.update(deny_list=[]))
+wallet_variant("deny-repeated", lambda w: w.update(deny_list=[w["deny_list"][0], w["deny_list"][0]]))
+wallet_variant("deny-secret", lambda w: w.update(deny_list=[seed()]))
+wallet_variant("not-object", lambda w: w.clear())
+write("bad-wallet-not-dict", dict(copy.deepcopy(good), wallet_factory=["x"]))
 PY
 printf '[1, 2]\n' >"$tmp/bad-array.json"
 printf '{not json\n' >"$tmp/unreadable.json"
@@ -113,6 +146,7 @@ run() {
 }
 
 run 0 "$tmp/good.json"
+run 0 "$tmp/good-wallet.json"
 for f in "$tmp"/bad-*.json; do
   run 1 "$f"
 done
