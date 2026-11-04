@@ -25,5 +25,8 @@ path = "src/bin/resource-snapshot.rs"
 soroban-sdk = { workspace = true, features = ["testutils"] }
 mandate-errors = { workspace = true }
 ed25519-dalek = "=2.2.0"
+# Test passkeys for smart account actors. Already in the lockfile through the
+# host, which verifies secp256r1; here it also signs.
+p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa"] }
 serde_json = "=1.0.154"
 sha2 = "=0.10.9"

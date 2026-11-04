@@ -21,11 +21,12 @@ The factory and mandate run on Stellar testnet. `deployments/testnet.json` names
 
 ```sh
 scripts/testnet/deploy.sh                # build, upload the mandate wasm, deploy the factory, write deployments/testnet.json
+scripts/testnet/deploy-wallet-factory.sh # upload the pinned smart account, verifier and policy, deploy the wallet factory, record it
 scripts/testnet/smoke.sh                 # create, fund, request, approve, execute, pause, resume, revoke, withdraw
 scripts/e2e/revoke-no-trustline.sh       # revoke and withdraw for a principal with no trustline
 ```
 
-All three are testnet only: every call carries the testnet passphrase, and they stop unless the RPC server answers as testnet. They need `stellar`, `python3`, `curl` and `git`. Identities are throwaway testnet keys made by the stellar CLI and funded by friendbot, kept under `~/.config/ujira-testnet/` (or `UJIRA_TESTNET_HOME`, which must be outside the repository), never in the repository; existing identities are reused, so a rerun creates no new keys. No script prints a secret key. Run logs, including every transaction hash, go to `~/.config/ujira-testnet/logs/`. Set `UJIRA_TESTNET_RPC_URL` to use another testnet RPC server. After a testnet reset, run the deploy again: it refunds the accounts, rewraps the assets and records the new factory.
+All of them are testnet only: every call carries the testnet passphrase, and they stop unless the RPC server answers as testnet. They need `stellar`, `python3`, `curl` and `git`. Identities are throwaway testnet keys made by the stellar CLI and funded by friendbot, kept under `~/.config/ujira-testnet/` (or `UJIRA_TESTNET_HOME`, which must be outside the repository), never in the repository; existing identities are reused, so a rerun creates no new keys. No script prints a secret key. Run logs, including every transaction hash, go to `~/.config/ujira-testnet/logs/`. Set `UJIRA_TESTNET_RPC_URL` to use another testnet RPC server. After a testnet reset, run the deploy again: it refunds the accounts, rewraps the assets and records the new factory.
 
 The deploy refuses to run when `soroban/` differs from `HEAD`, so the recorded commit is the source of the wasm. `soroban_tree` is the git tree id of `soroban/` at that commit, which stays the same through a squash merge.
 

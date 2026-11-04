@@ -15,6 +15,7 @@
 
 mod ledger;
 pub mod scval;
+pub mod smart;
 
 use crate::attest::{self, AttestInput, Attestation, Tamper};
 use crate::spec::{mode_code, Spec};
@@ -125,19 +126,25 @@ const CONFIG_FIELDS: [&str; 16] = [
 /// The Stellar Asset Contract's code for an account with no trustline.
 const SAC_TRUSTLINE_MISSING: u32 = 13;
 
-/// The compiled factory and mandate a run registers.
+/// The compiled factory and mandate a run registers, and the passkey wallet
+/// factory when it is built beside the mandate, for smart account actors.
 pub struct Contracts {
     pub factory: Vec<u8>,
     pub mandate: Vec<u8>,
+    pub wallet_factory: Option<Vec<u8>>,
 }
 
 impl Contracts {
     pub fn load(factory: &Path, mandate: &Path) -> Result<Contracts> {
         let read =
             |p: &Path| std::fs::read(p).map_err(|e| format!("cannot read {}: {e}", p.display()));
+        let wallet_factory = mandate
+            .parent()
+            .and_then(|dir| std::fs::read(dir.join("ujira_wallet_factory.wasm")).ok());
         Ok(Contracts {
             factory: read(factory)?,
             mandate: read(mandate)?,
+            wallet_factory,
         })
     }
 
@@ -425,6 +432,56 @@ struct Actor {
     /// The signing key of an account; a contract actor signs through the
     /// SDK's mock account contract instead.
     key: Option<SigningKey>,
+    /// A passkey wallet's keys, for a smart account actor.
+    smart: Option<smart::SmartAccount>,
+    /// The test account whose `__check_auth` calls back into its caller.
+    calls_back: bool,
+}
+
+/// Who the actor named `principal` is in a run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PrincipalMode {
+    /// As the vector says: an account unless it declares otherwise.
+    #[default]
+    AsDeclared,
+    /// A passkey wallet with three passkeys and a threshold of two, wherever
+    /// the vector does not declare the principal itself.
+    SmartAccount,
+}
+
+/// The passkeys and threshold of the principal under `PrincipalMode::SmartAccount`.
+const SMART_PRINCIPAL: (u32, u32) = (3, 2);
+
+/// The wallet contracts, named so their events are told apart from the
+/// mandate's.
+const WALLET_CONTRACTS: [&str; 3] = ["wallet_factory", "wallet_verifier", "wallet_policy"];
+
+/// Why a vector cannot run with a smart account principal, if it cannot: a
+/// contract holds no trustline and has no ed25519 key, and a vector that
+/// declares its principal is left as it is.
+pub fn smart_principal_unsupported(v: &Vector) -> Option<String> {
+    if v.setup()["actors"].get("principal").is_some() {
+        return Some(String::from("the vector declares its own principal"));
+    }
+    for step in v.steps() {
+        if step["step"] == "set_receiving" && step["account"] == "principal" {
+            return Some(String::from("it changes the principal's trustline"));
+        }
+    }
+    if mentions_account_key(&v.data, "principal") {
+        return Some(String::from("it uses the principal's ed25519 key"));
+    }
+    None
+}
+
+fn mentions_account_key(v: &Value, name: &str) -> bool {
+    match v {
+        Value::Object(m) => m
+            .iter()
+            .any(|(k, val)| (k == "account_key" && val == name) || mentions_account_key(val, name)),
+        Value::Array(a) => a.iter().any(|x| mentions_account_key(x, name)),
+        _ => false,
+    }
 }
 
 #[derive(Clone)]
@@ -439,6 +496,9 @@ enum Auth {
     None,
     Mock,
     Signer(String),
+    /// A smart account signing with this many of its passkeys, instead of
+    /// its threshold.
+    SignerWith(String, u32),
 }
 
 const TEXT_KEYS: [&str; 3] = ["id", "rules", "description"];
@@ -585,6 +645,33 @@ pub struct World<'a> {
     nonce: i64,
 }
 
+/// What `setup.actors` says an actor is, beyond an account.
+enum Declared {
+    Contract,
+    Smart(u32, u32),
+    CallsBack,
+}
+
+fn declared_actors(setup: &Value) -> Result<BTreeMap<String, Declared>> {
+    let mut out = BTreeMap::new();
+    for (name, spec) in setup["actors"].as_object().into_iter().flatten() {
+        let kind = match spec["kind"].as_str().unwrap_or("") {
+            "contract" => Declared::Contract,
+            "calls_back_account" => Declared::CallsBack,
+            "smart_account" => {
+                let n = spec["signers"].as_u64().unwrap_or(1);
+                let t = spec["threshold"].as_u64().unwrap_or(n);
+                let n = u32::try_from(n).map_err(|_| format!("{name}: too many signers"))?;
+                let t = u32::try_from(t).map_err(|_| format!("{name}: threshold too large"))?;
+                Declared::Smart(n, t)
+            }
+            _ => continue,
+        };
+        out.insert(name.clone(), kind);
+    }
+    Ok(out)
+}
+
 impl Names for World<'_> {
     fn name_of(&self, a: &ScAddress) -> Option<String> {
         self.reverse.get(&address_xdr(a).ok()?).cloned()
@@ -611,6 +698,16 @@ impl<'a> World<'a> {
     /// Builds the env for `v`: ledger, tokens, actors and factory. Nothing
     /// of the vector's setup has run yet.
     pub fn new(spec: &'a Spec, contracts: &Contracts, v: &Vector) -> Result<World<'a>> {
+        World::with_principal(spec, contracts, v, PrincipalMode::AsDeclared)
+    }
+
+    /// As `new`, with the principal chosen by `mode`.
+    pub fn with_principal(
+        spec: &'a Spec,
+        contracts: &Contracts,
+        v: &Vector,
+        mode: PrincipalMode,
+    ) -> Result<World<'a>> {
         let setup = v.setup();
         let now = parse_u64(&setup["now"], "setup.now")?;
         let env = Env::new_with_config(EnvTestConfig {
@@ -635,13 +732,26 @@ impl<'a> World<'a> {
                 "the zero address cannot be expressed on Stellar",
             ));
         }
-        let contract_actors: BTreeSet<String> = setup["actors"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter(|(_, spec)| spec["kind"] == "contract")
-            .map(|(name, _)| name.clone())
-            .collect();
+        let mut declared = declared_actors(setup)?;
+        if mode == PrincipalMode::SmartAccount
+            && names.contains("principal")
+            && !declared.contains_key("principal")
+        {
+            declared.insert(
+                String::from("principal"),
+                Declared::Smart(SMART_PRINCIPAL.0, SMART_PRINCIPAL.1),
+            );
+        }
+        let kit = if declared.values().any(|d| matches!(d, Declared::Smart(..))) {
+            let wasm = contracts.wallet_factory.as_ref().ok_or_else(|| {
+                String::from(
+                    "a smart account needs the wallet factory wasm; build it with scripts/soroban-build.sh",
+                )
+            })?;
+            Some(smart::Kit::deploy(&env, wasm)?)
+        } else {
+            None
+        };
 
         let (asset, other) =
             std::panic::catch_unwind(AssertUnwindSafe(|| make_tokens(&env, setup)))
@@ -655,23 +765,38 @@ impl<'a> World<'a> {
         {
             // Addresses nobody controls: no account entry, no contract and
             // no key, so they can be named as destinations and never sign.
+            let unsigned = |address| Actor {
+                address,
+                key: None,
+                smart: None,
+                calls_back: false,
+            };
             let actor = if name == "zero_account" {
-                Actor {
-                    address: account([0; 32]),
-                    key: None,
-                }
+                unsigned(account([0; 32]))
             } else if name == "zero_contract" {
+                unsigned(scval::contract([0; 32]))
+            } else if let (Some(Declared::Smart(n, t)), Some(kit)) = (declared.get(name), &kit) {
+                let (address, wallet) = smart::create(&env, kit, name, *n, *t)?;
                 Actor {
-                    address: scval::contract([0; 32]),
+                    address: ScAddress::from(&address),
                     key: None,
+                    smart: Some(wallet),
+                    calls_back: false,
                 }
-            } else if contract_actors.contains(name) {
+            } else if let Some(Declared::CallsBack) = declared.get(name) {
+                let address = scval::contract(actor_seed(name));
+                env.register_at(&to_address(&env, &address)?, smart::CallsBackAccount, ());
+                Actor {
+                    calls_back: true,
+                    ..unsigned(address)
+                }
+            } else if let Some(Declared::Contract) = declared.get(name) {
                 let address = scval::contract(actor_seed(name));
                 let a = to_address(&env, &address)?;
                 // The SDK's mock account contract accepts any signature, so a
                 // contract actor can authorize a call.
                 env.register_at(&a, MockAuthContract, ());
-                Actor { address, key: None }
+                unsigned(address)
             } else {
                 let key = actor_key(name);
                 let pk = key.verifying_key().to_bytes();
@@ -686,6 +811,8 @@ impl<'a> World<'a> {
                 Actor {
                     address: account(pk),
                     key: Some(key),
+                    smart: None,
+                    calls_back: false,
                 }
             };
             actors.insert(name.clone(), actor);
@@ -707,6 +834,14 @@ impl<'a> World<'a> {
         reverse.insert(address_xdr(&asset.address)?, String::from("asset"));
         reverse.insert(address_xdr(&other.address)?, String::from("other_token"));
         reverse.insert(address_xdr(&factory)?, String::from("factory"));
+        if let Some(kit) = &kit {
+            for (name, a) in WALLET_CONTRACTS
+                .iter()
+                .zip([&kit.factory, &kit.verifier, &kit.policy])
+            {
+                reverse.insert(address_xdr(&ScAddress::from(a))?, (*name).to_string());
+            }
+        }
 
         let mut mentions = Mentions::default();
         collect_mentions(&v.data, &mut mentions);
@@ -788,13 +923,15 @@ impl<'a> World<'a> {
         scval::decode(v, key, self, &|c| spec.error_name(c).map(String::from))
     }
 
-    /// The authorization entry `signer` signs for one root invocation.
+    /// The authorization entry `signer` signs for one root invocation. A
+    /// smart account signs with `count` passkeys, or with its threshold.
     fn auth_entry(
         &mut self,
         signer: &str,
         target: &ScAddress,
         fn_name: &str,
         args: &[ScVal],
+        count: Option<u32>,
     ) -> Result<SorobanAuthorizationEntry> {
         let actor =
             self.actors.get(signer).cloned().ok_or_else(|| {
@@ -823,20 +960,26 @@ impl<'a> World<'a> {
             .sequence()
             .checked_add(100)
             .ok_or_else(|| String::from("the ledger sequence ran out"))?;
-        let signature = match &actor.key {
-            Some(key) => {
-                let preimage =
-                    HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
-                        network_id: Hash(self.env.ledger().network_id().to_array()),
-                        nonce,
-                        signature_expiration_ledger: expiration,
-                        invocation: invocation.clone(),
-                    });
-                let payload = sha256(
-                    &preimage
-                        .to_xdr(Limits::none())
-                        .map_err(|e| format!("cannot encode the signature payload: {e}"))?,
-                );
+        let preimage = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
+            network_id: Hash(self.env.ledger().network_id().to_array()),
+            nonce,
+            signature_expiration_ledger: expiration,
+            invocation: invocation.clone(),
+        });
+        let payload = sha256(
+            &preimage
+                .to_xdr(Limits::none())
+                .map_err(|e| format!("cannot encode the signature payload: {e}"))?,
+        );
+        let signature = match (&actor.key, &actor.smart) {
+            (_, Some(wallet)) => smart::signature(
+                &self.env,
+                &to_address(&self.env, &actor.address)?,
+                wallet,
+                payload,
+                count.unwrap_or(wallet.threshold),
+            )?,
+            (Some(key), None) => {
                 let sig = key.sign(&payload).to_bytes();
                 let entry = ScMap(
                     vec![
@@ -854,7 +997,7 @@ impl<'a> World<'a> {
                 );
                 sc_vec(vec![ScVal::Map(Some(entry))])?
             }
-            None => ScVal::Void,
+            (None, None) => ScVal::Void,
         };
         Ok(SorobanAuthorizationEntry {
             credentials: SorobanCredentials::Address(SorobanAddressCredentials {
@@ -878,7 +1021,11 @@ impl<'a> World<'a> {
             Auth::None => self.env.set_auths(&[]),
             Auth::Mock => self.env.mock_all_auths(),
             Auth::Signer(name) => {
-                let entry = self.auth_entry(&name, target, fn_name, args)?;
+                let entry = self.auth_entry(&name, target, fn_name, args, None)?;
+                self.env.set_auths(&[entry]);
+            }
+            Auth::SignerWith(name, count) => {
+                let entry = self.auth_entry(&name, target, fn_name, args, Some(count))?;
                 self.env.set_auths(&[entry]);
             }
         }
@@ -1088,9 +1235,19 @@ impl<'a> World<'a> {
         lift_host_limits(&env);
         env.ledger().set(info);
         // Native contracts live in the host, not in the ledger, so the mock
-        // account contracts of contract actors are registered again.
-        for a in self.actors.values().filter(|a| a.key.is_none()) {
-            env.register_at(&to_address(&env, &a.address)?, MockAuthContract, ());
+        // account contracts of contract actors are registered again. A smart
+        // account is wasm and lives in the ledger.
+        for a in self
+            .actors
+            .values()
+            .filter(|a| a.key.is_none() && a.smart.is_none())
+        {
+            let address = to_address(&env, &a.address)?;
+            if a.calls_back {
+                env.register_at(&address, smart::CallsBackAccount, ());
+            } else {
+                env.register_at(&address, MockAuthContract, ());
+            }
         }
         self.env = env;
         Ok(())
@@ -1485,6 +1642,11 @@ impl<'a> World<'a> {
                     Ok(e) => ours.push(e),
                     Err(e) => errors.push(e),
                 },
+                // A wallet's own events, and its policy's, are not the
+                // mandate's and are not compared.
+                Some(n)
+                    if WALLET_CONTRACTS.contains(&n)
+                        || self.actors.get(n).is_some_and(|a| a.smart.is_some()) => {}
                 other => errors.push(format!(
                     "an event from {}, which is neither the factory, the mandate nor a token",
                     other.unwrap_or("an unknown contract")
@@ -1679,6 +1841,9 @@ impl<'a> World<'a> {
                 let (target, args) = self.call_args(&f, &caller, &step["args"])?;
                 let auth = if VIEWS.contains(&f.as_str()) {
                     Auth::None
+                } else if let Some(n) = step["signatures"].as_u64() {
+                    let n = u32::try_from(n).map_err(|_| String::from("too many signatures"))?;
+                    Auth::SignerWith(signer, n)
                 } else {
                     Auth::Signer(signer)
                 };
@@ -1866,7 +2031,12 @@ fn register_factory(
 
 /// Runs one vector and returns its trace entry.
 pub fn run_vector(spec: &Spec, contracts: &Contracts, v: &Vector) -> Value {
-    let mut world = match World::new(spec, contracts, v) {
+    run_vector_as(spec, contracts, v, PrincipalMode::AsDeclared)
+}
+
+/// As `run_vector`, with the principal chosen by `mode`.
+pub fn run_vector_as(spec: &Spec, contracts: &Contracts, v: &Vector, mode: PrincipalMode) -> Value {
+    let mut world = match World::with_principal(spec, contracts, v, mode) {
         Ok(w) => w,
         Err(e) => {
             return crate::trace::unrun(&v.id, &v.file, status::ABORTED, &format!("setup: {e}"))

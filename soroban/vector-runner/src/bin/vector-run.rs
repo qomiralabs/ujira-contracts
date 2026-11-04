@@ -12,11 +12,13 @@
 use std::process::ExitCode;
 use vector_runner::cli::Args;
 use vector_runner::run::{run, Options};
+use vector_runner::stellar::PrincipalMode;
 use vector_runner::trace;
 use vector_runner::vectors::{parse_areas, parse_only_calls, Selection};
 
 const USAGE: &str = "usage: tests/run --chain stellar [--files a.json,b.json] [--areas A,B] \
-[--only-calls f,g] [--trace-out FILE] [--factory-wasm FILE] [--mandate-wasm FILE] [--list]";
+[--only-calls f,g] [--principal account|smart_account] [--trace-out FILE] [--factory-wasm FILE] \
+[--mandate-wasm FILE] [--list]";
 
 fn main() -> ExitCode {
     match real_main() {
@@ -63,6 +65,15 @@ fn real_main() -> Result<u8, String> {
         Some(p) => args.path(&p),
         None => Options::default_wasm(&root, "ujira_mandate"),
     };
+    let principal = match args.value("--principal")?.as_deref() {
+        None | Some("account") => PrincipalMode::AsDeclared,
+        Some("smart_account") => PrincipalMode::SmartAccount,
+        Some(other) => {
+            return Err(format!(
+                "--principal: {other:?} is neither account nor smart_account"
+            ))
+        }
+    };
     let list = args.flag("--list");
     if let Some(extra) = args.positional()?.first() {
         return Err(format!("unexpected argument {extra}"));
@@ -75,6 +86,7 @@ fn real_main() -> Result<u8, String> {
         selection,
         factory_wasm,
         mandate_wasm,
+        principal,
     };
     if list {
         for v in vector_runner::run::select(&opts)? {

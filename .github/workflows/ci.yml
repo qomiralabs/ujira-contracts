@@ -177,6 +177,15 @@ jobs:
           shellcheck scripts/build-smart-account.sh scripts/build-smart-account.test.sh
           scripts/build-smart-account.test.sh
 
+      # The wallet factory's copy of the pinned wasm, and any deployment record
+      # of it, must hold the pinned hashes. The self test changes one thing at a
+      # time and needs no network.
+      - name: Test the wallet hash check
+        run: |
+          shellcheck scripts/check-wallet-hash.sh scripts/check-wallet-hash.test.sh
+          shellcheck -x scripts/testnet/deploy-wallet-factory.sh
+          scripts/check-wallet-hash.test.sh
+
       # Every byte count and length in spec/ENCODING.md is derived from the
       # layout here, not read from the file, and the file is checked against
       # the derivation. The layouts themselves are evaluated, and every other
@@ -539,7 +548,8 @@ jobs:
 
   # Rebuilds the OpenZeppelin smart account, its WebAuthn verifier and its
   # weighted threshold policy from the pinned upstream tag, prints their wasm
-  # hashes, and fails when one differs from the hash the build script pins. A
+  # hashes, and fails when one differs from the hash the build script pins, or
+  # when the wallet factory's committed copy or a deployment record differs. A
   # principal's wallet is only checkable if anyone can rebuild it to the same
   # bytes. The wasm is kept as an artifact so tests can load exactly what was
   # built here. Upstream code is compiled only on this runner, never on a
@@ -577,10 +587,10 @@ jobs:
           rm stellar.tar.gz
           echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
 
-      - name: Build the pinned smart account
+      - name: Build the pinned smart account and check the wallet factory's copy
         run: |
           code=0
-          scripts/build-smart-account.sh --all --out-dir "${RUNNER_TEMP}/wasm" v0.8.0 >"${RUNNER_TEMP}/hashes.txt" || code=$?
+          scripts/check-wallet-hash.sh --out-dir "${RUNNER_TEMP}/wasm" >"${RUNNER_TEMP}/hashes.txt" || code=$?
           cat "${RUNNER_TEMP}/hashes.txt"
           {
             echo "### OpenZeppelin smart account v0.8.0, wasm SHA-256"
@@ -748,6 +758,15 @@ jobs:
             exit 0
           fi
           exit "$code"
+
+      # The same vectors with the principal as a passkey wallet: the pinned
+      # smart account from the wallet factory, signing every principal call
+      # with two of its three passkeys. The mandate's rules do not change for
+      # a contract principal, and this shows it.
+      - name: Run the shared vectors with a smart account principal
+        run: |
+          ../tests/run --chain stellar --principal smart_account --trace-out "${RUNNER_TEMP}/trace-smart.json"
+          "$CHECK_JSONSCHEMA" --schemafile ../tests/trace.schema.json "${RUNNER_TEMP}/trace-smart.json"
 
   # The server side of the local guard hooks, which can be skipped or missing on
   # a fresh machine: no dashes in the files a change touches, no attribution in
