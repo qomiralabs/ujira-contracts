@@ -7,7 +7,7 @@
 
 use crate::compare::{compare_vector, Mismatch};
 use crate::spec::Spec;
-use crate::stellar::{self, Contracts};
+use crate::stellar::{self, Contracts, PrincipalMode};
 use crate::trace::{self, status};
 use crate::vectors::{self, Selection, Vector};
 use crate::Result;
@@ -23,6 +23,8 @@ pub struct Options {
     pub selection: Selection,
     pub factory_wasm: PathBuf,
     pub mandate_wasm: PathBuf,
+    /// Who the principal is: as each vector declares, or a passkey wallet.
+    pub principal: PrincipalMode,
 }
 
 impl Options {
@@ -100,7 +102,15 @@ pub fn run(opts: &Options) -> Result<Summary> {
                 continue;
             }
         };
-        let tv = stellar::run_vector(&spec, c, v);
+        if opts.principal == PrincipalMode::SmartAccount {
+            if let Some(why) = stellar::smart_principal_unsupported(v) {
+                let reason = format!("not run with a smart account principal: {why}");
+                entries.push(trace::unrun(&v.id, &v.file, status::SKIPPED, &reason));
+                summary.skipped.push(v.id.clone());
+                continue;
+            }
+        }
+        let tv = stellar::run_vector_as(&spec, c, v, opts.principal);
         match compare_vector(v, &tv, &opts.chain) {
             Ok(()) => summary.passed.push(v.id.clone()),
             Err(m) => summary.failed.push(m),

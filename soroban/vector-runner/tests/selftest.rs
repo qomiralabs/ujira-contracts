@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use vector_runner::compare::{compare_traces, compare_vector, echo_trace, Mismatch};
 use vector_runner::run::{run, select, Options};
 use vector_runner::spec::Spec;
-use vector_runner::stellar::{self, executable_hash, Contracts, World};
+use vector_runner::stellar::{self, executable_hash, Contracts, PrincipalMode, World};
 use vector_runner::trace;
 use vector_runner::values::sha256;
 use vector_runner::vectors::{self, parse_only_calls, Selection, Vector};
@@ -32,6 +32,7 @@ fn reference_options(files: &[&str]) -> Options {
         selection: Selection::default(),
         factory_wasm: here("fixtures/vector_runner_reference_factory.wasm"),
         mandate_wasm: here("fixtures/vector_runner_reference_mandate.wasm"),
+        principal: PrincipalMode::AsDeclared,
     }
 }
 
@@ -440,6 +441,7 @@ fn chain_specific(id: &str) {
         selection: Selection::default(),
         factory_wasm: Options::default_wasm(&root(), "ujira_factory"),
         mandate_wasm: Options::default_wasm(&root(), "ujira_mandate"),
+        principal: PrincipalMode::AsDeclared,
     };
     let s = run(&opts).unwrap();
     assert!(s.not_runnable.is_empty(), "{:?}", s.not_runnable_reason);
@@ -467,4 +469,23 @@ fn chain_specific_create_invalid_config_returns_contract_code() {
 #[test]
 fn chain_specific_archived_payout_record_exists() {
     chain_specific("chain_archived_payout_record_returns_payout_id_exists");
+}
+
+/// Contract principals and passkey wallets, against the real factory, mandate
+/// and wallet factory, with the pinned smart account.
+mod chain_specific {
+    #[test]
+    fn withdraw_and_sweep_to_c_principal() {
+        super::chain_specific("chain_withdraw_and_sweep_to_a_smart_account_principal");
+    }
+
+    #[test]
+    fn check_auth_calling_mandate_traps() {
+        super::chain_specific("chain_check_auth_calling_the_mandate_is_refused");
+    }
+
+    #[test]
+    fn two_of_three_approve_needs_two() {
+        super::chain_specific("chain_two_of_three_approver_needs_two_passkeys");
+    }
 }
