@@ -2121,6 +2121,7 @@ version = "0.0.0"
 dependencies = [
  "ed25519-dalek",
  "mandate-errors",
+ "p256",
  "serde_json",
  "sha2",
  "soroban-sdk",

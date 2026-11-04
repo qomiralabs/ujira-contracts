@@ -759,6 +759,15 @@ jobs:
           fi
           exit "$code"
 
+      # The same vectors with the principal as a passkey wallet: the pinned
+      # smart account from the wallet factory, signing every principal call
+      # with two of its three passkeys. The mandate's rules do not change for
+      # a contract principal, and this shows it.
+      - name: Run the shared vectors with a smart account principal
+        run: |
+          ../tests/run --chain stellar --principal smart_account --trace-out "${RUNNER_TEMP}/trace-smart.json"
+          "$CHECK_JSONSCHEMA" --schemafile ../tests/trace.schema.json "${RUNNER_TEMP}/trace-smart.json"
+
   # The server side of the local guard hooks, which can be skipped or missing on
   # a fresh machine: no dashes in the files a change touches, no attribution in
   # its commit messages, no internal files in the tree. Needs the whole history to

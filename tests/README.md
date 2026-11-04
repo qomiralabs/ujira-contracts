@@ -12,6 +12,7 @@ tests/run --chain stellar                    # every vector in spec/vectors
 tests/run --chain stellar --files spec/vectors/example.json --trace-out t.json
 tests/run --chain stellar --only-calls create,version,config,state,payout,daily_used,is_allowed
 tests/run --chain stellar --areas PAUSE,SWEEP
+tests/run --chain stellar --principal smart_account  # every vector, with a passkey wallet as the principal
 tests/run --chain stellar --list             # what a selection would run, without running it
 tests/compare t.json                         # a trace against its vectors
 tests/compare a.json b.json                  # two traces, step by step
@@ -31,6 +32,10 @@ Selection:
 - `--only-calls f,g` runs only vectors whose every contract function is listed. The functions the setup calls on the vector's behalf count: `create` for a mandate in the setup and `allow_recipients` for an allowlist. Step kinds such as `transfer` may be listed and never exclude a vector. An unknown name is refused.
 
 Every filter given must match.
+
+Principal:
+
+- `--principal smart_account` runs each vector with the actor `principal` as a passkey wallet: the pinned OpenZeppelin smart account, deployed through the wallet factory, with three test passkeys and a weighted threshold of two, so every call the principal authorizes runs the account's `__check_auth` with two real WebAuthn signatures. A vector that cannot express a contract principal is skipped with its reason: one that changes the principal's trustline, uses the principal's ed25519 key as an attester, or declares the principal itself. `--principal account`, the default, leaves the principal as each vector declares it.
 
 Exit codes: 0 every selected vector that applies to the chain ran and passed; 1 a vector failed; 2 bad usage or unreadable input; 3 nothing failed but some vectors could not run because the contract wasm is not built. A vector that cannot run is never counted as a pass.
 
@@ -57,6 +62,11 @@ For each vector it:
 - passes a tagged destination as the muxed `M` address of the account and tag;
 - makes attestations with the version 2 message and the tamper kinds of the vector format, with the label `#name` naming the test key whose seed is the label's bytes;
 - applies `set_receiving` by writing the account's trustline (removing one rebuilds the environment without it, since the test host has no call that deletes an entry), and `clawback` through the asset's `clawback`.
+
+Two more actor kinds exist for the Stellar only cases, outside the shared vector format:
+
+- `{ "kind": "smart_account", "signers": n, "threshold": t }`: a passkey wallet from the wallet factory in `soroban/contracts/wallet-factory`, built from the pinned upstream wasm in its `fixtures/`, with `n` test passkeys of weight 1 and the weighted threshold policy set to `t`. Passkey `i` of actor `name` has the P-256 secret `SHA-256("ujira-test-passkey:" || name || ":" || i)`. It signs each call with a WebAuthn assertion over the account's digest of the host's payload, its own address and its `Default` rule, as a browser would. A call step may carry `"signatures": k` to sign with its first `k` passkeys instead of `t`. The wallet's own events, and its policy's, are not compared. The wallet factory wasm must be built beside the mandate's.
+- `{ "kind": "calls_back_account" }`: a native test account whose `__check_auth` calls the `version` view of the contract that asked for its authorization, to show the host refuses a call back into a contract already on the stack. It lets the factory's `create` through, so the setup can make the mandate.
 
 A contract error code that another contract raised and the mandate let escape, such as a Stellar Asset Contract error, is recorded as that contract's (`escaped_error`), never as the mandate error with the same number: the asset's codes 10 to 12 are also `UNAUTHORIZED`, `ROLE_CONFLICT` and `ROLE_SET_FULL`.
 
@@ -102,7 +112,7 @@ Lists are compared in order, role sets included. The vectors write a role set in
 
 `cargo test -p vector-runner` in `soroban/` proves the runner without the real mandate: comparator cases built from the shared vectors (`extra_event_fails`, `missing_event_fails`, `reordered_events_fail`, `invariant_violation_fails`, `only_calls_selects_matching_vectors`), runs against the test-only reference factory and mandate in `soroban/vector-runner/contracts` (`reference_contract_wrong_return_is_reported`, `token_error_is_never_read_as_a_mandate_error`, `runner_registers_wasm_only`), the token kinds, receiving states and clawback on the test host, and the attest step against every case of `spikes/attestation-parity/fixture.json`. The reference contracts are committed as wasm in `soroban/vector-runner/fixtures`, and `scripts/check-wasm-fixtures.sh` checks they match their source.
 
-The four Stellar only cases in `soroban/vector-runner/chain-specific/stellar.json` need the real contracts, built first with `scripts/soroban-build.sh`, and run with the rest of the self tests: `cargo test -p vector-runner chain_specific`.
+The seven Stellar only cases in `soroban/vector-runner/chain-specific/stellar.json` need the real contracts, built first with `scripts/soroban-build.sh`, and run with the rest of the self tests: `cargo test -p vector-runner chain_specific`. Three of them are about contract principals: `chain_specific::withdraw_and_sweep_to_c_principal` (a passkey wallet principal, which has no trustline, receives a withdrawal and a sweep in its contract balance), `chain_specific::check_auth_calling_mandate_traps` (the host refuses a principal whose `__check_auth` calls the mandate, with `Context.InvalidAction`, and the mandate does not change) and `chain_specific::two_of_three_approve_needs_two` (a 2 of 3 passkey approver cannot approve with one signature and can with two).
 
 ## The resource snapshot
 
