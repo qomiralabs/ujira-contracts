@@ -6,9 +6,13 @@ Which audits cover the OpenZeppelin `stellar-accounts` smart account that passke
 
 **Pin tag `v0.8.0`, commit `ddc327eb92d63709436da3a8455f641c2d5476c5`.** It is the latest release, and the latest audited release that includes the accounts package. No critical or high finding is open in the files we use.
 
-**The wasm hash is not measured yet.** `scripts/build-smart-account.sh v0.8.0` is written to produce it, but the build has not been run to completion, so this document records no hash and nothing should be pinned to one until it does. See [The pinned build](#the-pinned-build).
+The smart account built from that tag has this wasm hash, measured by the CI job `smart-account` and pinned in `scripts/build-smart-account.sh`, which fails any later build that differs. See [The pinned build](#the-pinned-build).
 
-**This needs a decision from the contract owner.** The tag meets the bar the issue set, but the coverage has five limits, listed under [Decision needed](#decision-needed). The sharpest two: the deployable account contract is an example that no audit report lists in scope, and every report comes from OpenZeppelin auditing its own library.
+```
+6f1a3a524e75da519db0e815115101addd9bae529a45603aa4c3d1a2274d7de2
+```
+
+**Decided by the contract owner on 2026-11-02: the coverage is enough, and `v0.8.0` is pinned.** The coverage has five limits, kept under [Limits accepted](#limits-accepted) as the record of what was decided. The sharpest two: the deployable account contract is an example that no audit report lists in scope, and every report comes from OpenZeppelin auditing its own library.
 
 ## Coverage per report
 
@@ -118,9 +122,9 @@ These are not audit findings. They are open on the upstream tracker as of this r
 - [#891](https://github.com/OpenZeppelin/stellar-contracts/issues/891), [#892](https://github.com/OpenZeppelin/stellar-contracts/issues/892): `weighted_threshold::install` totals every entry of `signer_weights`, including addresses that are not signers of the rule, so a rule can be installed with a threshold it can never reach. This costs availability, not funds, and only a principal's own setup can cause it. Our create flow must check that every weighted address is a rule signer.
 - [#852](https://github.com/OpenZeppelin/stellar-contracts/issues/852): the threshold policies put the whole authorization `Context` in their event, so a call with very large arguments can pass the policy and then fail on the network's event size limit. Mandate calls carry bounded arguments, and the largest should be measured against the limit in the lifecycle vectors.
 
-## Decision needed
+## Limits accepted
 
-The issue asks for the latest audited release with no open high or critical finding in the files we use, and `v0.8.0` is that. These limits are for the contract owner to accept or act on. Nothing here is on mainnet, and the contracts need an external audit before they are, so the recommendation is to build and test on this pin and put items 1 and 2 in that audit's scope.
+The issue asks for the latest audited release with no open high or critical finding in the files we use, and `v0.8.0` is that. The contract owner accepted these limits on 2026-11-02. Nothing here is on mainnet, and the contracts need an external audit before they are, so items 1 and 2 belong in that audit's scope.
 
 1. **The deployable account is not in any audit scope.** Every report lists `packages/` files only. What we deploy is `examples/multisig-smart-account/account`, about 100 lines that wire the audited library into a contract. The WebAuthn verifier and the weighted threshold policy are likewise thin examples. No report lists a deployable wasm, so the choice is this example or a wrapper of our own, and a wrapper of our own would be just as unaudited and would not be reproducible from the upstream tag alone. The example was chosen for that reason.
 2. **61 changed lines reached the tag after the last audited snapshot.** They include the security fix for CR-01, as above.
@@ -138,7 +142,7 @@ Facts from the reports and the code that the next issues must respect.
 - **Verifiers and policies are trusted code.** The report assumes verifier contracts behave correctly, and a signer names its verifier by address. The allowed list in `CHAINOPS-CREATE-006` names wallet code hashes only, so it must also cover the verifier and the policy. The build below produces all three.
 - **Origin and RP ID are not checked on chain.** `webauthn.rs` documents that it omits both, and leaves them to the authenticator and the platform. It does require the user present and user verified flags, so a passkey without user verification cannot sign. The challenge binds the signature to the digest. Phishing protection therefore rests on the browser and the passkey's RP ID, and the wallet UI must set them correctly.
 - **Nothing extends the account's instance TTL.** The v0.7.0 report leaves this to the integrator, and the example does not do it. An idle wallet archives and must be restored, which is a cost for the sponsorship budget (qomiralabs/ujira#74) and not a safety problem.
-- **The constructor makes one rule, and it is not the rule the spec names.** The example's constructor takes `signers` and `policies` and creates a single `Default` rule named `multisig`. `CHAINOPS-CREATE-002` has its reader load an `admin` rule and a `mandate` rule, and neither exists on a new wallet from this code. The `Default` rule covers every call and can serve as the admin rule, but under another name. A `mandate` rule cannot be set at creation at all, because the mandate's address derives from the wallet's, and the wallet's address would then have to hash its own mandate's. The wallet's signers must add it afterwards, and that is one more signature in onboarding. Either the reader must accept this shape or the wallet must be a wrapper of our own (see item 1 of [Decision needed](#decision-needed)). This must be settled before the factory in #86 fixes its constructor arguments.
+- **The constructor makes one rule, and it is not the rule the spec names.** The example's constructor takes `signers` and `policies` and creates a single `Default` rule named `multisig`. `CHAINOPS-CREATE-002` has its reader load an `admin` rule and a `mandate` rule, and neither exists on a new wallet from this code. The `Default` rule covers every call and can serve as the admin rule, but under another name. A `mandate` rule cannot be set at creation at all, because the mandate's address derives from the wallet's, and the wallet's address would then have to hash its own mandate's. The wallet's signers must add it afterwards, and that is one more signature in onboarding. The contract owner decided on 2026-11-02 to accept that shape and not to write a wrapper: a wallet is created with its `Default` rule only, and its signers add the `mandate` rule once the mandate exists. The off-chain rules are changed to match in their own pull request.
 
 ## The pinned build
 
@@ -154,9 +158,9 @@ Facts from the reports and the code that the next issues must respect.
 
 | Package, from `examples/multisig-smart-account/` | Wasm SHA-256 |
 | --- | --- |
-| `multisig-account-example` (the smart account) | Not measured |
-| `multisig-webauthn-verifier-example` | Not measured |
-| `multisig-weighted-threshold-policy-example` | Not measured |
+| `multisig-account-example` (the smart account) | `6f1a3a524e75da519db0e815115101addd9bae529a45603aa4c3d1a2274d7de2` |
+| `multisig-webauthn-verifier-example` | `82ac47ab4f139fc07f9524e1c8b26547a21d686384c46ec89cac2284abba65ef` |
+| `multisig-weighted-threshold-policy-example` | `61af5ce32e207ced16163a6fbbb063ca10241c73450402bc4ed9c07f743e430a` |
 
 To check it:
 
@@ -167,4 +171,4 @@ scripts/build-smart-account.sh --all v0.8.0  # prints all three, one per line
 
 Upstream attaches no wasm to the `v0.8.0` release, so there is no published hash to compare with. The file `examples/multisig-smart-account/factory/testdata/multisig_account_example.wasm` at the tag was last changed on 2026-09-10, before the tag, so it is not the tagged account and its hash must not be used.
 
-The script's refusals are tested by `scripts/build-smart-account.test.sh`. The build itself compiles upstream's source and its dependencies, including their build scripts, on the machine that runs it, so the first run should be somewhere that is acceptable, for example a CI job. To finish this record, run the commands above twice from a clean state, and write the hash into this table and into the result at the top only if both runs agree.
+The build compiles upstream's source and its dependencies, including their build scripts, on the machine that runs it, so it runs in the CI job `smart-account` and not on a workstation. The job prints the three hashes in its log and its summary, keeps the wasm as the artifact `smart-account-wasm-v0.8.0`, and fails if a hash differs from the one the script pins. The hashes above come from [run 1](https://github.com/qomiralabs/ujira-contracts/actions/runs/41534125967). They were pinned in the next commit, whose own CI run rebuilt all three from a fresh checkout on a fresh runner and would have failed on any difference, so two separate runs agree. The script's refusals are tested by `scripts/build-smart-account.test.sh`.
