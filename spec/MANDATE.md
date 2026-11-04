@@ -659,7 +659,7 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 #### MANDATE-RECIPIENT-016 Allowlist entry validation
 
 - Precondition: `allow_recipients(entries)` or `disallow_recipients(entries)`, where each entry is `{ recipient_ref, destination }`, and: the mode is `ATTESTED`; or an entry has an unpayable address (`MANDATE-SPLIT-003`, any tag), a non-canonical tag or the address of `fee_address` (any tag); or, for allow, an entry is already present, or for disallow, an entry is absent, counting duplicate pairs within the same call.
-- Effect: refused. On success the call is atomic and emits one `recipient_allowed` or `recipient_disallowed { recipient_ref, destination }` per entry. The unpayable address check applies on every chain, with each chain's own set of addresses. The non-canonical tag check can only be reached on Celo, as for `MANDATE-SPLIT-004`; its vectors are Celo only with the unrepresentable-input skip reason.
+- Effect: refused. On success the call is atomic and emits one `recipient_allowed` or `recipient_disallowed { recipient_ref, destination }` per entry. The unpayable address check applies on every chain, with each chain's own set of addresses, and includes the mandate's own factory. The non-canonical tag check can only be reached on Celo, as for `MANDATE-SPLIT-004`; its vectors are Celo only with the unrepresentable-input skip reason.
 - Error: `WRONG_RECIPIENT_MODE`, `CONFIG_INVALID`
 
 #### MANDATE-RECIPIENT-017 Policy epoch
@@ -694,8 +694,8 @@ A payout record holds `payout_id`, `agent`, `agent_epoch` (the epoch under which
 
 #### MANDATE-SPLIT-003 No leg to an address that can never pay out
 
-- Precondition: a request with a leg whose address, under any tag, is an unpayable address: the mandate itself, the settlement asset's own contract, or an address nobody holds the key to. On Celo that last one is the zero address. On Stellar it is the account whose ed25519 key is 32 zero bytes and the contract whose ID is 32 zero bytes; Stellar has no zero address, but these two are valid addresses that nobody controls.
-- Effect: refused. A transfer to the asset contract or an all-zero address burns the amount, and a leg to the mandate spends budget and pays the fee while paying no one. Each needs the principal or the attester to bind a bad address, so this guards against that mistake rather than against an agent. The same addresses are refused as allowlist entries (`MANDATE-RECIPIENT-016`), and the attester refuses to attest them (`CHAINOPS-DELIVERY-005`).
+- Precondition: a request with a leg whose address, under any tag, is an unpayable address: the mandate itself, the factory that deployed it (the `factory` it stores), the settlement asset's own contract, or an address nobody holds the key to. On Celo that last one is the zero address. On Stellar it is the account whose ed25519 key is 32 zero bytes and the contract whose ID is 32 zero bytes; Stellar has no zero address, but these two are valid addresses that nobody controls.
+- Effect: refused. A transfer to the asset contract or an all-zero address burns the amount, the factory has no call that moves tokens so money sent to it stays there for good, and a leg to the mandate spends budget and pays the fee while paying no one. The asset's issuer account burns a transfer too, but the mandate would have to ask the asset contract for its issuer on every leg, so it is not on this list; onboarding and the attester refuse it (`CHAINOPS-DELIVERY-003`, `CHAINOPS-DELIVERY-005`). Each needs the principal or the attester to bind a bad address, so this guards against that mistake rather than against an agent. The same addresses are refused as allowlist entries (`MANDATE-RECIPIENT-016`), and the attester refuses to attest them (`CHAINOPS-DELIVERY-005`).
 - Error: `LEGS_INVALID`
 
 #### MANDATE-SPLIT-004 Canonical tag on legs
@@ -1644,7 +1644,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-DELIVERY-003 Only payable Stellar destinations are bindable
 
-- Off chain: a Stellar destination that needs a text or hash memo cannot be paid from a contract and is rejected at onboarding. Only `G`, `C` and `M` (numeric id) destinations are bindable.
+- Off chain: a Stellar destination that needs a text or hash memo cannot be paid from a contract and is rejected at onboarding. Only `G`, `C` and `M` (numeric id) destinations are bindable. Onboarding also rejects every address that is unpayable under `MANDATE-SPLIT-003`, and the settlement asset's issuer account, under any tag, because the asset contract burns a transfer to its issuer and the mandate does not check for it.
 
 #### CHAINOPS-DELIVERY-004 Providers are certified before use
 
@@ -1652,7 +1652,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-DELIVERY-005 The attester never attests an unpayable address
 
-- Off chain: the attester refuses to sign for a destination whose address is unpayable under `MANDATE-SPLIT-003`: the mandate it would sign for, that mandate's settlement asset contract, or an all-zero address. The mandate refuses such a leg anyway, but a refusal there costs the agent a failed request, and the attester is the only party that sees the destination before it is bound.
+- Off chain: the attester refuses to sign for a destination whose address is unpayable under `MANDATE-SPLIT-003`: the mandate it would sign for, the factory that deployed that mandate, that mandate's settlement asset contract, or an all-zero address. It also refuses the settlement asset's issuer account, which the mandate does not refuse because it would have to ask the asset contract for its issuer on every leg. The mandate refuses such a leg anyway, but a refusal there costs the agent a failed request, and the attester is the only party that sees the destination before it is bound.
 
 #### CHAINOPS-SUBMIT-001 No memo on contract calls
 

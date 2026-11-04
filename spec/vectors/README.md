@@ -38,6 +38,7 @@ Each actor name stands for one address, the same for the whole vector, which the
 | Name | What it is |
 | --- | --- |
 | `mandate` | The mandate, created by the setup or by the one `create` call that succeeds. |
+| `factory` | The factory the vector creates its mandate through. |
 | `asset` | The settlement asset, which the factory supports. |
 | `other_token` | A second token, which the factory does not support. |
 | `fee_address` | The factory's fee address, an account unless the setup lists it as a contract, as a vector does when it pays a fee above what a Stellar trustline holds. It may make calls, so a vector can show that it holds no role. |
@@ -45,7 +46,7 @@ Each actor name stands for one address, the same for the whole vector, which the
 | `zero_account` | The Stellar account whose ed25519 key is 32 zero bytes. Nobody holds its key, so a vector that names it is restricted to Stellar. It may take a tag. |
 | `zero_contract` | The Stellar contract whose ID is 32 zero bytes, where no contract is deployed. A vector that names it is restricted to Stellar. |
 
-`mandate`, `asset`, `other_token`, `zero`, `zero_account` and `zero_contract` never make a call.
+`mandate`, `factory`, `asset`, `other_token`, `zero`, `zero_account` and `zero_contract` never make a call.
 
 ### Labels and test keys
 

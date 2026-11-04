@@ -761,7 +761,7 @@ impl<'a> World<'a> {
         let mut account_keys = BTreeMap::new();
         for name in names
             .iter()
-            .filter(|n| !["mandate", "asset", "other_token"].contains(&n.as_str()))
+            .filter(|n| !["mandate", "factory", "asset", "other_token"].contains(&n.as_str()))
         {
             // Addresses nobody controls: no account entry, no contract and
             // no key, so they can be named as destinations and never sign.
@@ -884,14 +884,15 @@ impl<'a> World<'a> {
         self.mandate.as_ref()
     }
 
-    /// The address a vector name stands for: an actor, the mandate or a
-    /// token.
+    /// The address a vector name stands for: an actor, the mandate, the
+    /// factory or a token.
     pub fn address_of(&self, name: &str) -> Result<ScAddress> {
         match name {
             "mandate" => self
                 .mandate
                 .clone()
                 .ok_or_else(|| String::from("the mandate does not exist yet")),
+            "factory" => Ok(self.factory.clone()),
             "asset" => Ok(self.asset.address.clone()),
             "other_token" => Ok(self.other.address.clone()),
             _ => self
