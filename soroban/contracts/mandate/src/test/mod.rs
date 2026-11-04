@@ -279,11 +279,13 @@ pub fn zero_contract(env: &Env) -> Address {
 }
 
 /// Every address a payout could be sent to without anyone ever being able
-/// to spend it: the mandate itself, the settlement asset's contract, and
-/// the account and the contract whose key is all zeros.
-pub fn unpayable(fx: &Fx, mandate: &Address) -> [Address; 4] {
+/// to spend it: the mandate itself, the factory that deployed it, the
+/// settlement asset's contract, and the account and the contract whose key
+/// is all zeros.
+pub fn unpayable(fx: &Fx, mandate: &Address) -> [Address; 5] {
     [
         mandate.clone(),
+        fx.factory.clone(),
         fx.asset.clone(),
         account(&fx.env, 0),
         zero_contract(&fx.env),

@@ -392,12 +392,17 @@ fn same_destination(a: &Leg, b: &Leg) -> bool {
 }
 
 /// An address a payout could reach but nobody could ever spend from: the
-/// mandate itself, the settlement asset's own contract, and the account or
-/// contract whose key is all zeros. Paying the first spends budget and fee
-/// while paying no one; the others burn the amount. Only a principal or an
-/// attester mistake could bind one, so refusing them costs nothing honest.
+/// mandate itself, the factory that deployed it, the settlement asset's own
+/// contract, and the account or contract whose key is all zeros. Paying the
+/// mandate spends budget and fee while paying no one; the factory has no
+/// call that moves tokens, so money sent there stays there; the others burn
+/// the amount. Only a principal or an attester mistake could bind one, so
+/// refusing them costs nothing honest. The asset's issuer burns a transfer
+/// too, but the mandate would have to ask the asset contract for it on every
+/// leg, so onboarding and the attester refuse it instead.
 pub(crate) fn is_unpayable(env: &Env, fixed: &storage::Fixed, address: &Address) -> bool {
     *address == env.current_contract_address()
+        || *address == fixed.factory
         || *address == fixed.asset
         || mandate_config::is_zero_address(env, address)
 }

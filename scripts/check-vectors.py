@@ -24,8 +24,8 @@
 #     zero address, the non-canonical tag, a reentrant test token or a token
 #     whose transfer returns no data (Celo);
 #   - a tagged destination is an account actor, only an account actor changes
-#     whether it can receive, and the mandate, the tokens and the zero
-#     addresses never make a call;
+#     whether it can receive, and the mandate, the factory, the tokens and
+#     the zero addresses never make a call;
 #   - every attestation a request names was made by an earlier attest step,
 #     the retired secp256k1 tamper kinds are refused by name, and a
 #     wrong_signer tamper never signs with the key it already uses;
@@ -199,7 +199,7 @@ REQUESTS = {"request_payout", "request_payouts"}
 CALLER_AUTH_RULE = "MANDATE-ROLE-019"
 
 # Reserved actors that are not accounts and can never make a call.
-NOT_ACCOUNTS = {"mandate", "asset", "other_token", "zero", "zero_contract"}
+NOT_ACCOUNTS = {"mandate", "factory", "asset", "other_token", "zero", "zero_contract"}
 # The Stellar account with an all-zero key is an account, so it can take a
 # tag, but nobody holds its key, so it never makes a call either.
 NEVER_CALL = NOT_ACCOUNTS | {"zero_account"}

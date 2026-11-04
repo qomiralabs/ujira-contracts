@@ -20,6 +20,7 @@ pub const ACTOR_PREFIX: &str = "ujira-test-actor:";
 /// Names with a fixed meaning in every vector.
 pub const RESERVED: [&str; 7] = [
     "mandate",
+    "factory",
     "asset",
     "other_token",
     "fee_address",
