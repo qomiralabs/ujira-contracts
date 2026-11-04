@@ -22,6 +22,7 @@ The factory and mandate run on Stellar testnet. `deployments/testnet.json` names
 ```sh
 scripts/testnet/deploy.sh                # build, upload the mandate wasm, deploy the factory, write deployments/testnet.json
 scripts/testnet/deploy-wallet-factory.sh # upload the pinned smart account, verifier and policy, deploy the wallet factory, record it
+scripts/testnet/smoke-wallet.sh          # deploy a 2 of 3 passkey wallet and create a mandate with it as principal
 scripts/testnet/smoke.sh                 # create, fund, request, approve, execute, pause, resume, revoke, withdraw
 scripts/e2e/revoke-no-trustline.sh       # revoke and withdraw for a principal with no trustline
 ```

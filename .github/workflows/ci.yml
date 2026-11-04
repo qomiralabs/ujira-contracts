@@ -183,7 +183,7 @@ jobs:
       - name: Test the wallet hash check
         run: |
           shellcheck scripts/check-wallet-hash.sh scripts/check-wallet-hash.test.sh
-          shellcheck -x scripts/testnet/deploy-wallet-factory.sh
+          shellcheck -x scripts/testnet/deploy-wallet-factory.sh scripts/testnet/smoke-wallet.sh
           scripts/check-wallet-hash.test.sh
 
       # Every byte count and length in spec/ENCODING.md is derived from the
