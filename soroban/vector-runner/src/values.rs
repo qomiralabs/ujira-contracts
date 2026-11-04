@@ -18,7 +18,7 @@ pub const LABEL_PREFIX: &str = "UJIRA/TEST-ONLY/vector/";
 pub const ACTOR_PREFIX: &str = "ujira-test-actor:";
 
 /// Names with a fixed meaning in every vector.
-pub const RESERVED: [&str; 7] = [
+pub const RESERVED: [&str; 8] = [
     "mandate",
     "factory",
     "asset",
