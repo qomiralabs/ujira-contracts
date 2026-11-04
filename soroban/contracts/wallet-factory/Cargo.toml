@@ -1,0 +1,17 @@
+[package]
+name = "ujira-wallet-factory"
+version = "0.0.0"
+description = "The UJIRA passkey wallet factory: deploys the pinned OpenZeppelin smart account, and nothing else, at an address derived from its starting signers and policies."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

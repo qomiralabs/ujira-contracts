@@ -7,7 +7,8 @@
 # data only: it must have exactly the known fields, every account and
 # contract must be a well formed public strkey with a valid checksum, every
 # hash must be 64 lowercase hex digits, and no value anywhere may look like a
-# secret seed. It must also name testnet and nothing else.
+# secret seed. It must also name testnet and nothing else. A passkey wallet
+# factory, once deployed, is recorded under the optional "wallet_factory".
 #
 # Standard library only.
 #
@@ -48,6 +49,23 @@ TOP = {
     "deploy_transaction": str,
     "deployed_at": str,
 }
+OPTIONAL = {"wallet_factory": dict}
+WALLET = {
+    "factory": str,
+    "factory_wasm_hash": str,
+    "account_wasm_hash": str,
+    "verifier": str,
+    "verifier_wasm_hash": str,
+    "policy": str,
+    "policy_wasm_hash": str,
+    "deny_list": list,
+    "upstream_tag": str,
+    "upstream_commit": str,
+    "commit": str,
+    "deploy_transaction": str,
+    "deployed_at": str,
+}
+TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 ASSET_REQUIRED = {"code", "issuer", "contract"}
 ASSET_OPTIONAL = {"test_only"}
 
@@ -98,12 +116,12 @@ def check(record):
             break
 
     missing = sorted(set(TOP) - set(record))
-    extra = sorted(set(record) - set(TOP))
+    extra = sorted(set(record) - set(TOP) - set(OPTIONAL))
     if missing:
         errors.append(f"missing fields: {', '.join(missing)}")
     if extra:
         errors.append(f"unknown fields: {', '.join(extra)}")
-    for key, kind in TOP.items():
+    for key, kind in {**TOP, **OPTIONAL}.items():
         if key in record and (
             not isinstance(record[key], kind) or isinstance(record[key], bool)
         ):
@@ -155,6 +173,45 @@ def check(record):
         contracts.append(asset["contract"])
     if len(set(contracts)) != len(contracts):
         errors.append("supported_assets repeats a contract")
+    if "wallet_factory" in record:
+        errors.extend(check_wallet(record["wallet_factory"]))
+    return errors
+
+
+def check_wallet(wallet):
+    errors = []
+    missing = sorted(set(WALLET) - set(wallet))
+    extra = sorted(set(wallet) - set(WALLET))
+    if missing:
+        errors.append(f"wallet_factory is missing fields: {', '.join(missing)}")
+    if extra:
+        errors.append(f"wallet_factory has unknown fields: {', '.join(extra)}")
+    for key, kind in WALLET.items():
+        if key in wallet and not isinstance(wallet[key], kind):
+            errors.append(f"wallet_factory.{key} is not a {kind.__name__}")
+    if errors:
+        return errors
+    for key in ("factory", "verifier", "policy"):
+        if not strkey_ok(wallet[key], VERSION_CONTRACT):
+            errors.append(f"wallet_factory.{key} is not a contract id")
+    for key in ("factory_wasm_hash", "account_wasm_hash", "verifier_wasm_hash", "policy_wasm_hash", "deploy_transaction"):
+        if not HEX64.match(wallet[key]):
+            errors.append(f"wallet_factory.{key} is not 64 lowercase hex digits")
+    for key in ("upstream_commit", "commit"):
+        if not COMMIT.match(wallet[key]):
+            errors.append(f"wallet_factory.{key} is not a 40 digit git object id")
+    if not TAG.match(wallet["upstream_tag"]):
+        errors.append("wallet_factory.upstream_tag is not a release tag")
+    if not STAMP.match(wallet["deployed_at"]):
+        errors.append("wallet_factory.deployed_at is not a UTC timestamp")
+    deny = wallet["deny_list"]
+    if not deny:
+        errors.append("wallet_factory.deny_list is empty")
+    for i, entry in enumerate(deny):
+        if not (strkey_ok(entry, VERSION_ACCOUNT) or strkey_ok(entry, VERSION_CONTRACT)):
+            errors.append(f"wallet_factory.deny_list[{i}] is not an account or contract id")
+    if len(set(map(str, deny))) != len(deny):
+        errors.append("wallet_factory.deny_list repeats an address")
     return errors
 
 
