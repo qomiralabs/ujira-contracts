@@ -179,7 +179,7 @@ No funds are lost; this costs liveness and fees.
 
 ### I1 (informational): the mandate expiry branch of cancel reason 3 can never decide anything
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02.
 
 **Location:** `soroban/contracts/mandate/src/payout.rs:600-606`.
 
@@ -192,7 +192,7 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I2 (informational): changes to recovery_epoch and agent epochs are not evented directly
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02.
 
 **Location:**
 * `admin.rs:312-315` and `admin.rs:401-413` (agent add and remove bump `recovery_epoch`).
@@ -204,7 +204,7 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I3 (informational): the factory never extends the mandate code entry it deploys from
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02. It stays on the mainnet readiness checklist (#164).
 
 **Location:** `soroban/contracts/factory/src/lib.rs:112-155` and `212-216`.
 
@@ -214,7 +214,7 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I4 (informational): the exploit suite simulates archival, it does not exercise real eviction
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02. It stays on the mainnet readiness checklist (#164).
 
 **Location:** `exploits/src/storage_events.rs:18-24`, and `replay.rs:71-81`.
 
@@ -224,7 +224,7 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I5 (informational): batch resource bounds were measured against testnet settings
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02. It stays on the mainnet readiness checklist (#164).
 
 **Location:**
 * `MAX_BATCH_TRANSFERS` at `soroban/contracts/mandate/src/execute.rs:34`.
@@ -238,7 +238,7 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I6 (informational): after a revoke, payout records still read as open
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02.
 
 **Location:** `soroban/contracts/mandate/src/lifecycle.rs:132-154`, and `lib.rs:286-289`.
 
@@ -248,7 +248,7 @@ This is harmless. Keep the branch for spec parity, or note in MANDATE-PAYOUT-010
 
 ### I7 (informational): a lost principal key means funds that cannot be recovered, by design
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02.
 
 **Location:** `lifecycle.rs:188-223`, `recovery.rs`.
 
@@ -258,7 +258,7 @@ This is the intended non-custodial design (MANDATE-RECOVERYSET-009, MANDATE-SWEE
 
 ### I8 (informational): the placeholder contract builds by default
 
-**Status:** open. No fixing pull request; it needs the fix named here or the maintainer's recorded acceptance.
+**Status:** accepted by the maintainer on 2026-11-02. It stays on the mainnet readiness checklist (#164).
 
 **Location:** `soroban/Cargo.toml` (`default-members` includes `contracts/placeholder`).
 
