@@ -1732,7 +1732,7 @@ These rules bind the operator's services, not the contracts. They are listed her
 
 #### CHAINOPS-FEE-005 A fee address that cannot receive
 
-- Off chain: if the fee address cannot receive, every execute with a non-zero fee reverts. The operator cancels the affected payouts, re-requests them with `fee = 0`, and invoices that fee. Principal funds are never at risk; only liveness is affected until the address is fixed.
+- Off chain: if the fee address cannot receive, every execute with a non-zero fee reverts. The operator does not cancel a live payout in this case. It lets the payout lapse, which takes up to the `payout_ttl_seconds` in force when it was requested, at most `PAYOUT_TTL_MAX` (`MANDATE-EXPIRY-003`), or less where an attestation ends first (`MANDATE-EXPIRY-004`). It then proves the payout can never execute with the `payout_lapsed` proof: the record is still PENDING or APPROVED and finalized chain time is at or after `payout.expires_at` (`MANDATE-PAYOUT-006`). Only then does it re-request the payment under a new payout ID with `fee = 0`, with whatever approvals and attestations the new payout needs, and invoice that fee. It cancels the lapsed payout under `CHAINOPS-SUBMIT-004` to release its reservation, so a mandate with nothing spare can only pay the re-request once that cancel lands. A payout that has not lapsed when the address is fixed simply executes. Principal funds are never at risk; only liveness is affected, for up to that wait, until the address is fixed.
 
 #### CHAINOPS-INDEX-001 Mandate events are read only from verified mandates
 
